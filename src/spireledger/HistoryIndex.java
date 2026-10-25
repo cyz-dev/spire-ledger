@@ -57,6 +57,8 @@ final class HistoryIndex {
         boolean ended;
     }
     static String signature(JsonObject e){try{byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(normalized(e).toString().getBytes(StandardCharsets.UTF_8));return Base64.getEncoder().encodeToString(digest);}catch(java.security.NoSuchAlgorithmException ex){throw new IllegalStateException(ex);}}
+    // Index comparisons only need to tell records apart; 96 bits keeps the summary small. A summary record carries its source's value.
+    static String sig(JsonObject e){JsonElement v=e.get("_sig");return v!=null&&v.isJsonPrimitive()?v.getAsString():signature(e).substring(0,16);}
     static JsonObject normalized(JsonObject e){JsonObject n=Recorder.copy(e);for(String k:Arrays.asList("seq","time_ms"))n.remove(k);return n;}
     static Summary summarize(JsonObject run,boolean current){if(!Recorder.knownSchema(str(run,"schema")))throw new IllegalArgumentException("unsupported schema");Builder b=new Builder();b.metadata(obj(run,"metadata"));for(JsonElement e:array(run,"records")){if(!e.isJsonObject())throw new IllegalArgumentException("invalid record");JsonObject r=e.getAsJsonObject();b.ended|="ending".equals(str(r,"type"));b.event(r);}return b.finish(current);}
     static Summary readSummary(Path file)throws IOException {

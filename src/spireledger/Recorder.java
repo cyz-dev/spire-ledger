@@ -19,7 +19,8 @@ public final class Recorder implements AutoCloseable {
     private final JsonObject root;
     private final JsonArray records;
     private final FileOutputStream journal;
-    private int sequence, segmentStart, segment;
+    private int sequence, segmentStart, segment, summarized;
+    private final RunSummary summary=new RunSummary();
     private final Map<String,JsonObject> pending=new LinkedHashMap<>();
     private final Set<String> completed=new HashSet<>();
     public Recorder(Path parent, JsonObject metadata, String restoreId) throws IOException {
@@ -131,6 +132,9 @@ public final class Recorder implements AutoCloseable {
             atomic(directory.resolve(String.format(Locale.ROOT,"segment-%05d.json",++segment)),part.toString().getBytes(StandardCharsets.UTF_8));segmentStart=records.size();}
         // run.json is a derived view of events and segments; a reader holding it open must not stop recording.
         try{atomic(directory.resolve("run.json"),root.toString().getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] run.json held open by another process; latest copy kept in run.json.tmp");}
+        // Same projection on every flush; a summary that misses this write keeps its old marker, so readers rebuild from the record.
+        for(;summarized<records.size();summarized++)summary.add(records.get(summarized).getAsJsonObject());
+        try{atomic(directory.resolve(RunSummary.FILE),summary.document(SCHEMA,root.get("metadata"),journal.getChannel().size(),sequence).toString().getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] summary.json held open by another process; readers fall back to run.json");}
         Path html=directory.resolve("review.html");if(!Files.exists(html))try(InputStream in=Recorder.class.getResourceAsStream("/review.html")){if(in!=null)Files.copy(in,html);}
     }
     public Path export()throws IOException {
