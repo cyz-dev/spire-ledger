@@ -3,6 +3,7 @@ import com.google.gson.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import spireledger.stats.*;
 
 /** M1 performance measurement, not part of -Check: make a fixture from real records, then time one cold scan plus repeated filters per JVM. */
 public final class SummaryPerf {
@@ -20,12 +21,12 @@ public final class SummaryPerf {
             System.out.println("made "+n+" runs from "+runs.size()+" real records");return;}
         Path root=Paths.get(args[1]);
         if(args[0].equals("toggle")){boolean on=args[2].equals("on");int moved=0;try(DirectoryStream<Path> d=Files.newDirectoryStream(root)){for(Path p:d){Path a=p.resolve(RunSummary.FILE),b=p.resolve(RunSummary.FILE+".off");if(on&&Files.exists(b)){Files.move(b,a);moved++;}if(!on&&Files.exists(a)){Files.move(a,b);moved++;}}}System.out.println("toggled "+moved);return;}
-        if(args[0].equals("verify")){int n=0,unique=0;Set<String> seen=new HashSet<>();try(DirectoryStream<Path> d=Files.newDirectoryStream(root)){for(Path p:d){HistoryIndex.Summary s=HistoryIndex.load(p),f=HistoryIndex.loadFull(p);if(!s.summarized)throw new AssertionError("summary not used "+p);SummaryCheck.same(s,f,p+" Summary");SummaryCheck.same(StatsIndex.notesRun(HistoryIndex.facts(s),s),StatsIndex.notesRun(HistoryIndex.document(f.file),f),p+" Run");n++;}}System.out.println("verify PASS: "+n+" runs, summary path equals full path for every Summary and Run field");return;}
+        if(args[0].equals("verify")){int n=0,unique=0;Set<String> seen=new HashSet<>();try(DirectoryStream<Path> d=Files.newDirectoryStream(root)){for(Path p:d){HistoryIndex.Summary s=HistoryIndex.load(p),f=HistoryIndex.loadFull(p);if(!s.summarized)throw new AssertionError("summary not used "+p);SummaryCheck.same(s,f,p+" Summary");SummaryCheck.same(SummaryCheck.run(HistoryIndex.facts(s),s),SummaryCheck.run(HistoryIndex.document(f.file),f),p+" Run");n++;}}System.out.println("verify PASS: "+n+" runs, summary path equals full path for every Summary and Run field");return;}
         // scan: one cold measurement in this JVM, then 100 repeated filters on the loaded index.
-        long t0=System.nanoTime();HistoryIndex.Index index=HistoryIndex.scan(root,null);long t1=System.nanoTime();StatsIndex.Index stats=StatsIndex.scan(root.resolve("no-native"),index,null);long t2=System.nanoTime();
+        long t0=System.nanoTime();HistoryIndex.Index index=HistoryIndex.scan(root,null);long t1=System.nanoTime();Stats.Index stats=StatsIndex.scan(root.resolve("no-native"),index,null);long t2=System.nanoTime();
         int summarized=0;for(HistoryIndex.Summary s:index.runs)if(s.summarized)summarized++;
-        List<Double> hf=new ArrayList<>(),sf=new ArrayList<>();long now=System.currentTimeMillis();StatsIndex.Filter f=new StatsIndex.Filter();f.scope="notes";f.includeAbandon=true;int hits=0;
-        for(int i=0;i<100;i++){long a=System.nanoTime();hits+=HistoryIndex.filter(index.runs,i%2==0?"WATCHER":"",-1,"",0,i%3==0?"bash":"",false,now).size();long b=System.nanoTime();f.character=i%2==0?"WATCHER":"";hits+=StatsIndex.metrics(StatsIndex.filter(stats,f,now),f).size();long c=System.nanoTime();hf.add((b-a)/1e6);sf.add((c-b)/1e6);}
+        List<Double> hf=new ArrayList<>(),sf=new ArrayList<>();long now=System.currentTimeMillis();Stats.Filter f=new Stats.Filter();f.source="ledger";f.includeAbandon=true;int hits=0;
+        for(int i=0;i<100;i++){long a=System.nanoTime();hits+=HistoryIndex.filter(index.runs,i%2==0?"WATCHER":"",-1,"",0,i%3==0?"bash":"",false,now).size();long b=System.nanoTime();f.character=i%2==0?"WATCHER":"";hits+=Metrics.compute(Stats.select(stats,f,now),f).size();long c=System.nanoTime();hf.add((b-a)/1e6);sf.add((c-b)/1e6);}
         Runtime rt=Runtime.getRuntime();
         System.out.println(String.format(Locale.ROOT,"{\"runs\":%d,\"summarized\":%d,\"errors\":%d,\"history_scan_ms\":%.1f,\"stats_scan_ms\":%.1f,\"history_filter\":%s,\"stats_filter_metrics\":%s,\"used_heap_mb\":%d,\"hits\":%d}",index.runs.size(),summarized,index.errors.size()+stats.errors.size(),(t1-t0)/1e6,(t2-t1)/1e6,pct(hf),pct(sf),(rt.totalMemory()-rt.freeMemory())>>20,hits));
     }

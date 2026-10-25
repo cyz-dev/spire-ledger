@@ -15,6 +15,14 @@ $list=Join-Path $out 'sources.txt'
 [IO.File]::WriteAllLines($list,@($sources | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'}),$utf8)
 & javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp $cp -d $classes "@$list"
 if($LASTEXITCODE -ne 0){throw 'javac failed'}
+# spireledger.stats reads only the record schema: compile it alone against the game's own Gson, so any game or mod class reference fails the build.
+$gson=Join-Path $out 'gson'
+New-Item -ItemType Directory -Force $gson | Out-Null;Push-Location $gson;try{& jar xf "$Game\desktop-1.0.jar" com/google/gson}finally{Pop-Location}
+if(-not(Test-Path "$gson\com\google\gson\JsonObject.class")){throw 'Gson not found in desktop-1.0.jar'}
+# The same classes run the offline TinyCat export: java -cp "build\gson;build\stats-classes" spireledger.stats.Export <runs> <out.json> <slot> [run-list.json]
+$statsClasses=Join-Path $out 'stats-classes';if(Test-Path $statsClasses){Remove-Item -Recurse -Force $statsClasses};New-Item -ItemType Directory -Force $statsClasses | Out-Null;Copy-Item "$PSScriptRoot\ModTheSpire.json" $statsClasses
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -implicit:none -cp $gson -d $statsClasses @(Get-ChildItem "$PSScriptRoot\src\spireledger\stats" -Filter *.java | ForEach-Object FullName)
+if($LASTEXITCODE -ne 0){throw 'spireledger.stats must compile with Gson alone'}
 & "$PSScriptRoot/adapt-savestate.ps1" -Source $(if([IO.Path]::IsPathRooted($SaveStateSource)){$SaveStateSource}else{Join-Path $PSScriptRoot $SaveStateSource}) -Output 'build/SaveStateMod.jar' -Game $Game
 & javac -encoding UTF-8 --release 8 -cp "$workshop/1605060445/ModTheSpire.jar" -d "$out/adapter-tool" "$PSScriptRoot/tools/BundleSaveState.java"
 if($LASTEXITCODE -ne 0){throw 'Bundle tool compile failed'}
@@ -37,8 +45,8 @@ if($Check){
   if($LASTEXITCODE -ne 0){throw 'HistoryIndexCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.HistoryLayoutCheck
   if($LASTEXITCODE -ne 0){throw 'HistoryLayoutCheck failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.StatsIndexCheck (Join-Path $out ('stats-checks-'+[Guid]::NewGuid().ToString('N')))
-  if($LASTEXITCODE -ne 0){throw 'StatsIndexCheck failed'}
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.StatsCheck (Join-Path $out ('stats-checks-'+[Guid]::NewGuid().ToString('N'))) "$PSScriptRoot\src\spireledger\stats"
+  if($LASTEXITCODE -ne 0){throw 'StatsCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.SummaryCheck (Join-Path $out ('summary-checks-'+[Guid]::NewGuid().ToString('N'))) "$PSScriptRoot\samples"
   if($LASTEXITCODE -ne 0){throw 'SummaryCheck failed'}
   & java '-Dfile.encoding=UTF-8' ("-Duser.home="+(Join-Path $out ('diagnostic-check-'+[Guid]::NewGuid().ToString('N')))) -ea -cp "$classes;$cp" spireledger.DiagnosticReportCheck

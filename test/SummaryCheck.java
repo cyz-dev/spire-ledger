@@ -4,6 +4,7 @@ import java.lang.reflect.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import spireledger.stats.*;
 
 /** Summary path equals the full path field by field; stale, damaged or missing summaries fall back; scans write nothing. Synthetic records only. */
 public final class SummaryCheck {
@@ -20,13 +21,16 @@ public final class SummaryCheck {
             if(f.getName().equals("values")){Map<?,?> m=(Map<?,?>)x,n=(Map<?,?>)y;check(m.keySet().equals(n.keySet()),what+": values keys");for(Object k:m.keySet())check(Arrays.equals((double[])m.get(k),(double[])n.get(k)),what+": values "+k);continue;}
             check(Objects.equals(x,y),what+": "+f.getName()+" "+x+" vs "+y);}
     }
+    // The kernel's logical run from one record, as JSON: the summary and the full record must give the same one.
+    static Run run(JsonObject doc,HistoryIndex.Summary s){return Stats.build(Collections.<Stats.NativeFile>emptyList(),Collections.singletonList(new Ledger(doc,s.current,s.conflict))).runs.get(0);}
+    static void same(Run a,Run b,String what){String x=new Gson().toJson(a),y=new Gson().toJson(b);check(x.equals(y),what+": "+x+" vs "+y);}
     static void equal(Path dir,String what)throws Exception{
         HistoryIndex.Summary s=HistoryIndex.load(dir),full=HistoryIndex.loadFull(dir);check(s.summarized&&!full.summarized,what+": summary used");same(s,full,what+" Summary");
-        same(StatsIndex.notesRun(HistoryIndex.facts(s),s),StatsIndex.notesRun(HistoryIndex.document(full.file),full),what+" Run");
+        same(run(HistoryIndex.facts(s),s),run(HistoryIndex.document(full.file),full),what+" Run");
     }
     static void equal(JsonObject doc,Path dir,String what)throws Exception{
         HistoryIndex.Summary full=HistoryIndex.summarize(doc,false),s=HistoryIndex.fromSummary(RunSummary.project(doc,0,0),dir);full.file=s.file;same(s,full,what+" Summary");
-        same(StatsIndex.notesRun(RunSummary.project(doc,0,0),s),StatsIndex.notesRun(doc,full),what+" Run");
+        same(run(RunSummary.project(doc,0,0),s),run(doc,full),what+" Run");
     }
     static Map<Path,byte[]> files(Path root)throws Exception{Map<Path,byte[]> out=new TreeMap<>();try(java.util.stream.Stream<Path> w=Files.walk(root)){for(Path p:(Iterable<Path>)w.filter(Files::isRegularFile)::iterator)out.put(p,Files.readAllBytes(p));}return out;}
     static void copy(Path from,Path to)throws Exception{Files.createDirectories(to);try(DirectoryStream<Path> s=Files.newDirectoryStream(from)){for(Path p:s)Files.copy(p,to.resolve(p.getFileName()),StandardCopyOption.REPLACE_EXISTING);}}
@@ -57,9 +61,10 @@ public final class SummaryCheck {
         for(Map.Entry<String,JsonElement> k:sum.entrySet())check(Arrays.asList("schema","source_schema","events_bytes","last_seq","record_count","metadata","card_ids","card_names","relics","records").contains(k.getKey()),"summary holds facts only: "+k.getKey());
         check(sum.getAsJsonObject("relics").get("Anchor").getAsInt()==57,"relic first floor");check(Files.size(dir.resolve(RunSummary.FILE))<Files.size(dir.resolve("run.json")),"summary is a projection");
         equal(dir,"recorder run");HistoryIndex.Summary full=HistoryIndex.loadFull(dir);check(full.outcome.equals("victory")&&full.conflict&&full.branches.size()==2&&full.picks==2&&full.pending==2,"fixture exercises outcome, conflict, branches, picks, pending");
-        StatsIndex.Run run=StatsIndex.notesRun(HistoryIndex.document(full.file),full);check(run.pathExcluded==0&&run.values.containsKey("pick:2:Carnage")&&run.values.containsKey("remove:observed:Inflame")&&run.values.containsKey("upgrade:observed:Strike_R")&&run.deckSize==2,"fixture exercises path, observed changes, final deck");
+        Run led=run(HistoryIndex.document(full.file),full);Map<String,Integer> seen=led.counts.get("observed").value;boolean carnage=false;for(Run.Screen x:led.screens.value)carnage|=x.act==2&&"Carnage".equals(x.picked);
+        check(!led.unresolvedPath&&carnage&&seen.containsKey("remove:observed:Inflame")&&seen.containsKey("upgrade:observed:Strike_R")&&led.deckSize.value==2,"fixture exercises path, observed changes, final deck");
         Recorder u=new Recorder(root,meta,null);u.begin("r","COMBAT_REWARD",state(1,1),reward("Bash"),"card:0","human");u.settle(state(1,1));JsonObject turn=new JsonObject();turn.addProperty("snapshot_id","missing");u.forkBranch(u.branch,"turn_restore",turn);u.append(won(state(3,51)));u.flush();u.awaitWrites();
-        equal(u.directory,"unknown turn parent");check(StatsIndex.notesRun(HistoryIndex.facts(HistoryIndex.load(u.directory)),HistoryIndex.load(u.directory)).pathExcluded==1,"fixture exercises an unresolved path");u.close();
+        equal(u.directory,"unknown turn parent");check(run(HistoryIndex.facts(HistoryIndex.load(u.directory)),HistoryIndex.load(u.directory)).unresolvedPath,"fixture exercises an unresolved path");u.close();
         Path samples=Paths.get(args.length>1?args[1]:"samples");for(String name:Arrays.asList("run.json","m1-run.json"))equal(parse(new String(Files.readAllBytes(samples.resolve(name)),StandardCharsets.UTF_8)),dir,"samples/"+name);
         // Stale: the summary from an earlier flush is not used, even though it parses.
         Recorder st=new Recorder(root,meta,null);st.begin("r","COMBAT_REWARD",state(1,1),reward("Bash"),"card:0","human");st.settle(state(1,1));st.awaitWrites();Path sd=st.directory;byte[] oldSummary=Files.readAllBytes(sd.resolve(RunSummary.FILE)),oldRun=Files.readAllBytes(sd.resolve("run.json"));
@@ -69,14 +74,14 @@ public final class SummaryCheck {
         Path missing=root.resolve("missing");copy(sd,missing);Files.delete(missing.resolve(RunSummary.FILE));
         Path alien=root.resolve("alien");copy(sd,alien);JsonObject other=parse(new String(Files.readAllBytes(sd.resolve(RunSummary.FILE)),StandardCharsets.UTF_8));other.addProperty("schema","spire-ledger-summary-v9");Files.write(alien.resolve(RunSummary.FILE),other.toString().getBytes(StandardCharsets.UTF_8));
         Path nojournal=root.resolve("nojournal");copy(sd,nojournal);Files.delete(nojournal.resolve("events.jsonl"));
-        for(Path p:Arrays.asList(stale,broken,missing,alien,nojournal)){HistoryIndex.Summary x=HistoryIndex.load(p);check(!x.summarized&&x.outcome.equals("victory"),"falls back to the full record: "+p.getFileName());same(StatsIndex.notesRun(HistoryIndex.facts(x),x),StatsIndex.notesRun(HistoryIndex.document(x.file),x),"fallback Run "+p.getFileName());}
+        for(Path p:Arrays.asList(stale,broken,missing,alien,nojournal)){HistoryIndex.Summary x=HistoryIndex.load(p);check(!x.summarized&&x.outcome.equals("victory"),"falls back to the full record: "+p.getFileName());same(run(HistoryIndex.facts(x),x),run(HistoryIndex.document(x.file),x),"fallback Run "+p.getFileName());}
         // run.json older than run.json.tmp (a reader blocked the last replace): the newer copy wins, by record count.
         Path held=root.resolve("held");copy(sd,held);Files.copy(held.resolve("run.json"),held.resolve("run.json.tmp"));Files.write(held.resolve("run.json"),oldRun);
         check(HistoryIndex.load(held).summarized&&HistoryIndex.load(held).outcome.equals("victory"),"fresh summary already reflects the newer copy");Files.delete(held.resolve(RunSummary.FILE));
         HistoryIndex.Summary h=HistoryIndex.load(held);check(!h.summarized&&h.outcome.equals("victory")&&h.file.equals(held.resolve("run.json")),"run.json.tmp newer than run.json is chosen");check(HistoryIndex.document(h.file).getAsJsonArray("records").size()==h.records,"detail reads the newer copy");
         Path older=root.resolve("older-tmp");copy(sd,older);Files.write(older.resolve("run.json.tmp"),oldRun);Files.delete(older.resolve(RunSummary.FILE));check(HistoryIndex.load(older).outcome.equals("victory"),"an older run.json.tmp is ignored");
         // Scans only read: no summary is rebuilt on disk, nothing is touched.
-        Map<Path,byte[]> before=files(root);HistoryIndex.Index index=HistoryIndex.scan(root,null);StatsIndex.Index stats=StatsIndex.scan(root.resolve("no-native"),index,null);Map<Path,byte[]> after=files(root);
+        Map<Path,byte[]> before=files(root);HistoryIndex.Index index=HistoryIndex.scan(root,null);Stats.Index stats=StatsIndex.scan(root.resolve("no-native"),index,null);Map<Path,byte[]> after=files(root);
         check(before.keySet().equals(after.keySet()),"scan creates or deletes no file");for(Path p:before.keySet())check(Arrays.equals(before.get(p),after.get(p)),"scan changes no file: "+p);check(stats.errors.isEmpty()&&index.errors.isEmpty(),"scan errors "+index.errors+stats.errors);
         st.close();System.out.println("SummaryCheck PASS: summary equals full path for Summary and Run (recorder run, samples), stale/damaged/missing/foreign/no-journal fall back, newer run.json.tmp chosen, scans write nothing");
     }
