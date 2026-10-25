@@ -66,10 +66,13 @@ public final class Recorder implements AutoCloseable {
         line(e);records.add(e);
         if(records.size()-segmentStart>=16)flush();
     }
-    public String begin(String key,String source,JsonObject before,JsonArray candidates,String selected,String actor)throws IOException {
+    public String begin(String key,String source,JsonObject before,JsonArray candidates,String selected,String actor)throws IOException {return begin(key,source,before,candidates,selected,actor,null);}
+    /** extra adds source-specific keys (e.g. Neow variant, shop visit); it never overrides the common decision keys. */
+    public String begin(String key,String source,JsonObject before,JsonArray candidates,String selected,String actor,JsonObject extra)throws IOException {
         // Key represents the live reward, not floor/name. Reopening is not a new choice.
         if(pending.containsKey(key)||completed.contains(key))return null;
         String id=UUID.randomUUID().toString();JsonObject d=object("decision");
+        if(extra!=null)for(Map.Entry<String,JsonElement> e:extra.entrySet())d.add(e.getKey(),e.getValue());
         d.addProperty("decision_id",id);d.addProperty("reward_key",key);d.addProperty("source",source);
         d.addProperty("candidate_id",selected);d.addProperty("action_source",actor);d.addProperty("status","pending");
         d.add("before",copy(before));d.add("candidates",new JsonParser().parse(candidates.toString()));

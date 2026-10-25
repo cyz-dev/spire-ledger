@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/integration-instance',[switch]$PrepareOnly,[switch]$WithHistory,[switch]$UiOnly,[switch]$MiscOnly,[switch]$WaitForExit,[switch]$Headless)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/integration-instance',[switch]$PrepareOnly,[switch]$WithHistory,[switch]$UiOnly,[switch]$MiscOnly,[switch]$M1Only,[switch]$WaitForExit,[switch]$Headless)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -35,6 +35,7 @@ try {
  $props=@('-Dfile.encoding=UTF-8','-Dspireledger.fixture=true',('-Dspireledger.expectUiActor='+$uiActor))
  if($UiOnly){$props=@('-Dspireledger.uiOnly=true')+$props}
  if($MiscOnly){$props=@('-Dspireledger.miscOnly=true')+$props}
+ if($M1Only){$props=@('-Dspireledger.m1Only=true')+$props}
  $proc=Start-Probe $Game $instance $props $mods -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\probe-result.json"

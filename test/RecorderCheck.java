@@ -20,11 +20,61 @@ public class RecorderCheck {
         Recorder.replace(tmp,run);release.join();if(!"{}".equals(new String(Files.readAllBytes(run),StandardCharsets.UTF_8)))throw new AssertionError("replace did not wait for a brief reader");
         r.close();System.out.println("RecorderCheck lock: PASS");
     }
+    static JsonObject find(JsonArray records,String type,String key,String value){for(JsonElement e:records){JsonObject o=e.getAsJsonObject();if(type.equals(Recorder.string(o,"type"))&&(key==null||value.equals(Recorder.string(o,key))))return o;}throw new AssertionError("missing "+type+" "+key+"="+value);}
+    static int count(JsonArray records,String type){int n=0;for(JsonElement e:records)if(type.equals(Recorder.string(e.getAsJsonObject(),"type")))n++;return n;}
+    static void need(boolean ok,String what){if(!ok)throw new AssertionError(what);}
+    static void m1Checks(JsonArray recs){
+        JsonObject neow=find(recs,"decision","source","NEOW_OPTION");
+        need("mini_blessing".equals(Recorder.string(neow,"variant"))&&"neow:1".equals(Recorder.string(neow,"candidate_id")),"Neow variant and selection");
+        JsonObject cost=neow.getAsJsonArray("candidates").get(1).getAsJsonObject();need("TEN_PERCENT_HP_BONUS".equals(Recorder.string(cost,"reward_type"))&&"NONE".equals(Recorder.string(cost,"drawback"))&&Recorder.string(cost,"label").contains("8"),"Neow reward, drawback and label");
+        need(neow.getAsJsonObject("before").get("gold_gained").getAsInt()==0,"snapshot gold_gained");
+        JsonObject neowResult=find(recs,"result","decision_id",Recorder.string(neow,"decision_id"));need("confirmed".equals(Recorder.string(neowResult,"status"))&&neowResult.getAsJsonObject("after").get("max_hp").getAsInt()==88,"Neow settled after");
+        JsonObject enter=find(recs,"floor_enter","floor","1");need(enter.get("hp").getAsInt()==54&&enter.get("max_hp").getAsInt()==88&&enter.get("gold").getAsInt()==99&&enter.get("gold_gained").getAsInt()==0&&"RestRoom".equals(Recorder.string(enter,"room"))&&"before_room_entry_effects".equals(Recorder.string(enter,"timing")),"floor_enter fields");
+        need(count(recs,"shop_offer")==1,"one offer per visit");JsonObject offer=find(recs,"shop_offer","shop_key","visit-1");
+        JsonArray stock=offer.getAsJsonArray("candidates");need(stock.size()==5,"cards, relic, potion, purge, leave");
+        JsonObject relic=stock.get(1).getAsJsonObject();need("shop_relic".equals(Recorder.string(relic,"type"))&&relic.get("price").getAsInt()==300&&!relic.get("purchasable").getAsBoolean(),"relic price and state");
+        JsonObject purge=stock.get(3).getAsJsonObject();need(purge.get("available").getAsBoolean()&&purge.get("price").getAsInt()==75,"purge price and availability");
+        need(offer.getAsJsonObject("state").get("gold_gained").getAsInt()==112,"offer state gold_gained");
+        JsonObject buy=find(recs,"decision","candidate_id","card:shop-card");need("SHOP".equals(Recorder.string(buy,"source"))&&"visit-1".equals(Recorder.string(buy,"shop_key")),"purchase is a shop decision");
+        JsonObject paid=find(recs,"result","decision_id",Recorder.string(buy,"decision_id")).getAsJsonObject("after");need(buy.getAsJsonObject("before").get("gold").getAsInt()-paid.get("gold").getAsInt()==buy.getAsJsonArray("candidates").get(0).getAsJsonObject().get("price").getAsInt(),"paid equals offered price");
+        need(paid.get("gold_gained").getAsInt()==112,"spending never reduces gold_gained");
+        JsonObject leave=find(recs,"decision","candidate_id","leave");JsonObject left=find(recs,"result","decision_id",Recorder.string(leave,"decision_id"));need("confirmed".equals(Recorder.string(left,"status"))&&left.getAsJsonObject("after").equals(leave.getAsJsonObject("before")),"leave settles at once");
+        JsonObject end=find(recs,"ending",null,null);need(end.get("act3_cleared").getAsBoolean()&&end.get("act3_cleared_floor").getAsInt()==50&&!end.get("heart_kill").getAsBoolean(),"ending act-3 facts");
+    }
+    /** M1 additive fields: Neow options, entry HP, shop offer/purchase/leave, gold_gained, act-3 facts; journal restore and run.json both keep them. */
+    static void m1Fields(Path samples,JsonObject meta)throws Exception {
+        Recorder r=new Recorder(samples,meta,null);
+        JsonObject s=state(1,0);s.addProperty("gold_gained",0);
+        JsonArray neow=new JsonParser().parse("[{\"type\":\"neow_option\",\"candidate_id\":\"neow:0\",\"slot\":0,\"reward_type\":\"THREE_ENEMY_KILL\",\"drawback\":\"NONE\",\"label\":\"[ 敌人在接下来三场战斗中只有1点生命 ]\"},{\"type\":\"neow_option\",\"candidate_id\":\"neow:1\",\"slot\":1,\"reward_type\":\"TEN_PERCENT_HP_BONUS\",\"drawback\":\"NONE\",\"label\":\"[ 最大生命值 +8 ]\"}]").getAsJsonArray();
+        // Extra keys never override the common decision contract.
+        r.begin("neow-rewards","NEOW_OPTION",s,neow,"neow:1","human",parse("{\"variant\":\"mini_blessing\",\"source\":\"forged\",\"candidate_id\":\"forged\"}"));
+        JsonObject a=state(1,0);a.addProperty("max_hp",88);a.addProperty("gold_gained",0);r.settle(a);
+        JsonObject enter=Recorder.object("floor_enter");enter.addProperty("act",1);enter.addProperty("floor",1);enter.addProperty("room","RestRoom");enter.addProperty("hp",54);enter.addProperty("max_hp",88);enter.addProperty("gold",99);enter.addProperty("gold_gained",0);enter.addProperty("timing","before_room_entry_effects");r.append(enter);
+        JsonObject shop=state(1,2);shop.addProperty("gold",123);shop.addProperty("gold_gained",112);
+        JsonArray stock=new JsonParser().parse("[{\"type\":\"shop_card\",\"candidate_id\":\"card:shop-card\",\"price\":75,\"purchasable\":true,\"colorless\":false,\"card\":{\"id\":\"Inflame\",\"instance_id\":\"shop-card\",\"type\":\"POWER\",\"upgrades\":0}},{\"type\":\"shop_relic\",\"candidate_id\":\"relic:0\",\"price\":300,\"purchasable\":false,\"relic\":\"Anchor\"},{\"type\":\"shop_potion\",\"candidate_id\":\"potion:1\",\"price\":50,\"purchasable\":true,\"potion\":\"Fire Potion\"},{\"type\":\"shop_purge\",\"candidate_id\":\"purge\",\"price\":75,\"purchasable\":true,\"available\":true},{\"type\":\"leave\",\"candidate_id\":\"leave\"}]").getAsJsonArray();
+        JsonObject offer=Recorder.object("shop_offer");offer.addProperty("shop_key","visit-1");offer.add("state",shop);offer.add("candidates",stock);r.append(offer);
+        JsonObject visit=parse("{\"shop_key\":\"visit-1\"}");
+        r.begin("card-object","SHOP",shop,stock,"card:shop-card","human",visit);JsonObject paid=Recorder.copy(shop);paid.addProperty("gold",48);r.settleKey("card-object",paid);
+        JsonArray rest=new JsonParser().parse(stock.toString()).getAsJsonArray();rest.remove(0);
+        need(r.begin("visit-1:leave","SHOP",paid,rest,"leave","human",visit)!=null,"leave begins");r.settleKey("visit-1:leave",paid);
+        need(r.begin("visit-1:leave","SHOP",paid,rest,"leave","human",visit)==null,"leave recorded once");
+        JsonObject end=Recorder.object("ending");end.addProperty("outcome","death");StateMod.act3Facts(end,3,50,false);r.append(end);
+        String runId=r.runId;r.close();
+        Recorder back=new Recorder(samples,meta,runId);m1Checks(back.document().getAsJsonArray("records"));
+        m1Checks(parse(new String(Files.readAllBytes(back.directory.resolve("run.json")),StandardCharsets.UTF_8)).getAsJsonArray("records"));
+        Files.write(samples.resolve("m1-run.json"),back.document().toString().getBytes(StandardCharsets.UTF_8));back.close();
+        // Section 7 rule: no exit and still in act 1-3 is not cleared; act 4 is cleared without a known floor; a heart kill implies both.
+        JsonObject f=new JsonObject();StateMod.act3Facts(f,3,-1,false);need(!f.get("act3_cleared").getAsBoolean()&&f.get("act3_cleared_floor").isJsonNull()&&!f.get("heart_kill").getAsBoolean(),"act 3 death not cleared");
+        f=new JsonObject();StateMod.act3Facts(f,4,-1,false);need(f.get("act3_cleared").getAsBoolean()&&f.get("act3_cleared_floor").isJsonNull(),"act 4 implies cleared");
+        f=new JsonObject();StateMod.act3Facts(f,4,51,true);need(f.get("act3_cleared").getAsBoolean()&&f.get("heart_kill").getAsBoolean()&&f.get("act3_cleared_floor").getAsInt()==51,"heart kill");
+        System.out.println("RecorderCheck M1: PASS");
+    }
     public static void main(String[] args)throws Exception {
         Path samples=Paths.get(args[0]);Files.createDirectories(samples);
         if(!StateMod.reviewedMod("basemod","5.56.0")||!StateMod.reviewedMod("stslib","2.12.0")||StateMod.reviewedMod("RunHistoryPlus","1.8.3"))throw new AssertionError("only BaseMod + StSLib keep the human source label");
         JsonObject meta=parse("{\"game_version\":\"test\",\"mod_version\":\"0.1.0\",\"seed\":\"-9223372036854775808\",\"play_id\":\"synthetic-contract-check\",\"coverage\":\"synthetic; not a real played run\"}");
         lockedRunJson(samples,meta);
+        m1Fields(samples,meta);
         Recorder r=new Recorder(samples,meta,null);JsonObject before=state(1,1);
         assert !r.hasMap(1);JsonObject map=Recorder.object("map");map.addProperty("act",1);map.addProperty("dictionary_version",1);map.add("nodes",new JsonArray());r.append(map);assert r.hasMap(1)&&!r.hasMap(3);
         JsonObject egg=parse("{\"id\":\"Frozen Egg 2\",\"counter\":-1}");before.getAsJsonArray("relics").add(egg);

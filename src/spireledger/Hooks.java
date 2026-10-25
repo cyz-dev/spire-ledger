@@ -17,6 +17,12 @@ import com.megacrit.cardcrawl.cards.CardGroup;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
 import javassist.CannotCompileException;
+import javassist.CtBehavior;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
+import com.megacrit.cardcrawl.neow.NeowEvent;
+import com.megacrit.cardcrawl.saveAndContinue.SaveFile;
+import com.megacrit.cardcrawl.screens.stats.StatsScreen;
+import com.megacrit.cardcrawl.shop.*;
 
 public final class Hooks {
     @SpirePatch(clz=AbstractPlayer.class,method="preBattlePrep") public static class CombatIdentity {
@@ -66,9 +72,37 @@ public final class Hooks {
     }
     public static void abandon(){StateMod.abandon();}
     @SpirePatch(clz=ProceedButton.class,method="goToTreasureRoom") public static class BossExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
-    @SpirePatch(clz=ProceedButton.class,method="goToVictoryRoomOrTheDoor") public static class Act3Exit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
+    @SpirePatch(clz=ProceedButton.class,method="goToVictoryRoomOrTheDoor") public static class Act3Exit { @SpirePrefixPatch public static void before(){StateMod.abandon();StateMod.act3Exit();} }
     @SpirePatch(clz=ProceedButton.class,method="goToDoubleBoss") public static class DoubleBossExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
-    @SpirePatch(clz=ProceedButton.class,method="goToTrueVictoryRoom") public static class HeartExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
+    @SpirePatch(clz=ProceedButton.class,method="goToTrueVictoryRoom") public static class HeartExit { @SpirePrefixPatch public static void before(){StateMod.abandon();StateMod.heartExit();} }
+    @SpirePatch(clz=NeowEvent.class,method="buttonEffect") public static class NeowOption {
+        @SpirePrefixPatch public static void before(NeowEvent __instance,int buttonPressed){StateMod.neow(__instance,buttonPressed);}
+    }
+    @SpirePatch(clz=ShopScreen.class,method="open") public static class ShopOpen {
+        @SpirePostfixPatch public static void after(ShopScreen __instance){StateMod.shopOffer(__instance);}
+    }
+    // Purchase prefixes mirror each method's own affordability guard, so a refused click is not a choice.
+    @SpirePatch(clz=ShopScreen.class,method="purchaseCard") public static class ShopCard {
+        @SpirePrefixPatch public static void before(ShopScreen __instance,AbstractCard hoveredCard){if(AbstractDungeon.player.gold>=hoveredCard.price)StateMod.shopBuy(hoveredCard,"card:"+Snapshot.id(hoveredCard));}
+    }
+    @SpirePatch(clz=StoreRelic.class,method="purchaseRelic") public static class ShopRelic {
+        @SpirePrefixPatch public static void before(StoreRelic __instance){if(AbstractDungeon.player.gold>=__instance.price)StateMod.shopBuy(__instance.relic,"relic:"+StateMod.field(__instance,"slot"));}
+    }
+    @SpirePatch(clz=StorePotion.class,method="purchasePotion") public static class ShopPotion {
+        @SpirePrefixPatch public static void before(StorePotion __instance){if(Snapshot.canBuyPotion(__instance.price))StateMod.shopBuy(__instance.potion,"potion:"+StateMod.field(__instance,"slot"));}
+    }
+    // purgeCard runs only after the removal grid returned a card; purchasePurge already checked gold.
+    @SpirePatch(clz=ShopScreen.class,method="purgeCard") public static class ShopPurge {
+        @SpirePrefixPatch public static void before(){StateMod.shopBuy(null,"purge");}
+    }
+    @SpirePatch(clz=AbstractDungeon.class,method="nextRoomTransition",paramtypez={SaveFile.class}) public static class RoomExit {
+        @SpirePrefixPatch public static void before(){StateMod.leaveRoom();}
+    }
+    // Entry sample: floorNum is already advanced; relic onEnterRoom/justEnteredRoom and room onPlayerEntry have not run.
+    @SpirePatch(clz=AbstractDungeon.class,method="nextRoomTransition",paramtypez={SaveFile.class}) public static class RoomEntry {
+        @SpireInsertPatch(locator=Locator.class) public static void before(){StateMod.enterRoom();}
+        static class Locator extends SpireInsertLocator {public int[] Locate(CtBehavior m)throws Exception{return LineFinder.findInOrder(m,new Matcher.MethodCallMatcher(StatsScreen.class,"incrementFloorClimbed"));}}
+    }
     @SpirePatch(clz=GridCardSelectScreen.class,method="open",paramtypez={CardGroup.class,int.class,String.class,boolean.class,boolean.class,boolean.class,boolean.class}) public static class Grid {
         @SpirePrefixPatch public static void before(){StateMod.mutation("grid_selection; pending until effects settle");}
     }
