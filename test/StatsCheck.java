@@ -133,6 +133,11 @@ public final class StatsCheck {
   Metric loss=m(m,"hp_loss:1:Jaw Worm");check(is(loss,18,4)&&loss.estimated==2,"hp loss exact and estimated: "+loss.numerator+"/"+loss.denominator+" est "+loss.estimated);
   check(m(m,"hp_loss_heal:1:Hexaghost").denominator==3&&m(m,"hp_loss_heal:1:Hexaghost").numerator==0&&m(m,"hp_loss_noheal:1:Jaw Worm").denominator==3,"heal split at Burning Blood's 6");
   check(is(m(m,"gold_gained:exact"),300,1)&&is(m(m,"gold_gained:estimated"),115,1)&&m(m,"gold_gained").estimated==1&&is(m(m,"gold_gained"),415,2),"gold exact from gold_gained, estimate from gold_per_floor (no neow_bonus: TinyCat deducts 45)");
+  // GoldCheck pairs a Ledger exact gold_gained with its linked .run estimate by play_id.
+  JsonObject gn=nativeRun("GX",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");gn.add("gold_per_floor",new JsonParser().parse("[120,110,150]"));
+  JsonObject gl=doc(Recorder.SCHEMA,"L-gold",null);JsonObject gp=Recorder.object("game_play_id");gp.addProperty("play_id","GX");add(records(gl),gp,"x",1);JsonObject ge=ending("death",1,3,false,false);ge.getAsJsonObject("state").addProperty("gold_gained",100);add(records(gl),ge,"x",2);
+  List<GoldCheck.Row> gr=GoldCheck.rows(Stats.build(Arrays.asList(nf(gn,"IRONCLAD","g.run")),Collections.emptyList()),Arrays.asList(ledger(gl),ledger(doc(Recorder.SCHEMA,"L-nogold",null))));
+  check(gr.size()==1&&gr.get(0).exact==100&&gr.get(0).estimate==115,"GoldCheck pairs exact and estimate by play_id");
   // metrics.md 5.2 TinyCat formula: the Neow constant depends on neow_bonus (HUNDRED_GOLD 40) and is 0 with the NO_GOLD cost; was a flat 99.
   JsonObject g1=nativeRun("G1",20,3,false,"Jaw Worm","3:M:Jaw Worm:40"),g2=nativeRun("G2",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");g1.addProperty("neow_bonus","HUNDRED_GOLD");g1.addProperty("neow_cost","NONE");g1.add("gold_per_floor",new JsonParser().parse("[150,140,200]"));
   g2.addProperty("neow_bonus","TWO_FIFTY_GOLD");g2.addProperty("neow_cost","NO_GOLD");g2.add("gold_per_floor",new JsonParser().parse("[50,60]"));
