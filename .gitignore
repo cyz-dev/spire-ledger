@@ -3,3 +3,4 @@
 /sendToDevs/
 *.class
 __pycache__/
+.claude/
