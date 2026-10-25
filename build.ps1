@@ -19,7 +19,9 @@ if($LASTEXITCODE -ne 0){throw 'javac failed'}
 $gson=Join-Path $out 'gson'
 New-Item -ItemType Directory -Force $gson | Out-Null;Push-Location $gson;try{& jar xf "$Game\desktop-1.0.jar" com/google/gson}finally{Pop-Location}
 if(-not(Test-Path "$gson\com\google\gson\JsonObject.class")){throw 'Gson not found in desktop-1.0.jar'}
-& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -implicit:none -cp $gson -d (Join-Path $out ('stats-isolated-'+[Guid]::NewGuid().ToString('N'))) @(Get-ChildItem "$PSScriptRoot\src\spireledger\stats" -Filter *.java | ForEach-Object FullName)
+# The same classes run the offline TinyCat export: java -cp "build\gson;build\stats-classes" spireledger.stats.Export <runs> <out.json> <slot> [run-list.json]
+$statsClasses=Join-Path $out 'stats-classes';if(Test-Path $statsClasses){Remove-Item -Recurse -Force $statsClasses};New-Item -ItemType Directory -Force $statsClasses | Out-Null;Copy-Item "$PSScriptRoot\ModTheSpire.json" $statsClasses
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -implicit:none -cp $gson -d $statsClasses @(Get-ChildItem "$PSScriptRoot\src\spireledger\stats" -Filter *.java | ForEach-Object FullName)
 if($LASTEXITCODE -ne 0){throw 'spireledger.stats must compile with Gson alone'}
 & "$PSScriptRoot/adapt-savestate.ps1" -Source $(if([IO.Path]::IsPathRooted($SaveStateSource)){$SaveStateSource}else{Join-Path $PSScriptRoot $SaveStateSource}) -Output 'build/SaveStateMod.jar' -Game $Game
 & javac -encoding UTF-8 --release 8 -cp "$workshop/1605060445/ModTheSpire.jar" -d "$out/adapter-tool" "$PSScriptRoot/tools/BundleSaveState.java"

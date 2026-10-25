@@ -22,7 +22,7 @@ final class Native {
     static int act(int[] b,int floor){return floor<=b[0]?1:floor<=b[1]?2:floor<=b[2]?3:4;}
 
     static Run read(JsonObject o,String dir,String file){
-        Run r=new Run();r.sources.add(N);r.playId=str(o,"play_id");r.id=r.playId.isEmpty()?"native-file:"+dir+"/"+file:r.playId;
+        Run r=new Run();r.sources.add(N);r.playId=str(o,"play_id");r.nativeFile=dir+"/"+file;r.id=r.playId.isEmpty()?"native-file:"+r.nativeFile:r.playId;
         r.character=text(o,"character_chosen");r.seed=text(o,"seed_played");r.ascension=Fact.of(integer(o,"ascension_level"),N);r.floorReached=Fact.of(integer(o,"floor_reached"),N);
         Double stamp=number(o,"timestamp");r.time=stamp==null?Fact.missing(N):Fact.of((long)(stamp*1000),N);r.playtime=Fact.amount(number(o,"playtime"),N);
         r.fixture="test_fixture".equals(str(o,"dataset_origin"));r.practice="practice".equals(str(o,"session_kind"));
@@ -71,7 +71,7 @@ final class Native {
                 for(String id:strings(arr(c,"cards_removed")))events.merge("remove:event:"+cardId(id),1,Integer::sum);for(String id:strings(arr(c,"cards_upgraded")))events.merge("upgrade:event:"+cardId(id),1,Integer::sum);
                 Double d=number(c,"damage_taken");Integer floor=integer(c,"floor");if(d!=null&&d>0&&floor!=null)hurt.merge(act(b,floor),d,Double::sum);}
             r.counts.put("events",Fact.of(events,N));r.eventDamage=Fact.of(hurt,N);}
-        if(isArray(o,"items_purchased")){Map<String,Integer> m=new LinkedHashMap<>();List<String> items=strings(arr(o,"items_purchased"));m.put("purchases",arr(o,"items_purchased").size());for(String id:items)m.merge("purchase:"+cardId(id),1,Integer::sum);r.counts.put("purchases",Fact.of(m,N));}
+        if(isArray(o,"items_purchased")){Map<String,Integer> m=new LinkedHashMap<>();List<String> items=strings(arr(o,"items_purchased"));m.put("purchases",arr(o,"items_purchased").size());for(String id:items)m.merge("purchase:"+item(id),1,Integer::sum);r.counts.put("purchases",Fact.of(m,N));}
         if(isArray(o,"items_purged")){Map<String,Integer> m=new LinkedHashMap<>();m.put("purges",arr(o,"items_purged").size());for(String id:strings(arr(o,"items_purged")))m.merge("remove:shop:"+cardId(id),1,Integer::sum);r.counts.put("purges",Fact.of(m,N));}
         if(isArray(o,"campfire_choices")){Map<String,Integer> m=new LinkedHashMap<>();for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();String key=str(c,"key"),id=cardId(str(c,"data"));m.merge("campfire:"+key,1,Integer::sum);
                 if(key.equals("SMITH")&&!id.isEmpty())m.merge("upgrade:campfire:"+id,1,Integer::sum);if(key.equals("PURGE")&&!id.isEmpty())m.merge("remove:campfire:"+id,1,Integer::sum);}
@@ -80,8 +80,27 @@ final class Native {
         if(isArray(o,"potions_floor_usage")){Map<String,Integer> m=new LinkedHashMap<>();Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potions_floor_usage");m.put("potions",uses.size());for(JsonElement e:uses){Integer floor=integer(e);if(floor!=null)byFloor.merge(floor,1,Integer::sum);}
             r.counts.put("potions",Fact.of(m,N));r.potionsByFloor=Fact.of(byFloor,N);}
         else if(isArray(o,"potion_use_per_floor")){Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potion_use_per_floor");for(int i=0;i<uses.size();i++)if(uses.get(i).isJsonArray())byFloor.put(i+1,uses.get(i).getAsJsonArray().size());r.potionsByFloor=Fact.of(byFloor,Fact.RHP);}
-        return r;
+        r.counts.put(ACTS,Fact.of(acts(o,b),N));return r;
     }
+
+    /** Count family of act-split occurrences: "&lt;act&gt;|&lt;key&gt;", act 0 when the floor is unknown; "has|&lt;field&gt;" marks each field present, so an absent one stays missing. */
+    static final String ACTS="acts";
+    static Map<String,Integer> acts(JsonObject o,int[] b){Map<String,Integer> m=new TreeMap<>();
+        for(String field:Arrays.asList("event_choices","campfire_choices","items_purchased","items_purged","relics","path_per_floor"))if(isArray(o,field))m.put("has|"+field,1);
+        for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");at(m,b,floor,"event:"+str(c,"event_name"),1);at(m,b,floor,"purge:EVENT",strings(arr(c,"cards_removed")).size());}
+        for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String key=str(c,"key"),id=cardId(str(c,"data"));if(key.isEmpty())continue;at(m,b,floor,"campfire:"+key,1);
+            if(key.equals("SMITH")&&!id.isEmpty())at(m,b,floor,"upgrade:campfire:"+id,1);if(key.equals("PURGE")&&!id.isEmpty())at(m,b,floor,"purge:CAMPFIRE",1);}
+        List<String> bought=strings(arr(o,"items_purchased"));JsonArray boughtAt=arr(o,"item_purchase_floors");for(int i=0;i<bought.size();i++)at(m,b,i<boughtAt.size()?integer(boughtAt.get(i)):null,"purchase:"+item(bought.get(i)),1);
+        int purged=arr(o,"items_purged").size();JsonArray purgedAt=arr(o,"items_purged_floors");for(int i=0;i<purged;i++)at(m,b,i<purgedAt.size()?integer(purgedAt.get(i)):null,"purge:SHOP",1);
+        // RunHistoryPlus only; vanilla has no Neow removal record (metrics.md 6.5).
+        if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject()){JsonObject neow=obj(o,"neow_bonus_log");m.put("has|neow_bonus_log",1);at(m,b,null,"purge:NEOW",strings(arr(neow,"cards_removed")).size());}
+        // Empty Cage removes two cards that .run never lists: +2, estimated, in the act whose boss relic it was.
+        if(strings(arr(o,"relics")).contains("Empty Cage")){int act=0;JsonArray boss=arr(o,"boss_relics");for(int i=0;i<boss.size();i++)if(boss.get(i).isJsonObject()&&"Empty Cage".equals(str(boss.get(i).getAsJsonObject(),"picked")))act=i+1;m.merge(act+"|purge:EMPTY_CAGE",2,Integer::sum);}
+        JsonArray path=arr(o,"path_per_floor");for(int i=0;i<path.size();i++)if(path.get(i).isJsonPrimitive()&&"$".equals(path.get(i).getAsString()))at(m,b,i+1,"shop_visit",1);
+        return m;}
+    static void at(Map<String,Integer> m,int[] b,Integer floor,String key,int n){if(n>0)m.merge((floor==null?0:act(b,floor))+"|"+key,n,Integer::sum);}
+    /** Shop item ID: potions are bought under the ID or the display name, so "Swift Potion" becomes SwiftPotion (metrics.md 6.5); cards lose +N. */
+    static String item(String id){return id.endsWith(" Potion")?id.replace(" ",""):cardId(id);}
 
     /** metrics.md 5.2 estimate: first floor's gold less the start, plus later gains, plus 12 with Maw Bank. */
     static Fact<Double> goldEstimate(JsonObject o){JsonArray g=arr(o,"gold_per_floor");if(g.size()==0)return Fact.missing(N);double total=0;Integer prev=null;

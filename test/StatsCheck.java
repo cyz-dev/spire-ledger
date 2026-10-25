@@ -24,7 +24,7 @@ public final class StatsCheck {
  static Stats.NativeFile nf(JsonObject run,String dir,String file){return new Stats.NativeFile(run,dir,file);}
 
  // --- Ledger fixtures ---
- static JsonObject doc(String schema,String runId,String playId){JsonObject d=parse("{\"records\":[]}");d.addProperty("schema",schema);JsonObject m=new JsonObject();m.addProperty("run_id",runId);m.addProperty("seed",SEED);if(playId!=null)m.addProperty("play_id",playId);d.add("metadata",m);return d;}
+ static JsonObject doc(String schema,String runId,String playId){JsonObject d=parse("{\"records\":[]}");d.addProperty("schema",schema);JsonObject m=new JsonObject();m.addProperty("run_id",runId);m.addProperty("seed",SEED);if(playId!=null)m.addProperty("play_id",playId);m.addProperty("save_slot",0);d.add("metadata",m);return d;}
  static JsonObject state(int act,int floor){JsonObject s=parse("{\"class\":\"IRONCLAD\",\"ascension\":20,\"deck\":[{\"id\":\"Bash\",\"instance_id\":\"a\",\"upgrades\":0}],\"hp\":20,\"max_hp\":80,\"gold\":1,\"potions\":[],\"relics\":[],\"is_daily\":false,\"is_endless\":false,\"is_trial\":false}");s.addProperty("act",act);s.addProperty("floor",floor);return s;}
  static void add(JsonArray records,JsonObject e,String branch,int seq){e.addProperty("branch_id",branch);e.addProperty("seq",seq);e.addProperty("time_ms",100000);records.add(e);}
  static JsonArray records(JsonObject doc){return doc.getAsJsonArray("records");}
@@ -42,8 +42,8 @@ public final class StatsCheck {
 
  public static void main(String[] args)throws Exception{
   Path root=Paths.get(args[0]),src=Paths.get(args[1]);
-  oldAssertions(root);gapsAndCombinations();boundary(src);
-  System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, Gson-only stats package");
+  oldAssertions(root);gapsAndCombinations();export();boundary(src);
+  System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, save slot sources, TinyCat export, Gson-only stats package");
  }
 
  /** The StatsIndexCheck assertions that still hold under metrics-v1; changed ones say what changed. */
@@ -103,7 +103,7 @@ public final class StatsCheck {
   JsonObject leg=doc("sts1-state-v1","L-legacy-win",null);add(records(leg),ending("victory",4,57,null,null),"z",1);
   JsonObject legDeath=doc("sts1-state-v1","L-legacy-death",null);add(records(legDeath),ending("death",1,2,null,null),"w",1);
   JsonObject inc=doc(Recorder.SCHEMA,"L-open",null);decision(records(inc),"r3","v",1,1,1,"card");
-  List<Stats.NativeFile> natives=Arrays.asList(nf(heart,"IRONCLAD","h.run"),nf(act3,"IRONCLAD","v.run"),nf(act4,"2_IRONCLAD","d4.run"),nf(quit,"IRONCLAD","ab.run"),nf(early,"IRONCLAD","d1.run"),nf(noResult,"IRONCLAD","nu.run"));
+  List<Stats.NativeFile> natives=Arrays.asList(nf(heart,"IRONCLAD","h.run"),nf(act3,"IRONCLAD","v.run"),nf(act4,"IRONCLAD","d4.run"),nf(quit,"IRONCLAD","ab.run"),nf(early,"IRONCLAD","d1.run"),nf(noResult,"IRONCLAD","nu.run"));
   List<Ledger> ledgers=Arrays.asList(ledger(link),ledger(lv3),ledger(leg),ledger(legDeath),ledger(inc));
   Stats.Index index=Stats.build(natives,ledgers);
   check(index.runs.size()==10&&index.linked==1&&index.unlinked==4,"10.9 one merged population: linked record joins its .run, unlinked records stand alone ("+index.runs.size()+")");
@@ -140,8 +140,15 @@ public final class StatsCheck {
   check(fm.get("coverage:damage").unit.equals("combat")&&is(fm.get("coverage:damage"),16,16)&&fm.get("coverage:reward").unit.equals("choice_set")&&fm.get("pick:1:Inflame").coverUnit.equals("choice_set")&&fm.get("coverage:potions_by_encounter").unit.equals("combat")&&is(fm.get("coverage:potions_by_encounter"),7,16),"10.8 coverage by fight and by screen");
   // 10.9 sources: native filter keeps linked runs, Ledger filter keeps linked and unlinked records, together they are the one population.
   Stats.Filter nat=new Stats.Filter();nat.source=Fact.NATIVE;Stats.Filter led=new Stats.Filter();led.source=Fact.LEDGER;check(Stats.select(index,nat,100000).runs.size()==5&&Stats.select(index,led,100000).runs.size()==4,"10.9 sources are filters on one population");
-  Stats.Filter slot=new Stats.Filter();slot.slot=2;check(ids(Stats.select(index,slot,100000)).equals(new TreeSet<>(Arrays.asList("D4"))),"save slot from the 2_ directory");
-  JsonObject daily=nativeRun("DAILY",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");daily.addProperty("is_daily",true);Stats.Index withDaily=Stats.build(Arrays.asList(nf(daily,"DAILY","x.run")),Collections.emptyList());check(Stats.select(withDaily,all,100000).excluded.get("mode")==1,"daily excluded by default");Stats.Filter special=new Stats.Filter();special.mode="special";check(Stats.select(withDaily,special,100000).runs.size()==1,"daily on request");
+  Stats.Filter slot=new Stats.Filter();slot.slot=2;check(Stats.select(index,slot,100000).runs.isEmpty(),"slot-0 runs are not in slot 2");
+  JsonObject daily=nativeRun("DAILY",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");daily.addProperty("is_daily",true);Stats.Index withDaily=Stats.build(Arrays.asList(nf(daily,"DAILY","x.run")),Collections.emptyList());check(Stats.select(withDaily,all,100000).excluded.get("mode")==1,"daily never counted");
+  // Save slot (metrics.md 2): Ledger save_slot, else the linked .run's directory, else missing and in no slot.
+  JsonObject bare=doc(Recorder.SCHEMA,"L-noslot",null);bare.getAsJsonObject("metadata").remove("save_slot");add(records(bare),ending("victory",4,57,true,true),"x",1);
+  Stats.Index noSlot=Stats.build(Collections.emptyList(),Arrays.asList(ledger(bare)));check(Stats.select(noSlot,all,100000).excluded.get("slot")==1&&Stats.select(noSlot,slot,100000).excluded.get("slot")==1,"unlinked record without save_slot is in no slot");
+  JsonObject bareLinked=doc(Recorder.SCHEMA,"L-noslot-2","S2");bareLinked.getAsJsonObject("metadata").remove("save_slot");add(records(bareLinked),ending("victory",4,57,true,true),"x",1);
+  Stats.Index fromDir=Stats.build(Arrays.asList(nf(nativeRun("S2",20,57,true,null,"56:B:The Heart:3"),"2_IRONCLAD","s.run")),Arrays.asList(ledger(bareLinked)));check(fromDir.runs.get(0).slot.value==2&&Stats.select(fromDir,slot,100000).runs.size()==1,"older record takes the linked .run's slot");
+  JsonObject slotted=doc(Recorder.SCHEMA,"L-slot-1","S1");slotted.getAsJsonObject("metadata").addProperty("save_slot",1);add(records(slotted),ending("victory",4,57,true,true),"x",1);
+  Stats.Index fromLedger=Stats.build(Arrays.asList(nf(nativeRun("S1",20,57,true,null,"56:B:The Heart:3"),"IRONCLAD","s.run")),Arrays.asList(ledger(slotted)));Stats.Filter one=new Stats.Filter();one.slot=1;check(fromLedger.runs.get(0).slot.value==1&&Stats.select(fromLedger,one,100000).runs.size()==1&&Stats.select(fromLedger,all,100000).runs.isEmpty(),"Ledger save_slot beats the directory; slots never merge");
 
   // 10.4 read order: shuffled sources give the same metrics, including duplicate and conflicting copies.
   JsonObject changed=Recorder.copy(early);changed.addProperty("playtime",999);JsonObject twin=doc(Recorder.SCHEMA,"L-twin",null);JsonObject p2=Recorder.object("game_play_id");p2.addProperty("play_id","V3");add(records(twin),p2,"t",1);JsonObject twin2=Recorder.copy(twin);twin2.getAsJsonObject("metadata").addProperty("run_id","L-twin-2");
@@ -153,6 +160,34 @@ public final class StatsCheck {
  }
 
  /** architecture.md: stats reads only the record schema; the build also compiles it alone against Gson. */
+ static JsonObject row(JsonObject doc,String metric,String scope,String dims){for(JsonElement e:doc.getAsJsonArray("rows")){JsonObject r=e.getAsJsonObject();if(r.get("metric").getAsString().equals(metric)&&r.get("scope").getAsString().equals(scope)&&r.get("dims").toString().equals(dims))return r;}throw new AssertionError("no row "+metric+" "+scope+" "+dims);}
+ static boolean nul(JsonObject r,String k){return r.get(k)==null||r.get(k).isJsonNull();}
+ /** TinyCat parity export (tools/tinycat-compare README 2): exact filters, slot by directory, per-act counts, missing as null. */
+ static void export(){
+  JsonObject a=nativeRun("E1",20,20,true,null,"3:M:Jaw Worm:7","16:B:Hexaghost:20","18:M:Cultist:4");a.add("path_per_floor",new JsonParser().parse("[\"M\",\"$\",\"M\",\"R\",\"$\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"B\",null,\"M\",\"$\",\"R\"]"));
+  a.add("items_purged",new JsonParser().parse("[\"Strike_R\",\"Defend_R\"]"));a.add("items_purged_floors",new JsonParser().parse("[2,19]"));a.add("items_purchased",new JsonParser().parse("[\"Swift Potion\",\"SwiftPotion\",\"Inflame+1\"]"));a.add("item_purchase_floors",new JsonParser().parse("[2,5,19]"));
+  a.add("campfire_choices",new JsonParser().parse("[{\"floor\":4,\"key\":\"SMITH\",\"data\":\"Bash+1\"},{\"floor\":20,\"key\":\"REST\"}]"));a.add("event_choices",new JsonParser().parse("[{\"floor\":6,\"event_name\":\"Big Fish\",\"player_choice\":\"Banana\"},{\"floor\":7,\"event_name\":\"Big Fish\",\"player_choice\":\"Box\",\"cards_removed\":[\"Strike_R\"]}]"));
+  a.add("relics",new JsonParser().parse("[\"Burning Blood\",\"Empty Cage\"]"));a.add("boss_relics",new JsonParser().parse("[{\"picked\":\"Empty Cage\",\"not_picked\":[\"Sozu\"]}]"));
+  JsonObject other=nativeRun("E2",20,3,false,"Jaw Worm","3:M:Jaw Worm:40"),low=nativeRun("E3",10,3,false,"Jaw Worm","3:M:Jaw Worm:40");
+  Stats.Index index=Stats.build(Arrays.asList(nf(a,"IRONCLAD","a.run"),nf(other,"2_IRONCLAD","b.run"),nf(low,"IRONCLAD","c.run")),Collections.emptyList());
+  JsonObject doc=Export.export(index,0,null,"Spire Ledger test"),meta=doc.getAsJsonObject("meta");
+  check(meta.get("filters").toString().equals("{\"tinycat_alignment\":true,\"save_slot\":0,\"ascension\":[20],\"modes\":\"exclude_daily_special_endless\",\"include_abandons\":true,\"seed_filter\":\"all\",\"win_definition\":\"heart_kill\",\"sources\":[\"native\"]}"),"export filters are the alignment values "+meta.get("filters"));
+  check(meta.getAsJsonObject("run_ids").get("ALL").toString().equals("[\"IRONCLAD/a.run\"]")&&meta.getAsJsonObject("run_ids").get("WATCHER").getAsJsonArray().size()==0,"slot 0 reads unprefixed directories, A20 only");
+  check(Export.export(index,2,null,"t").getAsJsonObject("meta").getAsJsonObject("run_ids").get("ALL").toString().equals("[\"2_IRONCLAD/b.run\"]"),"slot 2 reads 2_ directories");
+  check(Export.export(index,0,new HashSet<>(Arrays.asList("IRONCLAD/c.run")),"t").getAsJsonObject("meta").getAsJsonObject("run_ids").get("ALL").toString().equals("[\"IRONCLAD/c.run\"]"),"run list replaces the scope");
+  check(row(doc,"win","ALL","{}").get("numerator").getAsDouble()==0&&row(doc,"win","ALL","{}").get("denominator").getAsDouble()==1,"heart-kill win basis");
+  JsonObject gold=row(doc,"gold_gained","IRONCLAD","{}");check(nul(gold,"value")&&gold.get("status").getAsString().equals("missing")&&gold.get("exact").getAsInt()==0,"missing gold is null, never 0");
+  check(nul(row(doc,"time","ALL","{\"result\":\"win\"}"),"value"),"no heart win: winning time is null");
+  check(row(doc,"damage","ALL","{\"act\":\"2\",\"encounter\":\"Cultist\"}").get("value").getAsDouble()==4,"damage per act and encounter");
+  check(row(doc,"purges","ALL","{\"source\":\"SHOP\"}").get("value").getAsDouble()==2&&row(doc,"purges","ALL","{\"source\":\"SHOP\",\"act\":\"2\"}").get("value").getAsDouble()==1,"shop purges overall and per act");
+  check(row(doc,"purges","ALL","{\"source\":\"EVENT\"}").get("value").getAsDouble()==1&&nul(row(doc,"purges","ALL","{\"source\":\"NEOW\"}"),"value"),"event purges; Neow purges missing without neow_bonus_log");
+  JsonObject cage=row(doc,"purges","ALL","{\"source\":\"EMPTY_CAGE\"}");check(cage.get("value").getAsDouble()==2&&cage.get("estimated").getAsInt()==1,"Empty Cage +2, estimated");
+  JsonObject total=row(doc,"purges","ALL","{\"source\":\"ALL\"}");check(total.get("value").getAsDouble()==5&&total.get("partial_sources").toString().equals("[\"NEOW\"]"),"all purges name the missing source");
+  check(row(doc,"purchase","ALL","{\"act\":\"0\",\"item\":\"SwiftPotion\"}").get("value").getAsDouble()==2&&row(doc,"purchase","ALL","{\"act\":\"2\",\"item\":\"Inflame\"}").get("value").getAsDouble()==1,"potion IDs normalized, cards lose +N, act 0 sums");
+  check(row(doc,"shop_visits","ALL","{\"act\":\"1\"}").get("value").getAsDouble()==2&&row(doc,"shop_visits","ALL","{\"act\":\"0\"}").get("value").getAsDouble()==3,"shop visits from $ floors");
+  check(row(doc,"campfire","ALL","{\"act\":\"0\",\"action\":\"TOTAL\"}").get("value").getAsDouble()==2&&row(doc,"upgrade","ALL","{\"source\":\"campfire\",\"act\":\"1\",\"card\":\"Bash\"}").get("value").getAsDouble()==1,"campfire actions and upgrades per act");
+  JsonObject fish=row(doc,"event_related","ALL","{\"act\":\"1\",\"event\":\"Big Fish\"}");check(fish.get("denominator").getAsDouble()==1&&fish.get("numerator").getAsDouble()==0,"event win rate once per run per act");
+ }
  static void boundary(Path src)throws Exception{int files=0;try(DirectoryStream<Path> d=Files.newDirectoryStream(src,"*.java")){for(Path p:d){files++;for(String line:Files.readAllLines(p,StandardCharsets.UTF_8)){String t=line.trim();
    check(!t.contains("com.megacrit")&&!t.contains("com.badlogic")&&!t.contains("basemod")&&!t.contains("com.evacipated"),"no game or mod reference in "+p.getFileName()+": "+t);
    if(t.startsWith("import "))check(t.matches("import (static )?(java\\.|com\\.google\\.gson\\.|spireledger\\.stats\\.).*"),"stats imports only JDK, Gson and itself: "+p.getFileName()+": "+t);}}}check(files>0,"stats sources found at "+src);}

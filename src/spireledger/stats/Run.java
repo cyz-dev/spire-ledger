@@ -20,7 +20,7 @@ public final class Run implements Cloneable {
         BossOffer(Set<String> offered,String picked){this.offered=offered;this.picked=picked;}
     }
 
-    public String id="",playId="",runId="",conflictReason="";public boolean fixture,practice,current,conflict,sl,unresolvedPath;
+    public String id="",playId="",runId="",conflictReason="",nativeFile="";public boolean fixture,practice,current,conflict,sl,unresolvedPath;
     public final Set<String> sources=new TreeSet<>();
     public Fact<String> character=Fact.missing(""),seed=Fact.missing(""),outcome=Fact.missing(""),killedBy=Fact.missing(""),neow=Fact.missing(""),actor=Fact.missing("");
     public Fact<Integer> ascension=Fact.missing(""),slot=Fact.missing(""),floorReached=Fact.missing(""),maxAct=Fact.missing(""),neowHp=Fact.missing(""),deckSize=Fact.missing("");
@@ -54,7 +54,7 @@ public final class Run implements Cloneable {
 
     /** Field-level merge (metrics.md 1.6, 4): native first for results and identity, Ledger first for in-run facts; same-rank disagreement is a conflict. */
     static Run merge(Run n,Run l){
-        Run r=new Run();r.id=n.id;r.playId=n.playId;r.runId=l.runId;r.sources.addAll(n.sources);r.sources.addAll(l.sources);
+        Run r=new Run();r.id=n.id;r.playId=n.playId;r.runId=l.runId;r.nativeFile=n.nativeFile;r.sources.addAll(n.sources);r.sources.addAll(l.sources);
         r.conflict=n.conflict;r.conflictReason=n.conflictReason;r.fixture=n.fixture||l.fixture;r.practice=n.practice||l.practice;r.current=l.current;r.sl=l.sl;r.unresolvedPath=l.unresolvedPath;
         r.character=Fact.agree(n.character,l.character);r.ascension=Fact.agree(n.ascension,l.ascension);r.seed=Fact.agree(n.seed,l.seed);
         for(Fact<?> f:Arrays.asList(r.character,r.ascension,r.seed))if(f.status==Fact.Status.CONFLICT){r.conflict=true;r.conflictReason="identity";}
