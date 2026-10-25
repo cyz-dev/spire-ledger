@@ -17,7 +17,7 @@ Product spec: [product.md](product.md)
 ### 接口与不变量
 
 - 记录 schema 是 `record` 与 `stats`、离线 `review.html`、SlaySpire1RL 导入工具之间的唯一接口。`stats` 不引用 `record` 的内部类。
-- 只有 `record` 写局内事实；派生数字不落盘（导出文件除外）。
+- 只有 `record` 写局内事实；派生数字不落盘（导出文件除外）。每局摘要是记录事实的投影，不含任何计算出的指标；它带指向源记录的有效性标记，过期或缺失时从源记录重建，不被信任为真值。
 - 打开统计或复盘不改变局内状态、不推进 RNG。
 - 读取方不能阻断写入：Windows 上读句柄会让原子替换失败，写入必须对此有界重试，失败不得停掉整局记录。
 - 已审核的同装 Mod：BaseMod、StSLib、求解器 `sts1solver`。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器加载时 `replay` 关闭。其他 Mod 一律记 `unknown`。
