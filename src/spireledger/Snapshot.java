@@ -6,6 +6,7 @@ import com.megacrit.cardcrawl.core.*;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.map.*;
 import com.megacrit.cardcrawl.potions.AbstractPotion;
+import com.megacrit.cardcrawl.neow.NeowReward;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
 import com.megacrit.cardcrawl.rooms.*;
 import com.megacrit.cardcrawl.neow.NeowRoom;
@@ -21,6 +22,11 @@ final class Snapshot {
         o.addProperty("misc",c.misc);o.addProperty("base_damage",c.baseDamage);o.addProperty("base_block",c.baseBlock);o.addProperty("base_magic",c.baseMagicNumber);o.addProperty("base_cost",c.cost);
         if(c.inBottleFlame)o.addProperty("bottle_flame",true);if(c.inBottleLightning)o.addProperty("bottle_lightning",true);if(c.inBottleTornado)o.addProperty("bottle_tornado",true);
         return o;
+    }
+    static JsonArray neow(List<NeowReward> rewards){
+        JsonArray all=new JsonArray();
+        for(int i=0;i<rewards.size();i++){NeowReward r=rewards.get(i);JsonObject c=Recorder.object("neow_option");c.addProperty("candidate_id","neow:"+i);c.addProperty("slot",i);c.addProperty("reward_type",r.type.name());c.addProperty("drawback",r.drawback.name());c.addProperty("label",r.optionLabel);all.add(c);}
+        return all;
     }
     static JsonObject capture(){
         JsonObject o=new JsonObject();o.addProperty("act",AbstractDungeon.actNum);o.addProperty("floor",AbstractDungeon.floorNum);
@@ -56,11 +62,13 @@ final class Snapshot {
             &&!blockingEffects(AbstractDungeon.effectsQueue)&&!blockingEffects(AbstractDungeon.effectList)&&!blockingEffects(AbstractDungeon.topLevelEffects)&&!blockingEffects(AbstractDungeon.topLevelEffectsQueue)
             &&!SoulGroup.isActive()&&(AbstractDungeon.actionManager==null||(AbstractDungeon.actionManager.actions.isEmpty()&&AbstractDungeon.actionManager.currentAction==null));
     }
+    static final Set<String> QUIET=new HashSet<>(Arrays.asList("com.megacrit.cardcrawl.vfx.RarePotionParticleEffect","com.megacrit.cardcrawl.vfx.InfiniteSpeechBubble","com.megacrit.cardcrawl.vfx.SpeechTextEffect"));
     static boolean blockingEffects(List<AbstractGameEffect> effects){
         // Original scene and rare-potion sparkles respawn without mutating builds/resources.
         // The precise potion class was verified after Tiny House stalled the native fixture.
         // All other live effects, including mod subclasses, continue to block settlement.
-        for(AbstractGameEffect e:effects)if(!e.isDone&&!e.getClass().getName().startsWith("com.megacrit.cardcrawl.vfx.scene.")&&!e.getClass().getName().equals("com.megacrit.cardcrawl.vfx.RarePotionParticleEffect"))return true;
+        // Neow's talk() bubble lives until the room transition clears effectList; without this its choice settles only after floor 1 (or its first combat).
+        for(AbstractGameEffect e:effects)if(!e.isDone&&!e.getClass().getName().startsWith("com.megacrit.cardcrawl.vfx.scene.")&&!QUIET.contains(e.getClass().getName()))return true;
         return false;
     }
     static JsonArray map(){JsonArray all=new JsonArray();if(AbstractDungeon.map!=null)for(ArrayList<MapRoomNode> row:AbstractDungeon.map)for(MapRoomNode n:row)if(n.getRoom()!=null){JsonObject o=new JsonObject();o.addProperty("x",n.x);o.addProperty("y",n.y);o.addProperty("room",n.getRoom().getClass().getSimpleName());o.addProperty("burning",n.hasEmeraldKey);JsonArray edges=new JsonArray();for(MapEdge edge:n.getEdges()){JsonArray pair=new JsonArray();pair.add(edge.dstX);pair.add(edge.dstY);edges.add(pair);}o.add("edges",edges);all.add(o);}return all;}

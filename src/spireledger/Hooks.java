@@ -17,6 +17,7 @@ import com.megacrit.cardcrawl.cards.CardGroup;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
 import javassist.CannotCompileException;
+import com.megacrit.cardcrawl.neow.NeowEvent;
 
 public final class Hooks {
     @SpirePatch(clz=AbstractPlayer.class,method="preBattlePrep") public static class CombatIdentity {
@@ -69,6 +70,9 @@ public final class Hooks {
     @SpirePatch(clz=ProceedButton.class,method="goToVictoryRoomOrTheDoor") public static class Act3Exit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
     @SpirePatch(clz=ProceedButton.class,method="goToDoubleBoss") public static class DoubleBossExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
     @SpirePatch(clz=ProceedButton.class,method="goToTrueVictoryRoom") public static class HeartExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
+    @SpirePatch(clz=NeowEvent.class,method="buttonEffect") public static class NeowOption {
+        @SpirePrefixPatch public static void before(NeowEvent __instance,int buttonPressed){StateMod.neow(__instance,buttonPressed);}
+    }
     @SpirePatch(clz=GridCardSelectScreen.class,method="open",paramtypez={CardGroup.class,int.class,String.class,boolean.class,boolean.class,boolean.class,boolean.class}) public static class Grid {
         @SpirePrefixPatch public static void before(){StateMod.mutation("grid_selection; pending until effects settle");}
     }

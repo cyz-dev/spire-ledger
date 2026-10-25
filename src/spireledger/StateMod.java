@@ -14,6 +14,7 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.*;
 import com.megacrit.cardcrawl.rewards.RewardItem;
 import com.megacrit.cardcrawl.screens.CardRewardScreen;
+import com.megacrit.cardcrawl.neow.*;
 import java.awt.Desktop;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -91,6 +92,14 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static void skip(RewardItem r){if(!ready()||r.cards==null||r.cards.isEmpty())return;safely(()->{ensure();if(seen.contains(r))return;recorder.begin(key(r),Snapshot.source(true),Snapshot.capture(),candidates(r.cards,true,AbstractDungeon.player.hasRelic("Singing Bowl")),"skip",actor());seen.add(r);recorder.flush();});}
     static void abandon(){if(!ready()||AbstractDungeon.screen!=AbstractDungeon.CurrentScreen.COMBAT_REWARD)return;for(RewardItem r:new ArrayList<>(AbstractDungeon.combatRewardScreen.rewards))if(r.type==RewardItem.RewardType.CARD)skip(r);}
     static void screenSkip(CardRewardScreen s){if(!ready()||s.rItem!=null)return;safely(()->{ensure();Object r=s.rewardGroup;if(seen.contains(r))return;boolean legal=(Boolean)field(s,"skippable");if(!legal)return;recorder.begin(key(r),Snapshot.source(false),Snapshot.capture(),candidates(s.rewardGroup,true,false),"skip",actor());seen.add(r);recorder.flush();});}
+    // blessing() (4 rewards) and miniBlessing() (2) both end at screenNum 3, where buttonEffect activates rewards[button].
+    @SuppressWarnings("unchecked") static void neow(NeowEvent event,int button){if(!ready())return;safely(()->{
+        if((Integer)field(event,"screenNum")!=3)return;List<NeowReward> rewards=(List<NeowReward>)field(event,"rewards");if(button<0||button>=rewards.size())return;
+        ensure();JsonObject extra=new JsonObject();
+        // shortcut: variant is inferred from the vanilla option counts; hook blessing()/miniBlessing() if a mod changes them.
+        extra.addProperty("variant",rewards.size()==4?"blessing":rewards.size()==2?"mini_blessing":"unknown");
+        recorder.begin(key(rewards),"NEOW_OPTION",Snapshot.capture(),Snapshot.neow(rewards),"neow:"+button,actor(),extra);
+    });}
     static void mutation(String reason){if(!ready())return;safely(()->{ensure();if(mutationBefore==null){mutationBefore=Snapshot.capture();mutationReason=reason;JsonObject e=Recorder.object("mutation_pending");e.addProperty("reason",reason);e.add("before",mutationBefore);recorder.append(e);recorder.flush();}});}
     // Bind the synchronous on-disk Metrics object before its UUID is generated. Upload
     // Metrics objects can generate a different UUID later and are deliberately ignored.
