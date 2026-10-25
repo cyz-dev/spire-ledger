@@ -1,0 +1,92 @@
+package spireledger.stats;
+
+import com.google.gson.*;
+import java.util.*;
+import java.util.regex.*;
+import static spireledger.stats.Json.*;
+
+/** One vanilla .run (and the RunHistoryPlus fields an old one may carry) as Run facts. */
+final class Native {
+    static final String N=Fact.NATIVE;
+    static final Set<String> ACT1_BOSS=set("The Guardian","Hexaghost","Slime Boss"),ACT2_BOSS=set("Champ","Automaton","Collector"),ACT3_BOSS=set("Awakened One","Time Eater","Donu and Deca"),ACT4=set("Shield and Spear","The Heart");
+    static final Pattern SLOT=Pattern.compile("^(\\d+)_");
+    static final int START_GOLD=99;
+    static Set<String> set(String... s){return new HashSet<>(Arrays.asList(s));}
+    static Fact<String> text(JsonObject o,String k){String v=str(o,k);return v.isEmpty()?Fact.missing(N):Fact.of(v,N);}
+
+    /** Act boundaries from boss floors (metrics.md 6.4): first act-1 and act-2 boss, last act-3 boss; 16/33/51 without them. */
+    static int[] bounds(JsonArray fights){int b1=Integer.MAX_VALUE,b2=Integer.MAX_VALUE,b3=-1;
+        for(JsonElement e:fights)if(e.isJsonObject()){String name=str(e.getAsJsonObject(),"enemies");Integer floor=integer(e.getAsJsonObject(),"floor");if(floor==null)continue;
+            if(ACT1_BOSS.contains(name))b1=Math.min(b1,floor);if(ACT2_BOSS.contains(name))b2=Math.min(b2,floor);if(ACT3_BOSS.contains(name))b3=Math.max(b3,floor);}
+        return new int[]{b1==Integer.MAX_VALUE?16:b1,b2==Integer.MAX_VALUE?33:b2,b3<0?51:b3};}
+    static int act(int[] b,int floor){return floor<=b[0]?1:floor<=b[1]?2:floor<=b[2]?3:4;}
+
+    static Run read(JsonObject o,String dir,String file){
+        Run r=new Run();r.sources.add(N);r.playId=str(o,"play_id");r.id=r.playId.isEmpty()?"native-file:"+dir+"/"+file:r.playId;
+        r.character=text(o,"character_chosen");r.seed=text(o,"seed_played");r.ascension=Fact.of(integer(o,"ascension_level"),N);r.floorReached=Fact.of(integer(o,"floor_reached"),N);
+        Double stamp=number(o,"timestamp");r.time=stamp==null?Fact.missing(N):Fact.of((long)(stamp*1000),N);r.playtime=Fact.amount(number(o,"playtime"),N);
+        r.fixture="test_fixture".equals(str(o,"dataset_origin"));r.practice="practice".equals(str(o,"session_kind"));
+        r.daily=Fact.of(bool(o,"is_daily"),N);r.endless=Fact.of(bool(o,"is_endless"),N);r.trial=Fact.of(bool(o,"is_trial"),N);r.seeded=Fact.of(bool(o,"chose_seed"),N);
+        // The save slot is only in the directory name (2_IRONCLAD); slot 0 has no prefix.
+        Matcher slot=SLOT.matcher(dir);r.slot=Fact.of(slot.find()?Integer.parseInt(slot.group(1)):0,"native_directory");
+
+        Boolean victory=bool(o,"victory");String killed=str(o,"killed_by");
+        boolean abandoned=Boolean.TRUE.equals(bool(o,"abandoned"))||Boolean.TRUE.equals(bool(o,"is_abandoned"))||killed.equalsIgnoreCase("Abandoned");
+        // proposed default (metrics.md 9.1): vanilla writes .run only when a run ends, so a loss without killed_by is an abandon.
+        r.outcome=Fact.of(abandoned?"abandon":victory==null?null:victory?"victory":killed.isEmpty()?"abandon":"death",N);if(!killed.isEmpty()&&!abandoned)r.killedBy=Fact.of(killed,N);
+        String outcome=r.outcome.value;Integer last=r.floorReached.value;
+
+        JsonArray fights=arr(o,"damage_taken"),path=arr(o,"path_per_floor");int[] b=bounds(fights);boolean hasFights=isArray(o,"damage_taken"),act4=false;Set<Integer> act3Wins=new HashSet<>();
+        List<Run.Combat> combats=new ArrayList<>();
+        for(JsonElement e:fights)if(e.isJsonObject()){JsonObject f=e.getAsJsonObject();String name=str(f,"enemies");Integer floor=integer(f,"floor");if(name.isEmpty()||floor==null||floor<1)continue;
+            JsonElement room=floor-1<path.size()?path.get(floor-1):null;if(room!=null&&room.isJsonNull())continue; // boss chest and reward floors hold no fight
+            Double damage=number(f,"damage");if(damage!=null&&damage>=99999)damage-=99999; // proposed (metrics.md 6.4): TinyCat's death-fight adjustment
+            combats.add(new Run.Combat(floor,act(b,floor),name,room!=null&&room.isJsonPrimitive()?room.getAsString():"",damage));
+            act4|=ACT4.contains(name);boolean died="death".equals(outcome)&&floor.equals(last)&&name.equals(killed);if(ACT3_BOSS.contains(name)&&!died)act3Wins.add(floor);}
+        r.combats=hasFights?Fact.of(combats,N):Fact.missing(N);
+        // A victory without act-4 fights ended in act 3 (no keys), though floor_reached counts the victory room.
+        if(last!=null)r.maxAct=Fact.of(Boolean.TRUE.equals(victory)&&!act4?Math.min(3,act(b,last)):Math.max(1,act(b,last)),N);
+        // m1-field-gaps 7: victory, an act-4 fight, or enough distinct act-3 boss wins (two at A20); any one clears act 3.
+        if(Boolean.TRUE.equals(victory)||hasFights&&(act4||act3Wins.size()>=(r.ascension.or(0)>=20?2:1)))r.act3=Fact.of(true,N);else if(hasFights&&victory!=null)r.act3=Fact.of(false,N);
+        if(abandoned||Boolean.FALSE.equals(victory))r.heart=Fact.of(false,N);else if(Boolean.TRUE.equals(victory)&&hasFights){boolean heart=false;for(Run.Combat c:combats)heart|=c.encounter.equals("The Heart");r.heart=Fact.of(heart,N);}
+
+        if(isArray(o,"current_hp_per_floor")){List<Integer> hp=new ArrayList<>();for(JsonElement e:arr(o,"current_hp_per_floor"))hp.add(integer(e));r.hpPerFloor=Fact.of(hp,N);}
+        if(isArray(o,"master_deck")){Set<String> deck=new LinkedHashSet<>();JsonArray cards=arr(o,"master_deck");for(JsonElement e:cards)if(e.isJsonPrimitive())deck.add(cardId(e.getAsString()));r.deck=Fact.of(deck,N);r.deckSize=Fact.amount(cards.size(),N);}
+        if(!str(o,"neow_bonus").isEmpty())r.neow=Fact.of(str(o,"neow_bonus")+" / "+str(o,"neow_cost"),N);
+        r.gold=goldEstimate(o);
+
+        // Card rewards: only floors with a fight are post-combat screens; Neow and event card choices share the field.
+        if(isArray(o,"card_choices")&&hasFights){Set<Integer> fightFloors=new HashSet<>();for(Run.Combat c:combats)fightFloors.add(c.floor);List<Run.Screen> screens=new ArrayList<>();
+            for(JsonElement e:arr(o,"card_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String picked=str(c,"picked");if(floor==null||!fightFloors.contains(floor)||picked.isEmpty())continue;
+                String kind=picked.equals("SKIP")?"skip":picked.equals("Singing Bowl")?"bowl":"card";Set<String> offered=new LinkedHashSet<>();for(String id:strings(arr(c,"not_picked")))offered.add(cardId(id));if(kind.equals("card"))offered.add(cardId(picked));
+                // .run never says whether the bowl was on offer, so these screens stay out of the bowl rate.
+                screens.add(new Run.Screen(act(b,floor),floor,offered,kind,kind.equals("card")?cardId(picked):"","unknown",N,null));}
+            r.screens=Fact.of(screens,N);}
+        if(isArray(o,"boss_relics")){List<Run.BossOffer> offers=new ArrayList<>();for(JsonElement e:arr(o,"boss_relics")){if(!e.isJsonObject()){offers.add(null);continue;}JsonObject c=e.getAsJsonObject();String picked=str(c,"picked");
+                Set<String> offered=new LinkedHashSet<>(strings(arr(c,"not_picked")));if(!picked.isEmpty())offered.add(picked);offered.add("SKIP");offers.add(new Run.BossOffer(offered,picked.isEmpty()?"SKIP":picked));}
+            r.boss=Fact.of(offers,N);}
+
+        if(isArray(o,"event_choices")){Map<String,Integer> events=new LinkedHashMap<>();Map<Integer,Double> hurt=new TreeMap<>();
+            for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();events.merge("event:"+str(c,"event_name")+" / "+str(c,"player_choice"),1,Integer::sum);
+                for(String id:strings(arr(c,"cards_removed")))events.merge("remove:event:"+cardId(id),1,Integer::sum);for(String id:strings(arr(c,"cards_upgraded")))events.merge("upgrade:event:"+cardId(id),1,Integer::sum);
+                Double d=number(c,"damage_taken");Integer floor=integer(c,"floor");if(d!=null&&d>0&&floor!=null)hurt.merge(act(b,floor),d,Double::sum);}
+            r.counts.put("events",Fact.of(events,N));r.eventDamage=Fact.of(hurt,N);}
+        if(isArray(o,"items_purchased")){Map<String,Integer> m=new LinkedHashMap<>();List<String> items=strings(arr(o,"items_purchased"));m.put("purchases",arr(o,"items_purchased").size());for(String id:items)m.merge("purchase:"+cardId(id),1,Integer::sum);r.counts.put("purchases",Fact.of(m,N));}
+        if(isArray(o,"items_purged")){Map<String,Integer> m=new LinkedHashMap<>();m.put("purges",arr(o,"items_purged").size());for(String id:strings(arr(o,"items_purged")))m.merge("remove:shop:"+cardId(id),1,Integer::sum);r.counts.put("purges",Fact.of(m,N));}
+        if(isArray(o,"campfire_choices")){Map<String,Integer> m=new LinkedHashMap<>();for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();String key=str(c,"key"),id=cardId(str(c,"data"));m.merge("campfire:"+key,1,Integer::sum);
+                if(key.equals("SMITH")&&!id.isEmpty())m.merge("upgrade:campfire:"+id,1,Integer::sum);if(key.equals("PURGE")&&!id.isEmpty())m.merge("remove:campfire:"+id,1,Integer::sum);}
+            r.counts.put("campfire",Fact.of(m,N));}
+        // Explicit use records only, never inferred from slot changes; each entry of potions_floor_usage is one use on that floor.
+        if(isArray(o,"potions_floor_usage")){Map<String,Integer> m=new LinkedHashMap<>();Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potions_floor_usage");m.put("potions",uses.size());for(JsonElement e:uses){Integer floor=integer(e);if(floor!=null)byFloor.merge(floor,1,Integer::sum);}
+            r.counts.put("potions",Fact.of(m,N));r.potionsByFloor=Fact.of(byFloor,N);}
+        else if(isArray(o,"potion_use_per_floor")){Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potion_use_per_floor");for(int i=0;i<uses.size();i++)if(uses.get(i).isJsonArray())byFloor.put(i+1,uses.get(i).getAsJsonArray().size());r.potionsByFloor=Fact.of(byFloor,Fact.RHP);}
+        return r;
+    }
+
+    /** metrics.md 5.2 estimate: first floor's gold less the start, plus later gains, plus 12 with Maw Bank. */
+    static Fact<Double> goldEstimate(JsonObject o){JsonArray g=arr(o,"gold_per_floor");if(g.size()==0)return Fact.missing(N);double total=0;Integer prev=null;
+        for(JsonElement e:g){Integer v=integer(e);if(v==null)return Fact.missing(N);
+            // contract gap: a Neow NO_GOLD start would make the first term negative, but gains never subtract, so it is clamped at 0.
+            total+=prev==null?Math.max(0,v-START_GOLD):Math.max(0,v-prev);prev=v;}
+        if(strings(arr(o,"relics")).contains("MawBank"))total+=12;return Fact.estimated(total,N);}
+}
