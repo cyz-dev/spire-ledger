@@ -2,7 +2,7 @@
 
 1. baseline vs itself: zero differences, exit 0.
 2. baseline projected into the Spire Ledger format (inverse of mapping.json) and compared back: no value
-   differences; only the unregistered TinyCat tables fail (exit 1), which is the expected real-data state.
+   differences and no unregistered TinyCat tables (exit 0).
 3. the projection with one planted change per class: (a) holding counted per run, (b) Boss relic SKIP rows
    dropped, (c) average deck size changed. Each must land in its class.
 4. invalid rules (wildcard table, quote missing from the doc) are refused with exit 2.
@@ -77,7 +77,7 @@ def main(baseline):
         code = compare.main([baseline, p, "--report", rep])
         r = compare.load_json(rep)
         nc_c = sorted({x["table"] for x in r["not_compared"] if x["category"] == "c"})
-        check(code == 1 and r["summary"]["differences"] == 0,
+        check(code == 0 and r["summary"]["differences"] == 0 and not nc_c,
               f"projection round trip: exit {code}, {r['summary']['differences']} differences, unregistered tables {nc_c}")
 
         planted = copy.deepcopy(ledger)
