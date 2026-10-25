@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>State Notes · 离线构筑复盘</title>
+<style>body{font:16px system-ui,sans-serif;background:#13181e;color:#e1e8ed;max-width:1120px;margin:auto;padding:24px}h1{font-size:26px}button,input,select{font:inherit;margin:8px;padding:8px}details{background:#202a34;padding:14px;margin:12px 0;border-radius:8px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:450px;overflow:auto;font:14px ui-monospace,monospace}.muted{color:#a5b7c5}.selected{color:#bfe4a1}.unknown{color:#f5ce7d}svg{background:#202a34;width:100%;height:180px}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #43515f;padding:8px}label{display:inline-block}</style>
+<h1>State Notes · 离线构筑复盘</h1><p class="muted">选择 ZIP 解压后的 run.json。数据仅在本页读取，不上传。这里展示记录事实，未记录的理由与信息不会补造。</p>
+<label>对局 JSON <input id="file" type="file" accept=".json,application/json"></label><label>分支 <select id="branch"><option value="">全部</option></select></label><label><input id="technical" type="checkbox">显示采集诊断</label>
+<p id="status" role="status"></p><div id="meta"></div><h2>生命值与实际路径</h2><svg id="chart" viewBox="0 0 1000 180" aria-label="记录点生命曲线"></svg><p id="path" class="muted"></p><main id="timeline"></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id),MAX=32*1024*1024;
+let run=null;
+function observedFloor(e){return (e.before||e.state||e.after||{}).floor??0;}
+function node(tag,text,parent,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;if(parent)parent.appendChild(n);return n;}
+function card(c){return (c.name||c.id||'未知卡牌')+(c.upgrades?' · 升级 '+c.upgrades+' 次':'')+(c.misc?' · 永久数值 '+c.misc:'');}
+const labels={floor:'到达楼层',decision:'选牌',build_change:'构筑变化',load:'读取存档',ending:'对局结束',COMBAT_REWARD:'战后奖励',COMBAT_SELECTION:'战斗内临时选牌',NEOW:'涅奥',EVENT:'事件',OTHER:'其他来源',confirmed:'已结算',pending:'等待结算',interrupted:'结算未完成',skip:'跳过',bowl:'歌唱碗：增加生命上限',human:'玩家操作',known_automation:'已标记的自动操作',unknown:'未知',local_checkpoint_found:'已关联本地保存点'};
+const label=v=>labels[v]||v;
+function raw(value,parent){const d=node('details',undefined,parent);node('summary','原始记录（实例 ID 与采集字段）',d);node('pre',JSON.stringify(value,null,2),d);}
+function state(s,parent,title){if(!s){node('p','缺少独立状态锚点',parent,'unknown');return;}node('h3',title,parent);node('p',`幕 ${s.act??'?'} / 层 ${s.floor??'?'} · ${s.class||'?'} A${s.ascension??'?'} · HP ${s.hp??'?'}/${s.max_hp??'?'} · 金币 ${s.gold??'?'} · ${s.resource_timing==='direct_game_thread_at_record'?'当时实测资源':'资源时机未知'}`,parent);
+const anchor=node('details',undefined,parent);node('summary','完整当时牌组、遗物与药水（点击展开）',anchor);parent=anchor;node('p','遗物：'+(s.relics||[]).map(r=>`${r.id} (${r.counter??'?'})`).join(' / '),parent);node('p','药水：'+(s.potions||[]).map(p=>`${p.slot}: ${p.id}`).join(' / '),parent);node('pre',(s.deck||[]).map(card).join('\n')||'空牌组 / 缺失',parent);}
+function validate(r){if(!r||r.schema!=='sts1-state-v1'||!Array.isArray(r.records)||r.records.length>50000)throw Error('不支持的 schema 或记录数量超限');if(!r.metadata||typeof r.metadata.run_id!=='string')throw Error('缺少 run_id');for(const e of r.records){if(!e||typeof e!=='object')throw Error('无效记录');for(const k of ['before','after','state'])if(e[k]){if(!Array.isArray(e[k].deck)||e[k].deck.length>2000)throw Error('牌组数量超限 / 缺失');}if(e.candidates&&(!Array.isArray(e.candidates)||e.candidates.length>2000))throw Error('候选数量超限');}return r;}
+function decisionFacts(r){
+const decisions=new Map(),results=new Map(),conflicts=new Set(),invalid=[];
+for(const e of r.records){if(!['decision','result'].includes(e.type))continue;const id=e.decision_id;
+if(typeof id!=='string'||!id){if(e.type==='decision')invalid.push({decision:e,result:{status:'invalid_decision_id'}});continue;}
+const target=e.type==='decision'?decisions:results;
+if(target.has(id)&&stable(target.get(id))!==stable(e))conflicts.add(id);if(!target.has(id))target.set(id,e);}
+return [...decisions].map(([id,decision])=>({decision,result:conflicts.has(id)?{status:'conflicting_record'}:results.get(id)||{status:'pending'}})).concat(invalid);}
+function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';return JSON.stringify(v);}
+// The importer check reads these same decision IDs, candidate IDs and result statuses.
+window.stateNotesFacts=decisionFacts;
+function render(){if(!run)return;const branch=$('branch').value,events=run.records.filter(e=>!branch||e.branch_id===branch),facts=new Map(decisionFacts(run).map(f=>[f.decision.decision_id,f]));
+$('meta').replaceChildren();if(run.metadata.dataset_origin==='test_fixture')node('p','隔离测试夹具：包含合成输入与自动操作，不是真人示范；默认训练导入排除此包。',$('meta'),'unknown');node('p',`种子：${run.metadata.seed??'未知'} · ${new Set(run.records.map(e=>e.branch_id).filter(Boolean)).size} 个分支`,$('meta'));raw(run.metadata,$('meta'));$('timeline').replaceChildren();$('chart').replaceChildren();
+const points=events.filter(e=>e.type==='floor').map(e=>e.state),max=Math.max(1,...points.map(s=>s.max_hp||1));
+if(points.length){const ns='http://www.w3.org/2000/svg',line=document.createElementNS(ns,'polyline');line.setAttribute('points',points.map((s,i)=>`${20+i*960/Math.max(1,points.length-1)},${165-(s.hp||0)*145/max}`).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke','#bfe4a1');line.setAttribute('stroke-width','3');$('chart').appendChild(line);}
+$('path').textContent=points.map(s=>`幕${s.act} 层${s.floor} (${s.x??'?'},${s.y??'?'}) ${s.room||'?'}`).join(' → ');
+const floors=new Map();for(const e of events){if(e.type==='result'||(!$('technical').checked&&!['floor','decision','build_change','load','ending'].includes(e.type)))continue;const s=e.before||e.state||e.after,floor=observedFloor(e);let section=floors.get(floor);if(!section){section=node('details',undefined,$('timeline'),'floor');node('summary','第 '+floor+' 层 · 选择与构筑',section);floors.set(floor,section);}const detail=node('details',undefined,section);let title=`幕${s?.act??'?'} · ${label(e.type)}`;
+if(e.type==='decision'){const f=facts.get(e.decision_id),choice=(e.candidates||[]).find(c=>c.candidate_id===e.candidate_id);title+=` · ${label(e.source)} · ${choice?.type==='card'?card(choice.card||{}):label(choice?.type||e.candidate_id)} · ${label(f.result.status)}`;node('summary',title,detail);node('p','动作来源：'+label(e.action_source),detail,'muted');state(e.before,detail,'选择前的牌组与资源');node('h3','当时可选项',detail);const t=node('table',undefined,detail);for(const c of e.candidates||[]){const tr=node('tr',undefined,t,c.candidate_id===e.candidate_id?'selected':'');node('td',c.type==='card'?card(c.card||{}):label(c.type),tr);node('td',c.candidate_id===e.candidate_id?'已选':'',tr);}if(f.result.after)state(f.result.after,detail,'效果结算后');else node('p',label(f.result.status)+'：'+(f.result.reason||'尚未观察到结算'),detail,'unknown');raw(f,detail);}
+else{node('summary',title,detail);if(e.type==='build_change'){node('p','状态：'+label(e.status),detail);state(e.before,detail,'变化前');state(e.after,detail,'变化后');}else if(e.type==='load'){node('p',`读取存档 · ${label(e.parent_status)} · 保存点 ${e.parent_checkpoint_id}`,detail);state(e.state,detail,'加载后');}else if(e.type==='ending'){node('p','结局：'+e.outcome,detail);state(e.state,detail,'结局状态（不作为历史决策输入）');}else if(e.type==='floor')state(e.state,detail,'本层状态');raw(e,detail);}}
+$('status').textContent=`${events.length} 条事件 · ${[...facts.values()].filter(f=>!branch||f.decision.branch_id===branch).length} 条选牌决策。未结算与未知来源保留原标记。`;}
+$('file').addEventListener('change',async()=>{try{const f=$('file').files[0];if(!f)return;if(f.size>MAX)throw Error('JSON 超过 32 MiB');run=validate(JSON.parse(await f.text()));$('branch').replaceChildren();const all=node('option','全部',$('branch'));all.value='';for(const id of new Set(run.records.map(e=>e.branch_id).filter(Boolean))){const o=node('option',id,$('branch'));o.value=id;}render();}catch(e){run=null;$('timeline').replaceChildren();$('status').textContent='读取失败：'+e.message;}});$('branch').addEventListener('change',render);
+$('technical').addEventListener('change',render);
+</script></html>

@@ -1,0 +1,1 @@
+{"modid": "sts1-state-notes", "name": "STS1 State Notes", "author_list": ["State Notes contributors"], "description": "Local build decisions and offline review. No solver or upload.", "version": "0.4.0", "sts_version": "12-18-2022", "mts_version": "3.30.3", "dependencies": ["basemod", "stslib"]}
