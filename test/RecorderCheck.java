@@ -11,14 +11,42 @@ public class RecorderCheck {
     static JsonArray choices(){return new JsonParser().parse("[{\"candidate_id\":\"card:0\",\"type\":\"card\",\"card\":{\"id\":\"Inflame\",\"type\":\"POWER\",\"upgrades\":0}},{\"candidate_id\":\"skip\",\"type\":\"skip\"},{\"candidate_id\":\"bowl\",\"type\":\"bowl\"}]").getAsJsonArray();}
     /** Windows: a reader holding run.json must neither stop recording nor lose the latest write. */
     static void lockedRunJson(Path samples,JsonObject meta)throws Exception {
-        Recorder r=new Recorder(samples,meta,null);r.flush();Path run=r.directory.resolve("run.json"),tmp=r.directory.resolve("run.json.tmp");
-        try(java.io.FileInputStream held=new java.io.FileInputStream(run.toFile())){r.append(Recorder.object("lock_probe"));r.flush();}
+        Recorder r=new Recorder(samples,meta,null);r.flush();r.awaitWrites();Path run=r.directory.resolve("run.json"),tmp=r.directory.resolve("run.json.tmp");
+        try(java.io.FileInputStream held=new java.io.FileInputStream(run.toFile())){r.append(Recorder.object("lock_probe"));r.flush();r.awaitWrites();}
         if(Files.exists(tmp)&&!new String(Files.readAllBytes(tmp),StandardCharsets.UTF_8).contains("lock_probe"))throw new AssertionError("latest run.json lost while held");
-        r.flush();if(!new String(Files.readAllBytes(run),StandardCharsets.UTF_8).contains("lock_probe"))throw new AssertionError("run.json not refreshed after release");
+        r.flush();r.awaitWrites();if(!new String(Files.readAllBytes(run),StandardCharsets.UTF_8).contains("lock_probe"))throw new AssertionError("run.json not refreshed after release");
         java.io.FileInputStream brief=new java.io.FileInputStream(run.toFile());Files.write(tmp,"{}".getBytes(StandardCharsets.UTF_8));
         Thread release=new Thread(()->{try{Thread.sleep(60);brief.close();}catch(Exception ignored){}});release.start();
         Recorder.replace(tmp,run);release.join();if(!"{}".equals(new String(Files.readAllBytes(run),StandardCharsets.UTF_8)))throw new AssertionError("replace did not wait for a brief reader");
         r.close();System.out.println("RecorderCheck lock: PASS");
+    }
+    static JsonObject read(Path p)throws Exception{return parse(new String(Files.readAllBytes(p),StandardCharsets.UTF_8));}
+    /** Derived files are written off the game thread: latest flush wins, each file is one flush's state, failures surface, close waits. */
+    static void asyncWrites(Path samples,JsonObject meta)throws Exception {
+        java.util.concurrent.atomic.AtomicInteger runWrites=new java.util.concurrent.atomic.AtomicInteger();
+        Recorder.writeHook=p->{if(p.endsWith("run.json"))runWrites.incrementAndGet();try{Thread.sleep(80);}catch(InterruptedException ex){throw new java.io.InterruptedIOException();}};
+        try{
+            Recorder r=new Recorder(samples,meta,null);Path run=r.directory.resolve("run.json"),sum=r.directory.resolve(RunSummary.FILE),log=r.directory.resolve("events.jsonl");
+            // Appends while a slow write is pending must not leak into it: the job is the state at its flush.
+            r.append(Recorder.object("first"));r.flush();int atFlush=r.document().getAsJsonArray("records").size();long bytesAtFlush=Files.size(log);
+            for(int i=0;i<3;i++)r.append(Recorder.object("late"));r.awaitWrites();
+            need(read(run).getAsJsonArray("records").size()==atFlush,"run.json mixes in records appended after its flush");
+            need(read(sum).get("events_bytes").getAsLong()==bytesAtFlush&&read(sum).get("record_count").getAsInt()==atFlush,"summary.json is not the state of its flush");
+            // Many flushes during one slow write coalesce; the disk ends at the last one.
+            runWrites.set(0);for(int i=0;i<6;i++){r.append(Recorder.object("burst"));r.flush();}r.awaitWrites();
+            int total=r.document().getAsJsonArray("records").size();
+            need(read(run).getAsJsonArray("records").size()==total&&read(sum).get("events_bytes").getAsLong()==Files.size(log),"last flush not on disk");
+            need(runWrites.get()<6,"pending writes were not coalesced: "+runWrites.get());
+            // A non-lock failure is never swallowed: it reaches the game thread, once.
+            Recorder.writeHook=p->{throw new java.io.IOException("injected write failure");};
+            r.append(Recorder.object("doomed"));boolean surfaced=false;try{r.flush();r.awaitWrites();}catch(java.io.IOException ex){surfaced=ex.getMessage().contains("injected");}
+            need(surfaced,"background write failure not surfaced");r.awaitWrites();
+            // close waits for the slow final write: run.json and summary.json both match the closed journal.
+            Recorder.writeHook=p->{try{Thread.sleep(150);}catch(InterruptedException ex){throw new java.io.InterruptedIOException();}};
+            r.append(Recorder.object("final"));r.close();JsonArray recs=read(run).getAsJsonArray("records");
+            need(recs.size()==total+2&&"final".equals(Recorder.string(recs.get(recs.size()-1).getAsJsonObject(),"type"))&&read(sum).get("events_bytes").getAsLong()==Files.size(log),"close returned before the last write");
+        }finally{Recorder.writeHook=null;}
+        System.out.println("RecorderCheck async writes: PASS");
     }
     static JsonObject find(JsonArray records,String type,String key,String value){for(JsonElement e:records){JsonObject o=e.getAsJsonObject();if(type.equals(Recorder.string(o,"type"))&&(key==null||value.equals(Recorder.string(o,key))))return o;}throw new AssertionError("missing "+type+" "+key+"="+value);}
     static int count(JsonArray records,String type){int n=0;for(JsonElement e:records)if(type.equals(Recorder.string(e.getAsJsonObject(),"type")))n++;return n;}
@@ -74,6 +102,7 @@ public class RecorderCheck {
         if(!StateMod.reviewedMod("basemod","5.56.0")||!StateMod.reviewedMod("stslib","2.12.0")||StateMod.reviewedMod("RunHistoryPlus","1.8.3"))throw new AssertionError("only BaseMod + StSLib keep the human source label");
         JsonObject meta=parse("{\"game_version\":\"test\",\"mod_version\":\"0.1.0\",\"seed\":\"-9223372036854775808\",\"play_id\":\"synthetic-contract-check\",\"coverage\":\"synthetic; not a real played run\"}");
         lockedRunJson(samples,meta);
+        asyncWrites(samples,meta);
         m1Fields(samples,meta);
         Recorder r=new Recorder(samples,meta,null);JsonObject before=state(1,1);
         assert !r.hasMap(1);JsonObject map=Recorder.object("map");map.addProperty("act",1);map.addProperty("dictionary_version",1);map.add("nodes",new JsonArray());r.append(map);assert r.hasMap(1)&&!r.hasMap(3);

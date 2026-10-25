@@ -5,6 +5,8 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.*;
 
 /** JSON values only: never retain game objects or RNGs. Called on the game thread. */
@@ -127,22 +129,48 @@ public final class Recorder implements AutoCloseable {
             catch(AccessDeniedException ex){if(attempt>=REPLACE_ATTEMPTS)throw ex;try{Thread.sleep(20);}catch(InterruptedException ie){Thread.currentThread().interrupt();throw ex;}}
         }
     }
+    // One daemon writer for all Recorders: derived files leave the game thread in flush order and never keep the JVM alive.
+    private static final ExecutorService WRITER=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"spire-ledger-writer");t.setDaemon(true);return t;});
+    interface WriteHook{void before(Path path)throws IOException;}
+    static volatile WriteHook writeHook; // checks only: delay or fail a background write
+    private final AtomicReference<String[]> nextWrite=new AtomicReference<>();
+    private Future<?> written=CompletableFuture.completedFuture(null);
+    private volatile IOException writeFailure;
     public void flush()throws IOException {
         if(records.size()>segmentStart){JsonObject part=new JsonObject();part.addProperty("schema",SCHEMA);part.add("metadata",root.get("metadata"));JsonArray slice=new JsonArray();for(int i=segmentStart;i<records.size();i++)slice.add(records.get(i));part.add("records",slice);
             atomic(directory.resolve(String.format(Locale.ROOT,"segment-%05d.json",++segment)),part.toString().getBytes(StandardCharsets.UTF_8));segmentStart=records.size();}
-        // run.json is a derived view of events and segments; a reader holding it open must not stop recording.
-        try{atomic(directory.resolve("run.json"),root.toString().getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] run.json held open by another process; latest copy kept in run.json.tmp");}
         // Same projection on every flush; a summary that misses this write keeps its old marker, so readers rebuild from the record.
         for(;summarized<records.size();summarized++)summary.add(records.get(summarized).getAsJsonObject());
-        try{atomic(directory.resolve(RunSummary.FILE),summary.document(SCHEMA,root.get("metadata"),journal.getChannel().size(),sequence).toString().getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] summary.json held open by another process; readers fall back to run.json");}
+        // Serialized here so the writer never reads live JSON; a newer flush replaces a job that has not started.
+        String[] job={root.toString(),summary.document(SCHEMA,root.get("metadata"),journal.getChannel().size(),sequence).toString()};
+        if(nextWrite.getAndSet(job)==null)written=WRITER.submit(this::writeLatest);
         Path html=directory.resolve("review.html");if(!Files.exists(html))try(InputStream in=Recorder.class.getResourceAsStream("/review.html")){if(in!=null)Files.copy(in,html);}
+        rethrowWriteFailure();
+    }
+    private void writeLatest(){
+        String[] job=nextWrite.getAndSet(null);if(job==null)return;
+        try{// run.json is a derived view of events and segments; a reader holding it open must not stop recording.
+            write("run.json",job[0],"run.json held open by another process; latest copy kept in run.json.tmp");
+            write(RunSummary.FILE,job[1],"summary.json held open by another process; readers fall back to run.json");
+        }catch(IOException|RuntimeException ex){writeFailure=ex instanceof IOException?(IOException)ex:new IOException(ex);System.err.println("[Spire Ledger] Background write failed: "+ex);}
+    }
+    private void write(String name,String text,String held)throws IOException {
+        Path path=directory.resolve(name);WriteHook hook=writeHook;if(hook!=null)hook.before(path);
+        try{atomic(path,text.getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] "+held);}
+    }
+    // A background failure reaches the game thread on the next flush or wait, so it still stops recording through StateMod.safely.
+    private void rethrowWriteFailure()throws IOException{IOException failure=writeFailure;if(failure!=null){writeFailure=null;throw failure;}}
+    /** Blocks until the last flush is on disk (or failed). */
+    void awaitWrites()throws IOException {
+        try{written.get();}catch(InterruptedException ex){Thread.currentThread().interrupt();throw new InterruptedIOException("Interrupted waiting for run.json");}catch(ExecutionException ex){throw new IOException(ex.getCause());}
+        rethrowWriteFailure();
     }
     public Path export()throws IOException {
-        flush();Path target=directory.resolve("run.zip"),tmp=directory.resolve("run.zip.tmp");
+        flush();awaitWrites();Path target=directory.resolve("run.zip"),tmp=directory.resolve("run.zip.tmp");
         try{writeZip(tmp,true);}catch(IOException ex){
             // A damaged optional attachment must not stop build recording. Keep an
             // explicit export diagnostic and produce the independently readable base.
-            JsonObject error=object("replay_export_unavailable");error.addProperty("reason",ex.getClass().getSimpleName());append(error);flush();writeZip(tmp,false);
+            JsonObject error=object("replay_export_unavailable");error.addProperty("reason",ex.getClass().getSimpleName());append(error);flush();awaitWrites();writeZip(tmp,false);
             System.err.println("[Spire Ledger] Optional replay export failed; base package exported: "+ex.getClass().getSimpleName());
         }
         replace(tmp,target);return target;
@@ -150,5 +178,6 @@ public final class Recorder implements AutoCloseable {
     private void writeZip(Path tmp,boolean replay)throws IOException {
         try(ZipOutputStream zip=new ZipOutputStream(Files.newOutputStream(tmp))){for(String name:Arrays.asList("run.json","review.html")){Path p=directory.resolve(name);if(Files.exists(p)){zip.putNextEntry(new ZipEntry(name));Files.copy(p,zip);zip.closeEntry();}}if(replay)TurnFiles.addToZip(directory,zip);}
     }
-    public void close()throws IOException{try{interrupt("session_closed");export();}finally{journal.close();}}
+    // Even when export failed, the last scheduled write finishes before close returns; its own failure was already printed by the writer.
+    public void close()throws IOException{try{interrupt("session_closed");export();}finally{try{written.get();}catch(InterruptedException ex){Thread.currentThread().interrupt();}catch(ExecutionException ignored){}journal.close();}}
 }
