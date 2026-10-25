@@ -41,11 +41,15 @@ final class DiagnosticReport {
   return true;
   }catch(Exception e){error("diagnostic_prepare",e);status=HistoryScreen.tr("错误报告准备失败：","Report preparation failed: ")+e.getClass().getSimpleName();busy.set(false);return false;}
  }
+ static final java.util.regex.Pattern SECRET_KEY=java.util.regex.Pattern.compile("username|playername|profilename|account|accountid|steamid|userid|email|.*token|password|passwd|secret|apikey|authorization|cookie|filepath|absolutepath");
+ // Messages and stacks embed secrets as name=value or name: "value"; keep the name, drop the value.
+ static final java.util.regex.Pattern SECRET_TEXT=java.util.regex.Pattern.compile("(?i)(?<![a-z0-9])(user(?:[_-]?(?:name|id))?|player[_-]?name|profile[_-]?name|account(?:[_-]?id)?|steam[_-]?id|e-?mail|[a-z]*[_-]?token|password|passwd|secret|api[_-]?key|authorization|cookie)(?![a-z0-9])(\\s*[\"']?\\s*[:=]\\s*[\"']?\\s*)(?:bearer\\s+|basic\\s+)?[^\\s\"'&,;<>]+");
  static JsonElement sanitize(JsonElement value){
   if(value==null||value.isJsonNull())return JsonNull.INSTANCE;
   if(value.isJsonArray()){JsonArray out=new JsonArray();for(JsonElement e:value.getAsJsonArray())out.add(sanitize(e));return out;}
-  if(value.isJsonObject()){JsonObject out=new JsonObject();for(Map.Entry<String,JsonElement> e:value.getAsJsonObject().entrySet()){String key=e.getKey().toLowerCase(Locale.ROOT).replace("_","");if(Arrays.asList("username","playername","profilename","account","accountid","steamid","userid","email","accesstoken","token","password","filepath","absolutepath").contains(key))continue;out.add(e.getKey(),sanitize(e.getValue()));}return out;}
-  if(value.getAsJsonPrimitive().isString()){String text=value.getAsString();for(String name:Arrays.asList("user.home","user.dir","java.io.tmpdir")){String path=System.getProperty(name,"");if(!path.isEmpty()){text=text.replace(path,"<local>").replace(path.replace('\\','/'),"<local>");}}text=text.replaceAll("\\\\\\\\[^\\r\\n\\\"<>]*","<local-path>");text=text.replaceAll("(?i)[a-z]:[\\\\/][^\\r\\n\\\"<>]*","<local-path>").replaceAll("/(?:home|Users|tmp|mnt)/[^\\r\\n\\\"<>]*","<local-path>");return new JsonPrimitive(text);}
+  if(value.isJsonObject()){JsonObject out=new JsonObject();for(Map.Entry<String,JsonElement> e:value.getAsJsonObject().entrySet()){String key=e.getKey().toLowerCase(Locale.ROOT).replace("_","").replace("-","");if(SECRET_KEY.matcher(key).matches())continue;out.add(e.getKey(),sanitize(e.getValue()));}return out;}
+  if(value.getAsJsonPrimitive().isString()){String text=value.getAsString();for(String name:Arrays.asList("user.home","user.dir","java.io.tmpdir")){String path=System.getProperty(name,"");if(!path.isEmpty()){text=text.replace(path,"<local>").replace(path.replace('\\','/'),"<local>");}}text=text.replaceAll("\\\\\\\\[^\\r\\n\\\"<>]*","<local-path>");text=text.replaceAll("(?i)(?<![a-z])[a-z]:[\\\\/][^\\r\\n\\\"<>]*","<local-path>").replaceAll("/(?:home|Users|tmp|mnt|var|private|Volumes|root|opt|media)/[^\\r\\n\\\"<>]*","<local-path>");
+   text=SECRET_TEXT.matcher(text).replaceAll("$1$2<redacted>").replaceAll("(?i)(?<![a-z])bearer\\s+[a-z0-9._~+/=-]+","Bearer <redacted>").replaceAll("(?<!\\d)7656119\\d{10}(?!\\d)","<account>").replaceAll("(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+","<email>");return new JsonPrimitive(text);}
   return value;
  }
  static Path write(Path output,Map<String,JsonElement> input)throws IOException{
