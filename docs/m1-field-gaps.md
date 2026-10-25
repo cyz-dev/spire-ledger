@@ -69,7 +69,7 @@ Architecture: [architecture.md](architecture.md) · Product spec: [product.md](p
 |---|---|---|---|---|---|---|---|---|
 | 卡牌抓率（第一幕 / 第一幕后） | 选择次数（每次奖励屏每张被提供的牌） | `card_choices`（`floor`、`picked`、`not_picked`）、歌唱碗 | 762；Boss 层缺 230/1049 | 否（三个补丁只补跳过记录） | `decision` 含全部候选与跳过、歌唱碗、最终离开（`StateMod.java:82-93`，`Hooks.java:38-71`）；StatsIndex 仅统计 `COMBAT_REWARD`（`StatsIndex.java:58`） | 无缺口；注意本机历史 Ledger 局 851/851 个决策的 `action_source` 都是 `unknown` | 精确（`.run` 局 Boss 层偏高） | Ledger > `.run` |
 | 标准化抓率（Plackett-Luce）、Tierlist | 选择次数（整屏为一个选择集） | 同上，需整屏 | 同上 | 否 | 同上，候选完整 | 无缺口 | 模型值 | Ledger > `.run` |
-| 卡组卡牌胜率 | 张次 | `master_deck`、`victory` | 762 | 否 | 结局牌组 | 无缺口 | 精确 | `.run` |
+| 卡组卡牌胜率 | 局（同名卡每局计一次，见 metrics.md） | `master_deck`、`victory` | 762 | 否 | 结局牌组 | 无缺口 | 精确 | `.run` |
 | 尼奥选中次数、胜率 | 局 | `neow_bonus`、`neow_cost` | 757（99.3%，5 局为空）；代价非 NONE 272 | 否 | 无尼奥选项记录；仅 4/851 个决策是尼奥的选牌（`Snapshot.java:43`） | 见第 5.2 节 | 精确 | `.run` ≥ Ledger；两者冲突标记冲突 |
 | 尼奥选取率、尼奥强度（PL、并列） | 选择次数（每局四选一） | `neow_bonuses_skipped_log`、`neow_costs_skipped_log` | 0 | 有 | 无 | **M1 新增**尼奥四选项与代价（第 5.2 节） | 新局精确，（历史局不可得） | Ledger > RHP |
 | 尼奥开局删牌/变牌/升级/获得 | 局内事件 | `neow_bonus_log` | 0 | 有 | 牌组差可得（尼奥决策前后快照，含实例 ID） | 尼奥决策的 `after` 在效果落定后取 | 精确（变牌只知旧牌去、新牌来，不知对应） | Ledger > RHP |
