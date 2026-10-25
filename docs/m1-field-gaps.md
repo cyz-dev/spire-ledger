@@ -151,7 +151,7 @@ Architecture: [architecture.md](architecture.md) · Product spec: [product.md](p
 
 ### 5.6 由主表推出的其余项（均为可选或需用户决定）
 
-- `saveSlot`：写入元数据，使存档位筛选不依赖目录名。
+- `saveSlot`：写入元数据，使存档位筛选不依赖目录名。（已实现：元数据 `save_slot`，2026-10-25）
 - 结局计数器：`monstersSlain`、`elites1/2/3Slain`、`cardsPurged`、`potionsBought`（均为 `CardCrawlGame` 公有静态，javap 核验存在）。非必需。
 - `killed_by`：`DeathScreen` 构造参数含 `MonsterGroup`（`Hooks.java:87-89` 已钩，目前未取），可使无 `.run` 的 Ledger 局也能判死因。非必需。
 - 放弃事件：现状只有 `session_closed` 中断。

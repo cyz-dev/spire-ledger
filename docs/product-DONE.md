@@ -7,6 +7,12 @@
 - Open question：“State Notes 现有本机记录和 SlaySpire1RL `tools/state_runs/import_run.py` 的迁移方式。blocks: 改名落地。”
   结案：旧记录原地只读、新 Mod 兼容读取旧 schema；`import_run.py` 同时接受两个 schema 名（用户决定，M0 落地，提交 b0274ce、SlaySpire1RL 3d1002a）。条款已并入 product.md“记录”一节。
 
+- Open question：“发布渠道（Steam Workshop、GitHub Release 或两者）与公开源码时间。blocks: 发布。”
+  结案：先只在 GitHub 内测，暂不发 Steam Workshop（用户决定）；公开源码时间仍为 open question。
+- Open question：“每日挑战、自定义、无尽模式和存档位的默认统计范围（上文为建议值）。本机 762 局里有 70 局在存档位 2，有 7 局是每日、无尽或指定种子局。blocks: M2 样本范围。”
+  原条款：“每日挑战、自定义模式和无尽模式默认不进入统计，可通过筛选单独查看；各存档位默认合并统计，存档位可作筛选项。（proposed，待用户确认）”
+  结案：每个存档位单独统计，三种模式不进入统计（用户决定）。
+
 ## 2026-10-25 Codex 对抗审阅修订前的原文
 
 以下条款被 [decisions/2026-10-25-review.md](decisions/2026-10-25-review.md) 的“规格审阅”一节改写或移出，原文保留：
