@@ -27,6 +27,8 @@ final class Snapshot {
         o.addProperty("class",AbstractDungeon.player.chosenClass.name());o.addProperty("ascension",AbstractDungeon.ascensionLevel);
         o.addProperty("is_daily",Settings.isDailyRun);o.addProperty("is_trial",Settings.isTrial);o.addProperty("is_endless",Settings.isEndless);
         o.addProperty("hp",AbstractDungeon.player.currentHealth);o.addProperty("max_hp",AbstractDungeon.player.maxHealth);o.addProperty("gold",AbstractDungeon.player.gold);
+        // Vanilla counter: only gainGold increments it; resetScoreVars zeroes it; loadPlayerSave restores SaveFile.gold_gained.
+        o.addProperty("gold_gained",CardCrawlGame.goldGained);
         o.addProperty("resource_timing","direct_game_thread_at_record");
         JsonArray deck=new JsonArray();for(AbstractCard c:AbstractDungeon.player.masterDeck.group)deck.add(card(c));o.add("deck",deck);
         JsonArray relics=new JsonArray();for(AbstractRelic r:AbstractDungeon.player.relics){JsonObject item=new JsonObject();item.addProperty("id",r.relicId);item.addProperty("counter",r.counter);relics.add(item);}o.add("relics",relics);
