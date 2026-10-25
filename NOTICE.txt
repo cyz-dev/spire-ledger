@@ -1,0 +1,15 @@
+Spire Ledger
+Copyright (C) 2026 CYZ
+
+Project-owned code is licensed under the GNU General Public License v3.0 (see LICENSE).
+
+Embedded third-party component (planned, arrives with the State Notes migration):
+- STSStateSaver / SaveStateMod 1.3.0 by Board Engineer
+  https://github.com/boardengineer/STSStateSaver
+  Modified at build time to capture-only (gameplay patches removed).
+  Upstream provides no LICENSE, COPYING or NOTICE file and has not granted redistribution
+  permission; it is NOT covered by this project's GPL grant. License request:
+  https://github.com/boardengineer/STSStateSaver/issues/13
+
+Metric definitions were informed by TinyCat (MI, MPL-2.0, https://github.com/haotiangod/tinycattrack);
+no TinyCat source files are included.
