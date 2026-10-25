@@ -15,6 +15,8 @@ import com.megacrit.cardcrawl.helpers.*;
 import com.megacrit.cardcrawl.rewards.RewardItem;
 import com.megacrit.cardcrawl.screens.CardRewardScreen;
 import com.megacrit.cardcrawl.neow.*;
+import com.megacrit.cardcrawl.rooms.*;
+import com.megacrit.cardcrawl.shop.ShopScreen;
 import java.awt.Desktop;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -100,6 +102,17 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         extra.addProperty("variant",rewards.size()==4?"blessing":rewards.size()==2?"mini_blessing":"unknown");
         recorder.begin(key(rewards),"NEOW_OPTION",Snapshot.capture(),Snapshot.neow(rewards),"neow:"+button,actor(),extra);
     });}
+    static JsonObject shopVisit(AbstractRoom room){JsonObject o=new JsonObject();o.addProperty("shop_key",key(room));return o;}
+    // First open only: closing and reopening the shop screen is not a new offer.
+    static void shopOffer(ShopScreen s){if(!ready())return;safely(()->{ensure();AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom)||seen.contains(room))return;seen.add(room);
+        JsonObject e=Recorder.object("shop_offer");e.addProperty("shop_key",key(room));e.add("state",Snapshot.capture());e.add("candidates",Snapshot.shop(s));recorder.append(e);recorder.flush();});}
+    /** item is the live stock object (a Courier restock is a new object); null is the removal service. */
+    static void shopBuy(Object item,String candidate){if(!ready())return;safely(()->{ensure();AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom))return;
+        recorder.begin(item==null?key(room)+":purge":key(item),"SHOP",Snapshot.capture(),Snapshot.shop(AbstractDungeon.shopScreen),candidate,actor(),shopVisit(room));});}
+    static void leaveRoom(){if(!ready())return;safely(()->{AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom)||!seen.contains(room))return;ensure();
+        String k=key(room)+":leave";JsonObject before=Snapshot.capture();
+        // Leaving has no effect to wait for: its anchor is also its settled result.
+        if(recorder.begin(k,"SHOP",before,Snapshot.shop(AbstractDungeon.shopScreen),"leave",actor(),shopVisit(room))!=null)recorder.settleKey(k,before);});}
     static void mutation(String reason){if(!ready())return;safely(()->{ensure();if(mutationBefore==null){mutationBefore=Snapshot.capture();mutationReason=reason;JsonObject e=Recorder.object("mutation_pending");e.addProperty("reason",reason);e.add("before",mutationBefore);recorder.append(e);recorder.flush();}});}
     // Bind the synchronous on-disk Metrics object before its UUID is generated. Upload
     // Metrics objects can generate a different UUID later and are deliberately ignored.
