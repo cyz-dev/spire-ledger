@@ -16,7 +16,8 @@ public final class Stats {
         public int nativeFiles,ledgerRecords,nativeDuplicates,ledgerDuplicates,conflicts,linked,unlinked;
     }
     public static final class Filter {
-        public String character="",result="all",source="all",mode="standard",seed="all";public int ascension=-1,days,minSamples=1,slot=-1;public long from,to;
+        /** slot: the current save slot; slots are never merged (metrics.md 2). */
+        public String character="",result="all",source="all",seed="all";public int ascension=-1,days,minSamples=1,slot;public long from,to;
         public boolean heart=true,includeAbandon,slOnly;
     }
     public static final class Selection {public final List<Run> runs=new ArrayList<>();public final Map<String,Integer> excluded=new TreeMap<>();}
@@ -60,9 +61,10 @@ public final class Stats {
     static String reason(Run r,Filter f,long now){
         String outcome=r.outcome.or(null);Boolean special=special(r);long time=r.time.or(0L);
         if(r.conflict)return "conflict";if(r.fixture)return "fixture";if(r.practice)return "practice";if(r.current)return "current";if("incomplete".equals(outcome))return "incomplete";
-        // proposed (metrics.md 9.2): daily, custom and endless runs are out of the default scope; an unstated mode stays in.
-        if(f.mode.equals("standard")?Boolean.TRUE.equals(special):f.mode.equals("special")&&!Boolean.TRUE.equals(special))return "mode";
-        if(f.slot>=0&&!Integer.valueOf(f.slot).equals(r.slot.or(null)))return "slot";
+        // Daily, custom and endless runs are never counted (metrics.md 2); an unstated mode stays in.
+        if(Boolean.TRUE.equals(special))return "mode";
+        // Only the current save slot; a run whose slot no source gives is in no slot's statistics.
+        if(!Integer.valueOf(f.slot).equals(r.slot.or(null)))return "slot";
         if("abandon".equals(outcome)&&!f.includeAbandon)return "abandon";
         boolean shown=(f.character.isEmpty()||f.character.equals(r.character.or(null)))&&(f.ascension<0||f.ascension==r.ascension.or(-1))&&(f.days==0||time>0&&time>=now-f.days*86400000L)&&(f.from==0||time>=f.from)&&(f.to==0||time<f.to)
             &&(!f.slOnly||r.sl)&&(f.source.equals("all")||r.has(f.source))&&(f.seed.equals("all")||Boolean.valueOf(f.seed.equals("only")).equals(r.seeded.or(null)));

@@ -29,7 +29,7 @@ public final class Ledger {
 
     static Run read(JsonObject doc,boolean current,boolean conflict){
         JsonObject meta=obj(doc,"metadata");Run r=new Run();r.sources.add(L);r.runId=str(meta,"run_id");r.id="ledger:"+r.runId;r.playId=str(meta,"play_id");r.current=current;r.conflict=conflict;if(conflict)r.conflictReason="ledger_record";
-        r.fixture="test_fixture".equals(str(meta,"dataset_origin"));r.practice="practice".equals(str(meta,"session_kind"));if(!str(meta,"seed").isEmpty())r.seed=Fact.of(str(meta,"seed"),L);
+        r.fixture="test_fixture".equals(str(meta,"dataset_origin"));r.practice="practice".equals(str(meta,"session_kind"));if(!str(meta,"seed").isEmpty())r.seed=Fact.of(str(meta,"seed"),L);r.slot=Fact.of(integer(meta,"save_slot"),L); // records before save_slot leave it missing (metrics.md 2)
         JsonArray all=arr(doc,"records");Set<String> branches=new HashSet<>();long time=0;
         for(JsonElement e:all)if(e.isJsonObject()){JsonObject o=e.getAsJsonObject();if(!str(o,"branch_id").isEmpty())branches.add(str(o,"branch_id"));try{time=Math.max(time,o.has("time_ms")?o.get("time_ms").getAsLong():0);}catch(Exception ignored){}}
         r.sl=branches.size()>1;if(time>0)r.time=Fact.of(time,L);
