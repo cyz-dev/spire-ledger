@@ -13,7 +13,7 @@ final class HistoryIndex {
     static final class Summary {
         String playId="",sessionKind="",fileSignature="",lastBranch="";boolean conflict;String metadataSignature="";final Map<String,String> eventSignatures=new HashMap<>();Path file;String id,seed="",character="unknown",outcome="incomplete",search="";
         int ascension=-1,floor,picks,skips,bowls,changes,pending,unknown;
-        long time;boolean fixture,current;
+        long time;boolean fixture,current,summarized;int records;
         final Set<String> branches=new LinkedHashSet<>(),cardIds=new HashSet<>(),relicIds=new HashSet<>(),names=new HashSet<>();
         String localizedSearch="";
     }
@@ -31,19 +31,19 @@ final class HistoryIndex {
         final Summary s=new Summary();final Map<String,JsonObject> decisions=new LinkedHashMap<>(),results=new HashMap<>();final Map<String,String> signatures=new HashMap<>();final Set<String> conflicts=new HashSet<>();int count;String lastBranch="";final Map<String,String> endings=new HashMap<>();
         void metadata(JsonObject m){s.metadataSignature=signature(m);s.id=str(m,"run_id");s.seed=str(m,"seed");s.fixture="test_fixture".equals(str(m,"dataset_origin"));s.playId=str(m,"play_id");s.sessionKind=str(m,"session_kind");}
         void event(JsonObject e){
-            if(++count>50000)throw new IllegalArgumentException("too many records");String eventKey=e.has("seq")?str(e,"seq"):String.valueOf(count);String previous=s.eventSignatures.putIfAbsent(eventKey,signature(e));if(previous!=null&&!previous.equals(signature(e)))s.conflict=true;
+            if(++count>50000)throw new IllegalArgumentException("too many records");String eventKey=e.has("seq")?str(e,"seq"):String.valueOf(count),sig=sig(e);String previous=s.eventSignatures.putIfAbsent(eventKey,sig);if(previous!=null&&!previous.equals(sig))s.conflict=true;
             try{s.time=Math.max(s.time,e.has("time_ms")?e.get("time_ms").getAsLong():0);}catch(Exception ignored){}
             String b=str(e,"branch_id");if(!b.isEmpty()){s.branches.add(b);lastBranch=b;}
             anchor(s,obj(e,"before"));anchor(s,obj(e,"after"));anchor(s,obj(e,"state"));
             for(JsonElement c:array(e,"candidates"))if(c.isJsonObject()){JsonObject card=obj(c.getAsJsonObject(),"card");s.cardIds.add(str(card,"id"));s.names.add(str(card,"name"));}
             String type=str(e,"type"),id=str(e,"decision_id");if(type.equals("game_play_id")&&!str(e,"play_id").isEmpty())s.playId=str(e,"play_id");
-            if(type.equals("decision")||type.equals("result")){Map<String,JsonObject> map=type.equals("decision")?decisions:results;String signature=signature(e),key=type+":"+id;String prior=signatures.putIfAbsent(key,signature);if(prior!=null&&!prior.equals(signature))conflicts.add(id);if(prior==null){JsonObject small=new JsonObject();for(String k:Arrays.asList("action_source","candidate_id","status"))if(e.has(k))small.add(k,e.get(k));if(type.equals("decision")){JsonArray candidates=new JsonArray();for(JsonElement c:array(e,"candidates")){JsonObject candidate=new JsonObject();for(String k:Arrays.asList("candidate_id","type"))if(c.isJsonObject()&&c.getAsJsonObject().has(k))candidate.add(k,c.getAsJsonObject().get(k));candidates.add(candidate);}small.add("candidates",candidates);}map.put(id,small);}}
+            if(type.equals("decision")||type.equals("result")){Map<String,JsonObject> map=type.equals("decision")?decisions:results;String signature=sig,key=type+":"+id;String prior=signatures.putIfAbsent(key,signature);if(prior!=null&&!prior.equals(signature))conflicts.add(id);if(prior==null){JsonObject small=new JsonObject();for(String k:Arrays.asList("action_source","candidate_id","status"))if(e.has(k))small.add(k,e.get(k));if(type.equals("decision")){JsonArray candidates=new JsonArray();for(JsonElement c:array(e,"candidates")){JsonObject candidate=new JsonObject();for(String k:Arrays.asList("candidate_id","type"))if(c.isJsonObject()&&c.getAsJsonObject().has(k))candidate.add(k,c.getAsJsonObject().get(k));candidates.add(candidate);}small.add("candidates",candidates);}map.put(id,small);}}
             if(type.equals("build_change")&&"settled".equals(str(e,"status")))s.changes++;
             if(type.equals("ending")){String outcome=str(e,"outcome");endings.put(b,outcome.equals("victory")?"victory":outcome.equals("death")?"death":"incomplete");}
         }
         Summary finish(boolean current){
             if(s.id==null||s.id.isEmpty())throw new IllegalArgumentException("missing run_id");
-            s.lastBranch=lastBranch;
+            s.lastBranch=lastBranch;s.records=count;
             s.conflict|=!conflicts.isEmpty();s.current=current;s.outcome=endings.containsKey(lastBranch)?endings.get(lastBranch):current?"current":"incomplete";
             for(Map.Entry<String,JsonObject> item:decisions.entrySet()){
                 JsonObject d=item.getValue(),r=results.get(item.getKey());
@@ -84,9 +84,20 @@ final class HistoryIndex {
         Set<String> open=new LinkedHashSet<>();for(JsonElement e:array(best,"records"))if(e.isJsonObject()){JsonObject r=e.getAsJsonObject();if(str(r,"type").equals("decision"))open.add(str(r,"decision_id"));else if(str(r,"type").equals("result"))open.remove(str(r,"decision_id"));}
         for(String d:open){JsonObject r=Recorder.object("result");r.addProperty("decision_id",d);r.addProperty("status","interrupted");r.addProperty("reason","recovered_without_run_json");best.getAsJsonArray("records").add(r);}return best;
     }
-    /** run.json first; a missing or damaged one falls back to recovery. Null when the directory holds no record. */
-    static Summary load(Path dir)throws Exception {Path file=dir.resolve("run.json");try{return readSummary(file);}catch(Exception e){JsonObject doc;try{doc=recover(dir);}catch(Exception r){throw Files.exists(file)?e:r;}if(doc==null){if(Files.exists(file))throw e;return null;}Summary s=summarize(doc,false);s.file=file;return s;}}
-    static JsonObject document(Path file)throws IOException {try{return whole(file);}catch(IOException|RuntimeException e){JsonObject doc=recover(file.getParent());if(doc==null)throw e;return doc;}}
+    /** A summary built from the facts in summary.json; the caller has checked it is fresh. */
+    static Summary fromSummary(JsonObject sum,Path dir){Builder b=new Builder();b.metadata(obj(sum,"metadata"));for(JsonElement e:array(sum,"records")){JsonObject r=e.getAsJsonObject();b.ended|="ending".equals(str(r,"type"));b.event(r);}
+        for(JsonElement x:array(sum,"card_ids"))b.s.cardIds.add(x.getAsString());for(JsonElement x:array(sum,"card_names"))b.s.names.add(x.getAsString());for(Map.Entry<String,JsonElement> x:obj(sum,"relics").entrySet())b.s.relicIds.add(x.getKey());
+        Summary s=b.finish(false);s.file=dir.resolve("run.json");s.summarized=true;return s;}
+    /** A fresh summary first, then the full record. Null when the directory holds no record. */
+    static Summary load(Path dir)throws Exception {JsonObject sum=RunSummary.fresh(dir);if(sum!=null)try{return fromSummary(sum,dir);}catch(RuntimeException ignored){}return loadFull(dir);}
+    // run.json.tmp holds the newest copy when a reader blocked the replace; both are prefixes of one append-only record list, so more records is newer.
+    static Summary newer(Summary s,Path dir){Path tmp=dir.resolve("run.json.tmp");if(!Files.exists(tmp))return s;try{Summary t=readSummary(tmp);if(t.id.equals(s.id)&&t.records>s.records){t.file=s.file;return t;}}catch(Exception ignored){}return s;}
+    /** run.json (or a newer run.json.tmp) first; a missing or damaged one falls back to recovery. */
+    static Summary loadFull(Path dir)throws Exception {Path file=dir.resolve("run.json");try{return newer(readSummary(file),dir);}catch(Exception e){JsonObject doc;try{doc=recover(dir);}catch(Exception r){throw Files.exists(file)?e:r;}if(doc==null){if(Files.exists(file))throw e;return null;}Summary s=summarize(doc,false);s.file=file;return s;}}
+    static JsonObject document(Path file)throws IOException {JsonObject doc;try{doc=whole(file);}catch(IOException|RuntimeException e){doc=recover(file.getParent());if(doc==null)throw e;return doc;}
+        Path tmp=file.resolveSibling(file.getFileName()+".tmp");if(Files.exists(tmp))try{JsonObject t=whole(tmp);if(str(obj(t,"metadata"),"run_id").equals(str(obj(doc,"metadata"),"run_id"))&&array(t,"records").size()>array(doc,"records").size())return t;}catch(Exception ignored){}return doc;}
+    /** What StatsIndex needs from a stored run: the fresh summary's projected records when the index came from one, else the full record. */
+    static JsonObject facts(Summary s)throws IOException {if(s.summarized){JsonObject sum=RunSummary.fresh(s.file.getParent());if(sum!=null)return sum;}return document(s.file);}
     static Index scan(Path root,JsonObject live)throws IOException {return scan(Collections.singletonList(root),live);}
     static Index scan(List<Path> roots,JsonObject live)throws IOException {
         Index index=new Index();Map<String,Summary> byId=new HashMap<>();
