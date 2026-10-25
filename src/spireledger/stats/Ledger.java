@@ -74,7 +74,9 @@ public final class Ledger {
         r.act3=cleared!=null?Fact.of(cleared,L):maxAct>=4||Boolean.TRUE.equals(victory)?Fact.of(true,"ledger_act"):maxAct>0&&maxAct<=2?Fact.of(false,"ledger_act"):Fact.missing(L);
         // The game shows a DeathScreen for an act-3 win without keys (architecture M2) and for a menu abandon (Ledger records against .run), so "death" alone is not a death.
         boolean act3Win=Boolean.TRUE.equals(r.act3.value)&&maxAct>0&&maxAct<4;
-        r.outcome=end.equals("victory")||end.equals("death")&&(act3Win||Boolean.TRUE.equals(victory))?Fact.of("victory",L):end.equals("abandon")?Fact.of("abandon",L):Fact.missing(L);
+        // Endings with outcome_basis tell the three DeathScreen causes apart (Hooks.Death), so their "death" is a death.
+        boolean basis=ending.has("outcome_basis");
+        r.outcome=end.equals("victory")||end.equals("death")&&!basis&&(act3Win||Boolean.TRUE.equals(victory))?Fact.of("victory",L):end.equals("abandon")?Fact.of("abandon",L):end.equals("death")&&basis?Fact.of("death",L):Fact.missing(L);
         return r;
     }
 

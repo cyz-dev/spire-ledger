@@ -150,6 +150,11 @@ public final class StatsCheck {
   Stats.Filter nat=new Stats.Filter();nat.source=Fact.NATIVE;Stats.Filter led=new Stats.Filter();led.source=Fact.LEDGER;check(Stats.select(index,nat,100000).runs.size()==5&&Stats.select(index,led,100000).runs.size()==4,"10.9 sources are filters on one population");
   Stats.Filter slot=new Stats.Filter();slot.slot=2;check(Stats.select(index,slot,100000).runs.isEmpty(),"slot-0 runs are not in slot 2");
   JsonObject daily=nativeRun("DAILY",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");daily.addProperty("is_daily",true);Stats.Index withDaily=Stats.build(Arrays.asList(nf(daily,"DAILY","x.run")),Collections.emptyList());check(Stats.select(withDaily,all,100000).excluded.get("mode")==1,"daily never counted");
+  // Ledger endings with outcome_basis are trusted for death; older "death" endings stay missing unless facts prove a win.
+  JsonObject dead=doc(Recorder.SCHEMA,"L-dead",null);JsonObject de=ending("death",2,20,false,false);de.addProperty("outcome_basis","death_screen_cause");add(records(dead),de,"x",1);
+  JsonObject old=doc(Recorder.SCHEMA,"L-old-death",null);add(records(old),ending("death",2,20,false,false),"x",1);
+  Stats.Index basis=Stats.build(Collections.emptyList(),Arrays.asList(ledger(dead),ledger(old)));Map<String,String> outs=new HashMap<>();for(Run r:basis.runs)outs.put(r.id,String.valueOf(r.outcome.value));
+  check(outs.containsValue("death")&&outs.containsValue("null")&&outs.size()==2,"outcome_basis death trusted, older death missing: "+outs);
   // Save slot (metrics.md 2): Ledger save_slot, else the linked .run's directory, else missing and in no slot.
   JsonObject bare=doc(Recorder.SCHEMA,"L-noslot",null);bare.getAsJsonObject("metadata").remove("save_slot");add(records(bare),ending("victory",4,57,true,true),"x",1);
   Stats.Index noSlot=Stats.build(Collections.emptyList(),Arrays.asList(ledger(bare)));check(Stats.select(noSlot,all,100000).excluded.get("slot")==1&&Stats.select(noSlot,slot,100000).excluded.get("slot")==1,"unlinked record without save_slot is in no slot");

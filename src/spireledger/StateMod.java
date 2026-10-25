@@ -40,7 +40,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static String mutationReason;
     static final Map<Object,Recorder> metricsOwners=Collections.synchronizedMap(new IdentityHashMap<Object,Recorder>());
     static int lastFloor=-1,lastAct=-1,act3Floor=-1;
-    static boolean heartExit;
+    static boolean heartExit,abandoning;
     static long nextObserve;
     static Object player;
     static boolean startRequested=true,loadingExpected=false;
@@ -70,7 +70,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         if(!ready())return;
         if(recorder!=null&&player==AbstractDungeon.player&&!startRequested)return;
         if(recorder!=null){recorder.close();recorder=null;}
-        rewardKeys.clear();seen.clear();Snapshot.identities.clear();last=null;mutationBefore=null;lastFloor=-1;lastAct=-1;
+        rewardKeys.clear();seen.clear();Snapshot.identities.clear();last=null;mutationBefore=null;lastFloor=-1;lastAct=-1;abandoning=false;
         JsonObject meta=new JsonObject();meta.addProperty("mod_version",Recorder.VERSION);meta.addProperty("game_version",CardCrawlGame.VERSION_NUM);meta.addProperty("seed",String.valueOf(Settings.seed));meta.addProperty("save_slot",CardCrawlGame.saveSlot);meta.add("play_id",JsonNull.INSTANCE);meta.addProperty("play_id_status","unknown_until_game_metrics");meta.addProperty("coverage",loadingExpected?"loaded_or_partial":"from_enable_or_start");meta.addProperty("privacy","local; no account, paths, audio, images or upload");meta.addProperty("checkpoint_attachments",false);
         JsonArray mods=new JsonArray();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){JsonObject mod=new JsonObject();mod.addProperty("id",info.ID);mod.addProperty("version",String.valueOf(info.ModVersion));mods.add(mod);}meta.add("mods",mods);
         meta.addProperty("human_path_review","native UI; BaseMod + StSLib only; other mods unknown");
@@ -132,7 +132,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     // Metrics objects can generate a different UUID later and are deliberately ignored.
     static void metricsStarted(Object metrics){if(!enabled||failed)return;safely(()->{if(ready())ensure();if(recorder!=null)metricsOwners.put(metrics,recorder);});}
     static void metricsFinished(Object metrics,boolean death,boolean heart){Recorder target=metricsOwners.remove(metrics);if(target==null)return;safely(()->{Object params=field(metrics,"params");Object value=((Map<?,?>)params).get("play_id");if(!(value instanceof String)||!((String)value).matches("[a-fA-F0-9-]{36}"))throw new IOException("Missing native metrics play_id");JsonObject e=Recorder.object("game_play_id");e.addProperty("play_id",(String)value);e.addProperty("source","original_metrics_disk_save");e.addProperty("victory",!death);e.addProperty("heart_kill",!death&&heart);target.append(e);target.export();});}
-    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
+    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);e.addProperty("outcome_basis","death_screen_cause");act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
     @Override public void receiveStartGame(){startRequested=true;loadingExpected=loadingExpected||CardCrawlGame.loadingSave;}
     @Override public void onLoad(JsonObject data){loading=data;loadingExpected=true;startRequested=true;TurnRecorder.restoreCombat(data==null?new JsonObject():data);}
     @Override public JsonObject onSave(){

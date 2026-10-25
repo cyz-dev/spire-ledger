@@ -9,6 +9,8 @@ import com.megacrit.cardcrawl.relics.AbstractRelic;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import com.megacrit.cardcrawl.screens.DeathScreen;
 import com.megacrit.cardcrawl.screens.VictoryScreen;
+import com.megacrit.cardcrawl.screens.GameOverScreen;
+import com.megacrit.cardcrawl.screens.options.ConfirmPopup;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
 import com.megacrit.cardcrawl.ui.buttons.ProceedButton;
 import com.megacrit.cardcrawl.ui.buttons.SkipCardButton;
@@ -119,7 +121,12 @@ public final class Hooks {
         @SpirePrefixPatch public static void before(AbstractRelic __instance){StateMod.mutation("relic:"+__instance.relicId);}
     }
     @SpirePatch(clz=DeathScreen.class,method=SpirePatch.CONSTRUCTOR,paramtypez={MonsterGroup.class}) public static class Death {
-        @SpirePostfixPatch public static void after(){StateMod.end("death");}
+        // The game builds a DeathScreen for a death, a menu abandon and a keyless act-3 win (isVictory: VictoryRoom).
+        @SpirePostfixPatch public static void after(){StateMod.end(StateMod.abandoning?"abandon":GameOverScreen.isVictory?"victory":"death");}
+    }
+    @SpirePatch(clz=ConfirmPopup.class,method="yesButtonEffect") public static class AbandonMidRun {
+        @SpirePrefixPatch public static void before(ConfirmPopup __instance){StateMod.abandoning=__instance.type==ConfirmPopup.ConfirmType.ABANDON_MID_RUN;}
+        @SpirePostfixPatch public static void after(){StateMod.abandoning=false;}
     }
     @SpirePatch(clz=VictoryScreen.class,method=SpirePatch.CONSTRUCTOR,paramtypez={MonsterGroup.class}) public static class Victory {
         @SpirePostfixPatch public static void after(){StateMod.end("victory");}
