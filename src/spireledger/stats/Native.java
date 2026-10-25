@@ -22,7 +22,8 @@ final class Native {
     static int[] bounds(JsonArray fights){int b1=Integer.MAX_VALUE,b2=Integer.MAX_VALUE,b3=-1;
         for(JsonElement e:fights)if(e.isJsonObject()){String name=str(e.getAsJsonObject(),"enemies");Integer floor=integer(e.getAsJsonObject(),"floor");if(floor==null)continue;
             if(ACT1_BOSS.contains(name))b1=Math.min(b1,floor);if(ACT2_BOSS.contains(name))b2=Math.min(b2,floor);if(ACT3_BOSS.contains(name))b3=Math.max(b3,floor);}
-        return new int[]{b1==Integer.MAX_VALUE?17:b1,b2==Integer.MAX_VALUE?34:b2,b3<0?52:b3};}
+        // The boss chest floor right after the act-1 and act-2 boss still belongs to that act (user decision, metrics.md 6.4).
+        return new int[]{b1==Integer.MAX_VALUE?17:b1+1,b2==Integer.MAX_VALUE?34:b2+1,b3<0?52:b3};}
     static int act(int[] b,int floor){return floor<=b[0]?1:floor<=b[1]?2:floor<=b[2]?3:4;}
 
     static Run read(JsonObject o,String dir,String file){

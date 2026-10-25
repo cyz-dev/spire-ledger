@@ -220,7 +220,7 @@ product.md 把以下三项记录口径交给本文。
 | 指标 | 缺失 / 零 / 不适用 | 覆盖率单位 | 估算 | 来源优先级 | 与 TinyCat 的差异与本项目选择 |
 |---|---|---|---|---|---|
 | 奖励屏数、跳过率、歌唱碗率 | 没有奖励记录的局为缺失；有决策但无确认结果的屏不计（不是 0）；无歌唱碗的屏对歌唱碗率不适用 | 奖励屏：有记录的屏 / 应发选牌奖励的已胜战斗数（判定规则 M2 定，建议取普通、精英与第一、二幕 Boss 战）；无法判定时退回按局 | 无 | Ledger 决策 > `.run` `card_choices`；已关联的局按楼层取 Ledger，Ledger 缺该层时取 `.run` 同层（proposed） | TinyCat 把歌唱碗并入 SKIP；本项目分开。`.run` 在第一、二幕 Boss 层缺选牌记录（本机 230/1049 场），这些层在 `.run` 来源下计为缺失，不当作跳过 |
-| 卡牌抓率 | 该牌未被提供为不适用（不是 0%）；奖励屏缺失同上 | 同上 | 无 | 同上 | TinyCat 按 Boss 楼层幕划分（第 6.4 节）出四张表：第一幕、第二幕、第三四幕合并、第一幕之后（二至四幕合并）；本项目按游戏真实幕号分幕（Ledger 快照 `act`，`.run` 按第 6.4 节幕划分），界面可合并为同样的分段。TinyCat 对同屏重复出现的牌逐条计数，本项目同屏同 ID 只计一次（`StatsIndexCheck` “duplicate candidates one appearance”）。TinyCat 只看 A20。TinyCat 把 `card_choices` 的每一条都算作奖励屏，包括没有战斗的楼层：感官石事件（SensoryStone）、商店买下星盘（Orrery）后的选牌、尼奥开局选牌（第 0 层）、捕梦网（Dream Catcher）的火堆选牌、Boss 宝箱层的小屋（Tiny House）（本机 A20 存档位 0 共 387 屏，存档位 2 共 65 屏；同屏重复候选两个存档位都是 0）。本项目只取有战斗的楼层，与 Ledger `COMBAT_REWARD` 的范围相同。建议保留本项目口径：这些屏的候选池与战后奖励不同（感官石只出无色牌，尼奥和星盘是单独的来源），并入后抓率就不再只描述战后选牌；需要时另加“全部选牌屏”的候选视图（proposed） |
+| 卡牌抓率 | 该牌未被提供为不适用（不是 0%）；奖励屏缺失同上 | 同上 | 无 | 同上 | TinyCat 按 Boss 楼层幕划分（第 6.4 节）出四张表：第一幕、第二幕、第三四幕合并、第一幕之后（二至四幕合并）；本项目按游戏真实幕号分幕（Ledger 快照 `act`，`.run` 按第 6.4 节幕划分），界面可合并为同样的分段。TinyCat 对同屏重复出现的牌逐条计数，本项目同屏同 ID 只计一次（`StatsIndexCheck` “duplicate candidates one appearance”）。TinyCat 只看 A20。TinyCat 把 `card_choices` 的每一条都算作奖励屏，包括没有战斗的楼层：感官石事件（SensoryStone）、商店买下星盘（Orrery）后的选牌、尼奥开局选牌（第 0 层）、捕梦网（Dream Catcher）的火堆选牌、Boss 宝箱层的小屋（Tiny House）（本机 A20 存档位 0 共 387 屏，存档位 2 共 65 屏；同屏重复候选两个存档位都是 0）。本项目只取有战斗的楼层，与 Ledger `COMBAT_REWARD` 的范围相同。本项目保留只取有战斗楼层的口径：这些屏的候选池与战后奖励不同（感官石只出无色牌，尼奥和星盘是单独的来源），并入后抓率就不再只描述战后选牌；需要时另加“全部选牌屏”的候选视图（用户决定，2026-10-25） |
 | 持牌胜率 | 无终局牌组为缺失；胜负未知计入 `excluded_count`；结果筛选为仅胜或仅败时显示“—” | 局 | 无 | `.run` `master_deck` > Ledger `ending.state.deck` | **TinyCat 按张次计**（卡组里 2 张打击 win/loss 各加 2）；**本项目同名卡每局只计一次**（`StatsIndexCheck` “same-name held once per run”）。[m1-field-gaps.md](m1-field-gaps.md) 4.2 把单位写成“张次”，那一行描述的是 TinyCat 口径 |
 
 ### 6.3 尼奥与 Boss 遗物
@@ -249,7 +249,7 @@ product.md 把以下三项记录口径交给本文。
 
 ### 6.4 战斗、HP、药水
 
-幕划分：Ledger 记录用快照里的真实幕号 `act`。`.run` 用 TinyCat 的 Boss 楼层规则：从 `damage_taken` 识别第一、二幕 Boss 的最小楼层和第三幕 Boss 的最大楼层作为幕边界，缺 Boss 数据时回退 17 / 34 / 52。现有实现按 `path_per_floor` 中的 `null` 分隔计幕；本机 14,783 场战斗上两种规则的幕号逐场一致（第 11 节 `acts2.py`），本项目采用 Boss 楼层规则，因为它不依赖 `null` 占位是否存在。宝箱层与 Boss 后奖励层不计入按幕的战斗指标。
+幕划分：Ledger 记录用快照里的真实幕号 `act`。`.run` 用 TinyCat 的 Boss 楼层规则：从 `damage_taken` 识别第一、二幕 Boss 的最小楼层和第三幕 Boss 的最大楼层作为幕边界，缺 Boss 数据时回退 17 / 34 / 52。现有实现按 `path_per_floor` 中的 `null` 分隔计幕；本机 14,783 场战斗上两种规则的幕号逐场一致（第 11 节 `acts2.py`），本项目采用 Boss 楼层规则，因为它不依赖 `null` 占位是否存在。宝箱层与 Boss 后奖励层不计入按幕的战斗指标。第一、二幕 Boss 后的宝箱层属于 Boss 所在幕：幕边界取 Boss 楼层加一，缺 Boss 数据时的回退值 17 / 34 已经是宝箱层（用户决定，2026-10-25）。
 
 **A 表**
 
@@ -273,8 +273,8 @@ product.md 把以下三项记录口径交给本文。
 | 指标 | 缺失 / 零 / 不适用 | 覆盖率单位 | 估算 | 来源优先级 | 与 TinyCat 的差异与本项目选择 |
 |---|---|---|---|---|---|
 | 受到伤害 | 无 `damage_taken` 为缺失（本机非空 737/762）；空列表为已知为零场数；单场 `damage` 非数值为缺失 | 战斗（无法知道缺失局的场数时按局） | 无 | `.run` | 一致：每场一个样本。TinyCat 对 `damage >= 99999` 减 99999、跳过奖励层；本项目同样跳过奖励层，99999 的处理沿用（proposed） |
-| 实际战损、有无回复 | 入层 HP 或结束 HP 缺失为缺失；第一层入层 HP 缺失时按第 5.3 节估算 | 战斗 | 第一层估算（第 5.3 节），标 `estimated` | 入层 HP：Ledger `floor_enter` > `.run` 上一层 `current_hp_per_floor` > 估算；结束 HP：`.run` `current_hp_per_floor` > Ledger 战后 `floor` 记录 | TinyCat 入层 HP 也取上一层结束 HP，第一层优先 `.tinycat`，否则估算；本项目第一层优先 Ledger 尼奥后 HP。回复阈值只考虑燃烧之血，黑暗之血等更大回复会被归入“有回复”但阈值不变，沿用 TinyCat 以便对数。TinyCat 的遭遇行计入问号房里的事件战斗，只跳过 Boss 后奖励层与宝箱层：神秘球体（Mysterious Sphere）的 2 Orb Walkers、心灵绽放（MindBloom）、蒙面强盗（Masked Bandits）、蘑菇（Mushrooms）、斗兽场（Colosseum），以及死去的冒险者（Dead Adventurer）的 3 Sentries、Gremlin Nob、Lagavulin Event（本机 A20 存档位 0 共 306 场，存档位 2 共 49 场）。本项目按 A 表只取 `path_per_floor` 为 `M`、`E`、`B` 的战斗与第四幕战斗。建议保留本项目口径：事件战斗由事件选项触发，奖励与地图节点战斗不同，与第 6.7 节怪物危险度只取 `M`、`E`、`B` 节点也一致（proposed） |
-| 每幕总战损 | 到达该幕但缺 `damage_taken` 为缺失；未到达为不适用；到达且无战损为已知为零 | 局·幕 | 第一层估算同上 | 同上 | 一致（TinyCat 同样对无战损的幕补 0）。另有两处不同：一是 TinyCat 的每幕合计同样含问号房事件战斗，本项目与实际战损用同一适用样本（上一行）；二是停在 Boss 宝箱层结束的局（本机 A20 存档位 0 有 6 局，3 局停在第 17 层、3 局停在第 34 层；存档位 2 有 1 局；都是既非胜利也无 `killed_by` 的放弃局，如 `WATCHER/1753220289.run`），TinyCat 取最后一幕时跳过奖励层，算到 Boss 所在幕为止，本项目按 Boss 楼层边界把宝箱层算进下一幕，给下一幕补一个 0。建议：事件战斗随实际战损一起决定；宝箱层改为属于 Boss 所在幕，因为玩家在宝箱层还没有进入下一幕；这会同时改变这些局在各幕存活率里的分母（proposed） |
+| 实际战损、有无回复 | 入层 HP 或结束 HP 缺失为缺失；第一层入层 HP 缺失时按第 5.3 节估算 | 战斗 | 第一层估算（第 5.3 节），标 `estimated` | 入层 HP：Ledger `floor_enter` > `.run` 上一层 `current_hp_per_floor` > 估算；结束 HP：`.run` `current_hp_per_floor` > Ledger 战后 `floor` 记录 | TinyCat 入层 HP 也取上一层结束 HP，第一层优先 `.tinycat`，否则估算；本项目第一层优先 Ledger 尼奥后 HP。回复阈值只考虑燃烧之血，黑暗之血等更大回复会被归入“有回复”但阈值不变，沿用 TinyCat 以便对数。TinyCat 的遭遇行计入问号房里的事件战斗，只跳过 Boss 后奖励层与宝箱层：神秘球体（Mysterious Sphere）的 2 Orb Walkers、心灵绽放（MindBloom）、蒙面强盗（Masked Bandits）、蘑菇（Mushrooms）、斗兽场（Colosseum），以及死去的冒险者（Dead Adventurer）的 3 Sentries、Gremlin Nob、Lagavulin Event（本机 A20 存档位 0 共 306 场，存档位 2 共 49 场）。本项目按 A 表只取 `path_per_floor` 为 `M`、`E`、`B` 的战斗与第四幕战斗。本项目不计事件战斗：事件战斗由事件选项触发，奖励与地图节点战斗不同，与第 6.7 节怪物危险度只取 `M`、`E`、`B` 节点也一致（用户决定，2026-10-25） |
+| 每幕总战损 | 到达该幕但缺 `damage_taken` 为缺失；未到达为不适用；到达且无战损为已知为零 | 局·幕 | 第一层估算同上 | 同上 | 一致（TinyCat 同样对无战损的幕补 0）。另有两处不同：一是 TinyCat 的每幕合计同样含问号房事件战斗，本项目与实际战损用同一适用样本（上一行）；二是停在 Boss 宝箱层结束的局（本机 A20 存档位 0 有 6 局，存档位 2 有 1 局，都是放弃局，如 `WATCHER/1753220289.run`）：宝箱层属于 Boss 所在幕（幕划分见本节开头），玩家在宝箱层还没有进入下一幕，所以这些局不进入下一幕的每幕总战损和各幕存活率，与 TinyCat 一致（用户决定，2026-10-25） |
 | 每幕战斗战损 | 同实际战损；该幕没有战斗为不适用，不补 0 | 局·幕 | 第一层估算同上 | 同上 | 对应 TinyCat “战斗总计 / 非Boss战斗总计”。与每幕总战损的区别是不含事件伤害、没有战斗的幕不计入分母 |
 | 遭遇死亡率 | 死亡局缺 `killed_by` 时该局所有遭遇对本指标为缺失 | 战斗 | 无 | `.run` `killed_by` > Ledger（M1 可选记录死因） | 本项目要求楼层匹配；TinyCat 按文档描述只比较遭遇名，同一局里两次同名遭遇可能都计死亡（据文档推断，未读代码核实）。TinyCat 另有地精大块头单列序列，本项目由按遭遇名的行直接给出 |
 | 致死次数 | 死亡但无 `killed_by` 不计入任何行，单列“死因未知” | 局 | 无 | 同上 | 一致 |
