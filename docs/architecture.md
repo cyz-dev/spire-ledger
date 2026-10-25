@@ -67,8 +67,8 @@ TinyCat 约 1.8 万行中约 37% 是值得重写的领域知识（幕划分、�
 各里程碑均为 (proposed)。
 
 - **M0 迁入与修复**：State Notes 代码迁入并改名（modid、包名、数据目录、schema 名、jar 名）；修写入锁冲突；重打兼容键与 jar 版本解绑。验收：`-Check` 全过；锁冲突测试转绿；一次 replay 探针通过。不可逆点：无（未公开发布）。
-- **M1 记录补字段与摘要**：`gold_gained`、尼奥选项与代价、商店候选，以及 TinyCat 指标清单中 RunHistoryPlus 独有且需要的字段（先出字段缺口表）；每局摘要。验收：记录检查；千局摘要索引耗时实测。
-- **M2 统计内核**：统一单局模型；State Notes 现有指标与 TinyCat 核心指标（卡牌抓率、遭遇战损、金币）迁入。验收：真值金币夹具；与 TinyCat 逐表对数。
+- **M1 记录补字段与摘要**：先定 `docs/metrics.md` 指标合同（M2、M3 全部指标的统计单位、分母、缺失规则、来源优先级），再据此出字段缺口表；补 `gold_gained`、尼奥选项与代价、商店候选、第三幕通过事实，以及 TinyCat 指标清单中 RunHistoryPlus 独有且需要的字段；每局摘要。同时修三处现有缺陷：缺少 `run.json` 的记录目录在历史里不可见（`HistoryIndex.java:70`）；诊断报告的异常消息和堆栈里的令牌没有去除（`DiagnosticReport.java:47-48`）；统计筛选没有排除未完成局（`StatsIndex.java:70`）。验收：记录检查；三处缺陷各有一个反例夹具转绿；千局夹具上的冷启动、筛选和记录停顿实测值交给用户定上限。
+- **M2 统计内核**：统一单局模型；State Notes 现有指标与 TinyCat 核心指标（卡牌抓率、遭遇战损、金币）迁入。验收：真值金币夹具；与 TinyCat 逐表对数；结果筛选（全部、仅胜、仅败）× 放弃开关 × 两种胜负口径的全部组合各有离线断言，夹具含心脏胜、第三幕胜、第四幕死亡、放弃和缺少胜负事实的旧局；多来源合并在打乱读取顺序后结果不变。
 - **M3 其余指标与导出**：Plackett-Luce、Jenks、怪物危险度、尼奥；遗物效果量（读 `relic_stats`，遗物语义对照表覆盖本机样本出现的全部遗物，未收录的遗物显示为缺失而非 0）；CSV 与 Tierlist 图片；求解器同装来源标记（含求解器仓库一侧的 `withAutomation` 调用）。
 - **M4 CI 与发布**：自托管 runner 工作流；发布由用户逐次授权。不可逆点：modid `spire-ledger` 与记录 schema 公开后只能兼容扩展。
 
@@ -76,5 +76,5 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 ## Open decisions
 
-- 已决定（2026-10-25）：State Notes 旧记录留在 `~/.sts1-state-notes/` 原地只读，新 Mod 同时读旧 schema `sts1-state-v1`；SlaySpire1RL `import_run.py` 同时接受两个 schema 名。
+- 已决定（2026-10-25）：State Notes 旧记录留在 `~/.sts1-state-notes/` 原地只读，新 Mod 同时读旧 schema `sts1-state-v1`；跨项目一侧，SlaySpire1RL `tools/state_runs/import_run.py` 同时接受两个 schema 名（SlaySpire1RL 3d1002a）。每局摘要是统计索引的内部机制，见 M1。
 - 是否保留 State Notes 的 Git 历史迁入（历史中含内部证据路径与记录，影响日后公开）。blocks: M0。
