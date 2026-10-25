@@ -60,15 +60,14 @@ import java.nio.charset.StandardCharsets;
         }
     }catch(Throwable e){finish(e);stage=99;}}
     void presentationChecks(HistoryScreen h){
-     JsonObject original=h.detail,event=h.events.get(h.eventIndex);try{
-      h.detail=new JsonParser().parse(original.toString()).getAsJsonObject();JsonObject chosen=new JsonParser().parse(event.toString()).getAsJsonObject();h.events.set(h.eventIndex,chosen);chosen.addProperty("candidate_id","bowl");h.makeLines();
-      JsonObject result=null;for(JsonElement e:HistoryIndex.array(h.detail,"records"))if(e.isJsonObject()&&"result".equals(HistoryIndex.str(e.getAsJsonObject(),"type")))result=e.getAsJsonObject();check(result!=null,"synthetic result");
-      // Change the synthetic document's decision too; otherwise it is correctly a conflicting decision.
-      for(JsonElement e:HistoryIndex.array(h.detail,"records"))if(e.isJsonObject()&&"decision".equals(HistoryIndex.str(e.getAsJsonObject(),"type")))e.getAsJsonObject().addProperty("candidate_id","bowl");h.makeLines();
-      check(h.lines.stream().anyMatch(r->r.left.contains("[Bowl used]")&&r.tone==HistoryScreen.Tone.CHANGED),"completed bowl");result.addProperty("status","pending");h.makeLines();check(h.lines.toString().contains("[Submitted · incomplete]")&&!h.lines.toString().contains("[Bowl used]"),"pending not completed");
-      result.addProperty("status","confirmed");JsonObject conflict=new JsonParser().parse(result.toString()).getAsJsonObject();conflict.addProperty("status","interrupted");HistoryIndex.array(h.detail,"records").add(conflict);h.makeLines();check(!h.lines.toString().contains("[Bowl used]")&&h.lines.stream().anyMatch(r->r.tone==HistoryScreen.Tone.REMOVED),"conflict does not choose result");
+     JsonObject original=h.detail;int at=h.eventIndex;String bowl=HistoryScreen.tr("【已用歌唱碗】","[Bowl used]"),submitted=HistoryScreen.tr("【提交项 · 未完成】","[Submitted · incomplete]");try{
+      // makeLines reads the records prepareFloors derived from detail, so edits go to a copy and are re-derived.
+      h.detail=new JsonParser().parse(original.toString()).getAsJsonObject();h.prepareFloors();h.eventIndex=at;JsonObject chosen=h.events.get(at);String id=HistoryIndex.str(chosen,"decision_id");
+      JsonObject result=null;for(JsonElement e:HistoryIndex.array(h.detail,"records"))if(e.isJsonObject()&&id.equals(HistoryIndex.str(e.getAsJsonObject(),"decision_id"))){JsonObject o=e.getAsJsonObject();if("result".equals(HistoryIndex.str(o,"type")))result=o;if("decision".equals(HistoryIndex.str(o,"type")))o.addProperty("candidate_id","bowl");}check(result!=null,"synthetic result");h.makeLines();
+      check(h.lines.stream().anyMatch(r->r.left.contains(bowl)&&r.tone==HistoryScreen.Tone.CHANGED),"completed bowl: "+h.lines);result.addProperty("status","pending");h.makeLines();check(h.lines.toString().contains(submitted)&&!h.lines.toString().contains(bowl),"pending not completed");
+      result.addProperty("status","confirmed");JsonObject conflict=new JsonParser().parse(result.toString()).getAsJsonObject();conflict.addProperty("status","interrupted");HistoryIndex.array(h.detail,"records").add(conflict);h.prepareFloors();h.eventIndex=at;h.makeLines();check(!h.lines.toString().contains(bowl)&&h.lines.stream().anyMatch(r->r.tone==HistoryScreen.Tone.REMOVED),"conflict does not choose result: "+h.lines);
       report.addProperty("bowl_pending_conflict_presentation",true);
-     }finally{h.detail=original;h.events.set(h.eventIndex,event);h.makeLines();}
+     }finally{h.detail=original;h.prepareFloors();h.eventIndex=at;h.makeLines();}
     }
     void event(HistoryScreen h,int seq){for(int i=0;i<h.events.size();i++)if(HistoryIndex.num(h.events.get(i),"seq",-1)==seq){h.eventIndex=i;h.makeLines();checkWidths(h);return;}throw new AssertionError("missing real event "+seq);}
     void checkWidths(HistoryScreen h){for(HistoryScreen.Row r:h.lines){com.badlogic.gdx.graphics.g2d.BitmapFont f=r.tone==HistoryScreen.Tone.HEADER?FontHelper.buttonLabelFont:FontHelper.cardDescFont_N;float scale=r.tone==HistoryScreen.Tone.HEADER?1:1.12f;check(h.measure(f,r.left,scale)<=(r.columns?h.cellWidth():h.contentWidth())+.1f,"left native pixel bound "+r.left);if(r.columns)check(h.measure(FontHelper.cardDescFont_N,r.right,1.12f)<=h.cellWidth()+.1f,"right native pixel bound");}}
