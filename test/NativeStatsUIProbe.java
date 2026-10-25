@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 import basemod.BaseMod;
 import basemod.interfaces.*;
 import com.badlogic.gdx.Gdx;
@@ -25,12 +25,12 @@ import java.nio.charset.StandardCharsets;
 
 /** Native controls exercised by synthetic input. Shipping JAR never contains this driver. */
 @SpireInitializer public class NativeStatsUIProbe implements PostUpdateSubscriber,PostRenderSubscriber {
-    final boolean realLayout=Boolean.getBoolean("sts1state.realLayout");
+    final boolean realLayout=Boolean.getBoolean("spireledger.realLayout");
     int stage;long next,started=System.currentTimeMillis();String shot;boolean captured;MainMenuScreen.CurScreen prior;AbstractDungeon.CurrentScreen rewardScreen;int deck,gold;long rng;JsonObject report=new JsonObject(),pauseState,pauseRng;
     public static void initialize(){BaseMod.subscribe(new NativeStatsUIProbe());}
     @SpirePatch(clz=DistributorFactory.class,method="getEnabledDistributor") public static class Offline {@SpirePrefixPatch public static SpireReturn<PublisherIntegration> before(String distributor){return SpireReturn.Return(new GogIntegration());}}
     @SpirePatch(clz=CardCrawlGame.class,method="create") public static class NoSteam {@SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(NewExpr e)throws CannotCompileException{if(e.getClassName().equals("com.codedisaster.steamworks.SteamUtils")||e.getClassName().equals("com.megacrit.cardcrawl.helpers.steamInput.SteamInputHelper"))e.replace("{ $_ = null; }");}};}}
-    @SpirePatch(clz=Settings.class,method="initializeGamePref") public static class Chinese {@SpirePostfixPatch public static void lang(){Settings.setLanguage(Settings.GameLanguage.valueOf(System.getProperty("sts1state.uiLanguage","ZHS")),true);}}
+    @SpirePatch(clz=Settings.class,method="initializeGamePref") public static class Chinese {@SpirePostfixPatch public static void lang(){Settings.setLanguage(Settings.GameLanguage.valueOf(System.getProperty("spireledger.uiLanguage","ZHS")),true);}}
     static Object fade()throws Exception{java.lang.reflect.Field f=CardCrawlGame.class.getDeclaredField("screenColor");f.setAccessible(true);return f.get(null);}
     static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
     static void clicked(Hitbox h){h.clicked=true;InputHelper.mX=(int)h.cX;InputHelper.mY=(int)h.cY;}

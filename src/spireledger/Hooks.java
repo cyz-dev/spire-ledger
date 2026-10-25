@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.evacipated.cardcrawl.modthespire.lib.*;
 import com.megacrit.cardcrawl.cards.AbstractCard;
@@ -50,7 +50,7 @@ public final class Hooks {
     }
     @SpirePatch(clz=SkipCardButton.class,method="update") public static class NoncombatSkipClick {
         @SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(MethodCall c)throws CannotCompileException {
-            if(c.getClassName().equals("com.megacrit.cardcrawl.dungeons.AbstractDungeon")&&c.getMethodName().equals("closeCurrentScreen"))c.replace("{ sts1state.Hooks.noncombatSkip(); $proceed($$); }");
+            if(c.getClassName().equals("com.megacrit.cardcrawl.dungeons.AbstractDungeon")&&c.getMethodName().equals("closeCurrentScreen"))c.replace("{ spireledger.Hooks.noncombatSkip(); $proceed($$); }");
         }};}
     }
     public static void noncombatSkip(){if(com.megacrit.cardcrawl.dungeons.AbstractDungeon.screen==com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.CARD_REWARD)StateMod.screenSkip(com.megacrit.cardcrawl.dungeons.AbstractDungeon.cardRewardScreen);}
@@ -61,7 +61,7 @@ public final class Hooks {
     // is the commit boundary; temporary CardRewardScreen/peek closes are deliberately untouched.
     @SpirePatch(clz=ProceedButton.class,method="update") public static class FinalAbandon {
         @SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(MethodCall c)throws CannotCompileException {
-            if(c.getClassName().equals("com.megacrit.cardcrawl.dungeons.AbstractDungeon")&&c.getMethodName().equals("closeCurrentScreen"))c.replace("{ sts1state.Hooks.abandon(); $proceed($$); }");
+            if(c.getClassName().equals("com.megacrit.cardcrawl.dungeons.AbstractDungeon")&&c.getMethodName().equals("closeCurrentScreen"))c.replace("{ spireledger.Hooks.abandon(); $proceed($$); }");
         }};}
     }
     public static void abandon(){StateMod.abandon();}

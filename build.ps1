@@ -21,27 +21,27 @@ if($LASTEXITCODE -ne 0){throw 'Bundle tool compile failed'}
 & java '-Dfile.encoding=UTF-8' -cp "$out/adapter-tool;$workshop/1605060445/ModTheSpire.jar" BundleSaveState "$out/SaveStateMod.jar" $classes "$Game/desktop-1.0.jar" "$workshop/1605060445/ModTheSpire.jar" "$workshop/1605833019/BaseMod.jar"
 if($LASTEXITCODE -ne 0){throw 'Bundle failed'}
 Copy-Item "$PSScriptRoot/NOTICE.txt" $classes
-Copy-Item "$PSScriptRoot/LICENSE-StateNotes.txt" $classes
+Copy-Item "$PSScriptRoot/LICENSE" $classes
 Copy-Item "$PSScriptRoot\ModTheSpire.json" $classes
 Copy-Item "$PSScriptRoot\viewer\review.html" $classes
-& jar cf "$out\STS1StateNotes.jar" -C $classes .
+& jar cf "$out\SpireLedger.jar" -C $classes .
 if($LASTEXITCODE -ne 0){throw 'jar failed'}
 if($Check){
   $tests=@(Get-ChildItem "$PSScriptRoot\test" -Filter *.java | Where-Object Name -ne "NativeReplayProbe.java")
   [IO.File]::WriteAllLines($list,@($tests | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'}),$utf8)
   & javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp "$classes;$cp" -d $classes "@$list"
   if($LASTEXITCODE -ne 0){throw 'test compile failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" sts1state.RecorderCheck (Join-Path $out ('recorder-checks-'+[Guid]::NewGuid().ToString('N')))
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.RecorderCheck (Join-Path $out ('recorder-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'RecorderCheck failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" sts1state.HistoryIndexCheck (Join-Path $out ('history-checks-'+[Guid]::NewGuid().ToString('N')))
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.HistoryIndexCheck (Join-Path $out ('history-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'HistoryIndexCheck failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" sts1state.HistoryLayoutCheck
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.HistoryLayoutCheck
   if($LASTEXITCODE -ne 0){throw 'HistoryLayoutCheck failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" sts1state.StatsIndexCheck (Join-Path $out ('stats-checks-'+[Guid]::NewGuid().ToString('N')))
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.StatsIndexCheck (Join-Path $out ('stats-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'StatsIndexCheck failed'}
-  & java '-Dfile.encoding=UTF-8' ("-Duser.home="+(Join-Path $out ('diagnostic-check-'+[Guid]::NewGuid().ToString('N')))) -ea -cp "$classes;$cp" sts1state.DiagnosticReportCheck
+  & java '-Dfile.encoding=UTF-8' ("-Duser.home="+(Join-Path $out ('diagnostic-check-'+[Guid]::NewGuid().ToString('N')))) -ea -cp "$classes;$cp" spireledger.DiagnosticReportCheck
   if($LASTEXITCODE -ne 0){throw 'DiagnosticReportCheck failed'}
-  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" sts1state.TurnFilesCheck (Join-Path $out ('turn-checks-'+[Guid]::NewGuid().ToString('N')))
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.TurnFilesCheck (Join-Path $out ('turn-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'TurnFilesCheck failed'}
 }
-Get-Item "$out\STS1StateNotes.jar" | Select-Object FullName,Length
+Get-Item "$out\SpireLedger.jar" | Select-Object FullName,Length

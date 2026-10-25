@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import java.io.*;
@@ -9,7 +9,10 @@ import java.util.zip.*;
 
 /** JSON values only: never retain game objects or RNGs. Called on the game thread. */
 public final class Recorder implements AutoCloseable {
-    public static final String SCHEMA="sts1-state-v1", VERSION="0.4.0";
+    public static final String SCHEMA="spire-ledger-v1", VERSION="0.5.0";
+    // State Notes 0.4.0 wrote the same record shape under its old schema name; read it, never write it.
+    static final String LEGACY_SCHEMA="sts1-state-v1";
+    static boolean knownSchema(String schema){return SCHEMA.equals(schema)||LEGACY_SCHEMA.equals(schema);}
     public final Path directory;
     public final String runId;
     public String branch;
@@ -110,13 +113,21 @@ public final class Recorder implements AutoCloseable {
     JsonArray recent(int count){JsonArray out=new JsonArray();for(int i=Math.max(0,records.size()-count);i<records.size();i++)out.add(copy(records.get(i).getAsJsonObject()));return out;}
     public JsonObject document(){return copy(root);}
     private static void atomic(Path path,byte[] data)throws IOException {
-        Path tmp=path.resolveSibling(path.getFileName()+".tmp");Files.write(tmp,data);
-        try{Files.move(tmp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException ex){Files.move(tmp,path,StandardCopyOption.REPLACE_EXISTING);}
+        Path tmp=path.resolveSibling(path.getFileName()+".tmp");Files.write(tmp,data);replace(tmp,path);
+    }
+    static final int REPLACE_ATTEMPTS=10;
+    // Windows refuses to replace a file another process holds open (indexers, antivirus, readers); wait briefly instead of failing.
+    static void replace(Path tmp,Path path)throws IOException {
+        for(int attempt=1;;attempt++){
+            try{try{Files.move(tmp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException ex){Files.move(tmp,path,StandardCopyOption.REPLACE_EXISTING);}return;}
+            catch(AccessDeniedException ex){if(attempt>=REPLACE_ATTEMPTS)throw ex;try{Thread.sleep(20);}catch(InterruptedException ie){Thread.currentThread().interrupt();throw ex;}}
+        }
     }
     public void flush()throws IOException {
         if(records.size()>segmentStart){JsonObject part=new JsonObject();part.addProperty("schema",SCHEMA);part.add("metadata",root.get("metadata"));JsonArray slice=new JsonArray();for(int i=segmentStart;i<records.size();i++)slice.add(records.get(i));part.add("records",slice);
             atomic(directory.resolve(String.format(Locale.ROOT,"segment-%05d.json",++segment)),part.toString().getBytes(StandardCharsets.UTF_8));segmentStart=records.size();}
-        atomic(directory.resolve("run.json"),root.toString().getBytes(StandardCharsets.UTF_8));
+        // run.json is a derived view of events and segments; a reader holding it open must not stop recording.
+        try{atomic(directory.resolve("run.json"),root.toString().getBytes(StandardCharsets.UTF_8));}catch(AccessDeniedException ex){System.err.println("[Spire Ledger] run.json held open by another process; latest copy kept in run.json.tmp");}
         Path html=directory.resolve("review.html");if(!Files.exists(html))try(InputStream in=Recorder.class.getResourceAsStream("/review.html")){if(in!=null)Files.copy(in,html);}
     }
     public Path export()throws IOException {
@@ -125,9 +136,9 @@ public final class Recorder implements AutoCloseable {
             // A damaged optional attachment must not stop build recording. Keep an
             // explicit export diagnostic and produce the independently readable base.
             JsonObject error=object("replay_export_unavailable");error.addProperty("reason",ex.getClass().getSimpleName());append(error);flush();writeZip(tmp,false);
-            System.err.println("[State Notes] Optional replay export failed; base package exported: "+ex.getClass().getSimpleName());
+            System.err.println("[Spire Ledger] Optional replay export failed; base package exported: "+ex.getClass().getSimpleName());
         }
-        Files.move(tmp,target,StandardCopyOption.REPLACE_EXISTING);return target;
+        replace(tmp,target);return target;
     }
     private void writeZip(Path tmp,boolean replay)throws IOException {
         try(ZipOutputStream zip=new ZipOutputStream(Files.newOutputStream(tmp))){for(String name:Arrays.asList("run.json","review.html")){Path p=directory.resolve(name);if(Files.exists(p)){zip.putNextEntry(new ZipEntry(name));Files.copy(p,zip);zip.closeEntry();}}if(replay)TurnFiles.addToZip(directory,zip);}

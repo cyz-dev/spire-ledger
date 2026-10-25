@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.evacipated.cardcrawl.modthespire.lib.*;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
@@ -11,10 +11,10 @@ import javassist.expr.*;
 /** A failed rollback is terminal for this process, even if a UI catches the exception. */
 public final class ReplaySafety {
     static boolean quarantined;
-    static boolean practice(){return Boolean.getBoolean("sts1state.practiceMode");}
+    static boolean practice(){return Boolean.getBoolean("spireledger.practiceMode");}
     static void quarantine(Throwable failure){
         quarantined=true;DiagnosticReport.error("restore_quarantine",failure);
-        System.err.println("[State Notes] Restore failed without a verified rollback. Gameplay and saving are frozen; close this game process and reload the untouched native save.");
+        System.err.println("[Spire Ledger] Restore failed without a verified rollback. Gameplay and saving are frozen; close this game process and reload the untouched native save.");
         failure.printStackTrace();
     }
     @SpirePatch(clz=CardCrawlGame.class,method="update") public static class Freeze {
@@ -28,7 +28,7 @@ public final class ReplaySafety {
             ___sb.begin();
             com.megacrit.cardcrawl.helpers.FontHelper.renderFontCentered(___sb,com.megacrit.cardcrawl.helpers.FontHelper.buttonLabelFont,HistoryScreen.tr("恢复失败，游戏已冻结。","Restore failed; gameplay is frozen."),com.megacrit.cardcrawl.core.Settings.WIDTH/2f,com.megacrit.cardcrawl.core.Settings.HEIGHT/2f,com.badlogic.gdx.graphics.Color.WHITE);
             com.megacrit.cardcrawl.helpers.FontHelper.renderFontCentered(___sb,com.megacrit.cardcrawl.helpers.FontHelper.buttonLabelFont,HistoryScreen.tr("请关闭游戏，重新读取原存档。","Close this game process and reload the native save."),com.megacrit.cardcrawl.core.Settings.WIDTH/2f,com.megacrit.cardcrawl.core.Settings.HEIGHT/2f-50,com.badlogic.gdx.graphics.Color.WHITE);
-            com.megacrit.cardcrawl.helpers.FontHelper.renderFontCentered(___sb,com.megacrit.cardcrawl.helpers.FontHelper.cardDescFont_N,"Ctrl+Shift+R · ~/.sts1-state-notes/bug-reports",com.megacrit.cardcrawl.core.Settings.WIDTH/2f,com.megacrit.cardcrawl.core.Settings.HEIGHT/2f-100,com.badlogic.gdx.graphics.Color.WHITE);
+            com.megacrit.cardcrawl.helpers.FontHelper.renderFontCentered(___sb,com.megacrit.cardcrawl.helpers.FontHelper.cardDescFont_N,"Ctrl+Shift+R · ~/.spire-ledger/bug-reports",com.megacrit.cardcrawl.core.Settings.WIDTH/2f,com.megacrit.cardcrawl.core.Settings.HEIGHT/2f-100,com.badlogic.gdx.graphics.Color.WHITE);
             DiagnosticReport.draw(___sb);___sb.end();return SpireReturn.Return(null);
         }
     }
@@ -49,7 +49,7 @@ public final class ReplaySafety {
     }
     @SpirePatch(clz=CardCrawlGame.class,method="create") public static class NoSteam {
         @SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(NewExpr e)throws CannotCompileException{
-            if(e.getClassName().equals("com.codedisaster.steamworks.SteamUtils")||e.getClassName().equals("com.megacrit.cardcrawl.helpers.steamInput.SteamInputHelper"))e.replace("{ $_ = sts1state.ReplaySafety.isPractice() ? null : $proceed($$); }");
+            if(e.getClassName().equals("com.codedisaster.steamworks.SteamUtils")||e.getClassName().equals("com.megacrit.cardcrawl.helpers.steamInput.SteamInputHelper"))e.replace("{ $_ = spireledger.ReplaySafety.isPractice() ? null : $proceed($$); }");
         }};}
     }
     public static boolean isPractice(){return practice();}

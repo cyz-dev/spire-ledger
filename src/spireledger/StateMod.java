@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import basemod.*;
 import basemod.abstracts.CustomSavable;
@@ -24,7 +24,9 @@ import java.util.*;
 @SpireInitializer
 public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscriber,StartGameSubscriber,CustomSavable<JsonObject> {
     static final StateMod INSTANCE=new StateMod();
-    static final Path ROOT=Paths.get(System.getProperty("user.home"),".sts1-state-notes","runs");
+    static final Path ROOT=Paths.get(System.getProperty("user.home"),".spire-ledger","runs");
+    // State Notes 0.4.0 records stay where the player left them; read-only.
+    static final Path LEGACY_ROOT=Paths.get(System.getProperty("user.home"),".sts1-state-notes","runs");
     static Recorder recorder;
     static ModLabeledButton historyEntry,reportEntry;
     static HistoryTopPanelItem historyTopPanel;
@@ -39,12 +41,12 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static boolean startRequested=true,loadingExpected=false;
     static final IdentityHashMap<Object,String> rewardKeys=new IdentityHashMap<>();
     static final Set<Object> seen=Collections.newSetFromMap(new IdentityHashMap<Object,Boolean>());
-    public static void initialize(){EmbeddedSaveState.initialize();BaseMod.subscribe(INSTANCE);BaseMod.addSaveField("sts1-state-notes:checkpoint",INSTANCE);}
+    public static void initialize(){EmbeddedSaveState.initialize();BaseMod.subscribe(INSTANCE);BaseMod.addSaveField("spire-ledger:checkpoint",INSTANCE);}
     static Object field(Object object,String name){try{Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}catch(Exception ex){throw new IllegalStateException("Missing game field: "+name,ex);}}
     interface Action {void run()throws Exception;}
-    static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status="Recording stopped: "+ex.getClass().getSimpleName()+" (see log)";System.err.println("[State Notes] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[State Notes] Last export failed; recover events.jsonl");}recorder=null;}}
+    static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status="Recording stopped: "+ex.getClass().getSimpleName()+" (see log)";System.err.println("[Spire Ledger] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[Spire Ledger] Last export failed; recover events.jsonl");}recorder=null;}}
     static boolean ready(){return enabled&&!failed&&!ReplaySafety.quarantined&&!CardCrawlGame.loadingSave&&CardCrawlGame.mode==CardCrawlGame.GameMode.GAMEPLAY&&AbstractDungeon.player!=null&&AbstractDungeon.player.masterDeck!=null&&AbstractDungeon.getCurrMapNode()!=null&&AbstractDungeon.getCurrMapNode().getRoom()!=null;}
-    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"sts1-state-notes".equals(id);}
+    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id);}
     static String actor(){
         if(automation!=null)return "known_automation";
         // Only BaseMod + StSLib are supported; any other mod makes the action source unknown.
@@ -53,7 +55,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         for(StackTraceElement f:Thread.currentThread().getStackTrace()){
             String c=f.getClassName(),m=f.getMethodName();
             if(c.startsWith("com.megacrit.cardcrawl.")&&(m.equals("cardSelectUpdate")||m.equals("update")))return "human";
-            if(!c.startsWith("sts1state.")&&!c.startsWith("java.")&&!c.startsWith("com.megacrit.cardcrawl.")&&!c.startsWith("com.evacipated.")&&!c.startsWith("basemod."))return "unknown";
+            if(!c.startsWith("spireledger.")&&!c.startsWith("java.")&&!c.startsWith("com.megacrit.cardcrawl.")&&!c.startsWith("com.evacipated.")&&!c.startsWith("basemod."))return "unknown";
         }return "unknown";
     }
     /** Automation must wrap its native commit call. Label does not change gameplay. */
@@ -67,8 +69,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         JsonObject meta=new JsonObject();meta.addProperty("mod_version",Recorder.VERSION);meta.addProperty("game_version",CardCrawlGame.VERSION_NUM);meta.addProperty("seed",String.valueOf(Settings.seed));meta.add("play_id",JsonNull.INSTANCE);meta.addProperty("play_id_status","unknown_until_game_metrics");meta.addProperty("coverage",loadingExpected?"loaded_or_partial":"from_enable_or_start");meta.addProperty("privacy","local; no account, paths, audio, images or upload");meta.addProperty("checkpoint_attachments",false);
         JsonArray mods=new JsonArray();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){JsonObject mod=new JsonObject();mod.addProperty("id",info.ID);mod.addProperty("version",String.valueOf(info.ModVersion));mods.add(mod);}meta.add("mods",mods);
         meta.addProperty("human_path_review","native UI; BaseMod + StSLib only; other mods unknown");
-        if(Boolean.getBoolean("sts1state.practiceMode")){meta.addProperty("session_kind","practice");meta.addProperty("parent_run_id",ReplayLauncher.practiceTargetRunId);meta.addProperty("parent_snapshot_id",ReplayLauncher.practiceTargetSnapshotId);}
-        if(Boolean.getBoolean("sts1state.fixture"))meta.addProperty("dataset_origin","test_fixture");
+        if(Boolean.getBoolean("spireledger.practiceMode")){meta.addProperty("session_kind","practice");meta.addProperty("parent_run_id",ReplayLauncher.practiceTargetRunId);meta.addProperty("parent_snapshot_id",ReplayLauncher.practiceTargetSnapshotId);}
+        if(Boolean.getBoolean("spireledger.fixture"))meta.addProperty("dataset_origin","test_fixture");
         String restore=loading==null?null:Recorder.string(loading,"run_id");
         if(restore!=null&&!restore.matches("[a-fA-F0-9-]{36}"))restore=null;
         recorder=new Recorder(ROOT,meta,restore);
@@ -123,16 +125,16 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         try{Path p=ROOT.getParent().resolve("enabled.txt");if(Files.exists(p))enabled=Boolean.parseBoolean(new String(Files.readAllBytes(p),StandardCharsets.UTF_8).trim());}catch(IOException ex){status="Preference read failed; recording disabled";enabled=false;}
         historyTopPanel=new HistoryTopPanelItem();BaseMod.addTopPanelItem(historyTopPanel);
         ModPanel panel=new ModPanel();
-        panel.addUIElement(new ModLabeledToggleButton("Local State Notes recording",350,700,Color.WHITE,FontHelper.charDescFont,enabled,panel,l->{},b->toggle(b.enabled)));
+        panel.addUIElement(new ModLabeledToggleButton("Local Spire Ledger recording",350,700,Color.WHITE,FontHelper.charDescFont,enabled,panel,l->{},b->toggle(b.enabled)));
         panel.addUIElement(new ModLabeledToggleButton("Turn checkpoint recording (practice/replay)",350,650,Color.WHITE,FontHelper.charDescFont,TurnRecorder.enabled,panel,l->{},b->TurnRecorder.toggle(b.enabled)));
         panel.addUIElement(new ModLabel(status,350,600,Color.WHITE,panel,l->l.text=status));
         panel.addUIElement(new ModLabeledButton("Export current run ZIP",350,540,panel,b->safely(()->{if(recorder!=null){recorder.export();status="Exported current run.zip";}})));
-        panel.addUIElement(new ModLabeledButton("Open records folder",350,470,panel,b->safely(()->{Files.createDirectories(ROOT);if(Desktop.isDesktopSupported())Desktop.getDesktop().open(ROOT.toFile());else status="Folder: ~/.sts1-state-notes/runs";})));
-        historyEntry=new ModLabeledButton(HistoryScreen.tr("构筑记录 / 当前局统计","State Notes / current run"),350,400,panel,b->HistoryScreen.open());panel.addUIElement(historyEntry);
+        panel.addUIElement(new ModLabeledButton("Open records folder",350,470,panel,b->safely(()->{Files.createDirectories(ROOT);if(Desktop.isDesktopSupported())Desktop.getDesktop().open(ROOT.toFile());else status="Folder: ~/.spire-ledger/runs";})));
+        historyEntry=new ModLabeledButton(HistoryScreen.tr("尖塔账本 / 当前局统计","Spire Ledger / current run"),350,400,panel,b->HistoryScreen.open());panel.addUIElement(historyEntry);
         reportEntry=new ModLabeledButton(HistoryScreen.tr("导出错误报告 · Ctrl+Shift+R","Error report · Ctrl+Shift+R"),350,330,panel,b->DiagnosticReport.request());panel.addUIElement(reportEntry);
         panel.addUIElement(new ModLabeledButton(HistoryScreen.tr("打开错误报告目录","Open error report folder"),350,230,panel,b->DiagnosticReport.openFolder()));
         panel.addUIElement(new ModLabel("",350,285,Color.WHITE,panel,l->l.text=DiagnosticReport.status));
-        BaseMod.registerModBadge(ImageMaster.loadImage("images/relics/blueCandle.png"),"State Notes","State Notes contributors","Local build recording and offline review",panel);
-        Runtime.getRuntime().addShutdownHook(new Thread(()->{if(recorder!=null)try{recorder.close();}catch(IOException ex){System.err.println("[State Notes] Recover events.jsonl after shutdown IO failure");}},"state-notes-flush"));
+        BaseMod.registerModBadge(ImageMaster.loadImage("images/relics/blueCandle.png"),"Spire Ledger","CYZ","Local build recording and offline review",panel);
+        Runtime.getRuntime().addShutdownHook(new Thread(()->{if(recorder!=null)try{recorder.close();}catch(IOException ex){System.err.println("[Spire Ledger] Recover events.jsonl after shutdown IO failure");}},"spire-ledger-flush"));
     }
 }

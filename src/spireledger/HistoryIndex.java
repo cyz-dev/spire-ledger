@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
@@ -58,15 +58,16 @@ final class HistoryIndex {
     }
     static String signature(JsonObject e){try{byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(normalized(e).toString().getBytes(StandardCharsets.UTF_8));return Base64.getEncoder().encodeToString(digest);}catch(java.security.NoSuchAlgorithmException ex){throw new IllegalStateException(ex);}}
     static JsonObject normalized(JsonObject e){JsonObject n=Recorder.copy(e);for(String k:Arrays.asList("seq","time_ms"))n.remove(k);return n;}
-    static Summary summarize(JsonObject run,boolean current){if(!Recorder.SCHEMA.equals(str(run,"schema")))throw new IllegalArgumentException("unsupported schema");Builder b=new Builder();b.metadata(obj(run,"metadata"));for(JsonElement e:array(run,"records")){if(!e.isJsonObject())throw new IllegalArgumentException("invalid record");JsonObject r=e.getAsJsonObject();b.ended|="ending".equals(str(r,"type"));b.event(r);}return b.finish(current);}
+    static Summary summarize(JsonObject run,boolean current){if(!Recorder.knownSchema(str(run,"schema")))throw new IllegalArgumentException("unsupported schema");Builder b=new Builder();b.metadata(obj(run,"metadata"));for(JsonElement e:array(run,"records")){if(!e.isJsonObject())throw new IllegalArgumentException("invalid record");JsonObject r=e.getAsJsonObject();b.ended|="ending".equals(str(r,"type"));b.event(r);}return b.finish(current);}
     static Summary readSummary(Path file)throws IOException {
         if(Files.isSymbolicLink(file)||Files.size(file)>MAX_BYTES)throw new IOException("file exceeds bounds or is linked");Builder b=new Builder();String schema="";
         try(JsonReader r=new JsonReader(Files.newBufferedReader(file,StandardCharsets.UTF_8))){r.beginObject();while(r.hasNext()){String key=r.nextName();if(key.equals("schema"))schema=r.nextString();else if(key.equals("metadata"))b.metadata(new JsonParser().parse(r).getAsJsonObject());else if(key.equals("records")){r.beginArray();while(r.hasNext()){JsonObject e=new JsonParser().parse(r).getAsJsonObject();b.ended|="ending".equals(str(e,"type"));b.event(e);}r.endArray();}else r.skipValue();}r.endObject();if(r.peek()!=com.google.gson.stream.JsonToken.END_DOCUMENT)throw new IOException("trailing JSON");}
-        if(!Recorder.SCHEMA.equals(schema))throw new IOException("unsupported schema");Summary s=b.finish(false);s.file=file;return s;
+        if(!Recorder.knownSchema(schema))throw new IOException("unsupported schema");Summary s=b.finish(false);s.file=file;return s;
     }
-    static Index scan(Path root,JsonObject live)throws IOException {
+    static Index scan(Path root,JsonObject live)throws IOException {return scan(Collections.singletonList(root),live);}
+    static Index scan(List<Path> roots,JsonObject live)throws IOException {
         Index index=new Index();Map<String,Summary> byId=new HashMap<>();
-        if(Files.isDirectory(root))try(DirectoryStream<Path> dirs=Files.newDirectoryStream(root)){for(Path dir:dirs){if(!Files.isDirectory(dir)||Files.isSymbolicLink(dir))continue;Path file=dir.resolve("run.json");if(!Files.exists(file))continue;try{Summary s=readSummary(file);Summary old=byId.get(s.id);if(old!=null){index.duplicates++;boolean bad=old.conflict||s.conflict||!old.metadataSignature.equals(s.metadataSignature);for(String key:s.eventSignatures.keySet())if(old.eventSignatures.containsKey(key)&&!old.eventSignatures.get(key).equals(s.eventSignatures.get(key)))bad=true;old.conflict=s.conflict=bad;if(bad)index.errors.add("Conflicting exports: "+s.id);if(old.time>s.time)continue;}byId.put(s.id,s);}catch(Exception e){index.errors.add(dir.getFileName()+": "+e.getClass().getSimpleName());}}}
+        for(Path root:roots)if(Files.isDirectory(root))try(DirectoryStream<Path> dirs=Files.newDirectoryStream(root)){for(Path dir:dirs){if(!Files.isDirectory(dir)||Files.isSymbolicLink(dir))continue;Path file=dir.resolve("run.json");if(!Files.exists(file))continue;try{Summary s=readSummary(file);Summary old=byId.get(s.id);if(old!=null){index.duplicates++;boolean bad=old.conflict||s.conflict||!old.metadataSignature.equals(s.metadataSignature);for(String key:s.eventSignatures.keySet())if(old.eventSignatures.containsKey(key)&&!old.eventSignatures.get(key).equals(s.eventSignatures.get(key)))bad=true;old.conflict=s.conflict=bad;if(bad)index.errors.add("Conflicting exports: "+s.id);if(old.time>s.time)continue;}byId.put(s.id,s);}catch(Exception e){index.errors.add(dir.getFileName()+": "+e.getClass().getSimpleName());}}}
         if(live!=null){Summary s=summarize(live,true);Summary old=byId.put(s.id,s);if(old!=null){s.file=old.file;s.conflict|=old.conflict;}}
         index.runs.addAll(byId.values());index.runs.sort(Comparator.comparingLong((Summary s)->s.time).reversed().thenComparing(s->s.id));return index;
     }

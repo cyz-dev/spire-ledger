@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import java.nio.file.*;
@@ -9,10 +9,22 @@ public class RecorderCheck {
     static JsonObject parse(String s){return new JsonParser().parse(s).getAsJsonObject();}
     static JsonObject state(int act,int floor){return parse("{\"act\":"+act+",\"floor\":"+floor+",\"class\":\"IRONCLAD\",\"ascension\":20,\"hp\":60,\"max_hp\":80,\"gold\":123,\"resource_timing\":\"direct_game_thread_at_record\",\"deck\":[{\"id\":\"Strike_R\",\"name\":\"打击\",\"instance_id\":\"one\",\"upgrades\":0,\"misc\":0},{\"id\":\"Strike_R\",\"name\":\"打击\",\"instance_id\":\"two\",\"upgrades\":0,\"misc\":0}],\"relics\":[],\"potions\":[]}");}
     static JsonArray choices(){return new JsonParser().parse("[{\"candidate_id\":\"card:0\",\"type\":\"card\",\"card\":{\"id\":\"Inflame\",\"type\":\"POWER\",\"upgrades\":0}},{\"candidate_id\":\"skip\",\"type\":\"skip\"},{\"candidate_id\":\"bowl\",\"type\":\"bowl\"}]").getAsJsonArray();}
+    /** Windows: a reader holding run.json must neither stop recording nor lose the latest write. */
+    static void lockedRunJson(Path samples,JsonObject meta)throws Exception {
+        Recorder r=new Recorder(samples,meta,null);r.flush();Path run=r.directory.resolve("run.json"),tmp=r.directory.resolve("run.json.tmp");
+        try(java.io.FileInputStream held=new java.io.FileInputStream(run.toFile())){r.append(Recorder.object("lock_probe"));r.flush();}
+        if(Files.exists(tmp)&&!new String(Files.readAllBytes(tmp),StandardCharsets.UTF_8).contains("lock_probe"))throw new AssertionError("latest run.json lost while held");
+        r.flush();if(!new String(Files.readAllBytes(run),StandardCharsets.UTF_8).contains("lock_probe"))throw new AssertionError("run.json not refreshed after release");
+        java.io.FileInputStream brief=new java.io.FileInputStream(run.toFile());Files.write(tmp,"{}".getBytes(StandardCharsets.UTF_8));
+        Thread release=new Thread(()->{try{Thread.sleep(60);brief.close();}catch(Exception ignored){}});release.start();
+        Recorder.replace(tmp,run);release.join();if(!"{}".equals(new String(Files.readAllBytes(run),StandardCharsets.UTF_8)))throw new AssertionError("replace did not wait for a brief reader");
+        r.close();System.out.println("RecorderCheck lock: PASS");
+    }
     public static void main(String[] args)throws Exception {
         Path samples=Paths.get(args[0]);Files.createDirectories(samples);
         if(!StateMod.reviewedMod("basemod","5.56.0")||!StateMod.reviewedMod("stslib","2.12.0")||StateMod.reviewedMod("RunHistoryPlus","1.8.3"))throw new AssertionError("only BaseMod + StSLib keep the human source label");
         JsonObject meta=parse("{\"game_version\":\"test\",\"mod_version\":\"0.1.0\",\"seed\":\"-9223372036854775808\",\"play_id\":\"synthetic-contract-check\",\"coverage\":\"synthetic; not a real played run\"}");
+        lockedRunJson(samples,meta);
         Recorder r=new Recorder(samples,meta,null);JsonObject before=state(1,1);
         assert !r.hasMap(1);JsonObject map=Recorder.object("map");map.addProperty("act",1);map.addProperty("dictionary_version",1);map.add("nodes",new JsonArray());r.append(map);assert r.hasMap(1)&&!r.hasMap(3);
         JsonObject egg=parse("{\"id\":\"Frozen Egg 2\",\"counter\":-1}");before.getAsJsonArray("relics").add(egg);

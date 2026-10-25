@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import com.megacrit.cardcrawl.cards.*;

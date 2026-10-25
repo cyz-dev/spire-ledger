@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import com.evacipated.cardcrawl.modthespire.Loader;
@@ -26,8 +26,10 @@ import java.util.*;
 
 /** Launcher and runtime manager for in-combat replay and isolated historical practice. */
 final class ReplayLauncher {
-    static String practiceTargetRunId = System.getProperty("sts1state.practiceRunId", "");
-    static String practiceTargetSnapshotId = System.getProperty("sts1state.practiceSnapshotId", "");
+    // Attachments are keyed by snapshot schema, TurnAdapter.ID and save_state identity, not by our jar version.
+    private static final String ANY_VERSION="*";
+    static String practiceTargetRunId = System.getProperty("spireledger.practiceRunId", "");
+    static String practiceTargetSnapshotId = System.getProperty("spireledger.practiceSnapshotId", "");
     static boolean practiceInitialized = false;
     static int practiceStep = 0;
     static Process launchedProcess;
@@ -35,9 +37,9 @@ final class ReplayLauncher {
         if(!runId.matches("[a-fA-F0-9-]{36}"))throw new IOException("Invalid run identity");
         JsonObject manifest=TurnFiles.read(runDir.resolve("replay/manifest.json"));
         if(!TurnFiles.SCHEMA.equals(Recorder.string(manifest,"schema"))||!runId.equals(Recorder.string(manifest,"run_id"))||!TurnAdapter.ID.equals(Recorder.string(manifest,"adapter"))||!manifest.has("restore_available")||!manifest.get("restore_available").getAsBoolean()||!"12-18-2022".equals(Recorder.string(manifest,"game_version")))throw new IOException("Unsupported or mismatched replay manifest");
-        Map<String,String> expectedMods=new HashMap<>();expectedMods.put("basemod","5.56.0");expectedMods.put("stslib","2.12.0");if(!Recorder.VERSION.equals(Recorder.string(manifest,"mod_version")))throw new IOException("Unsupported recorder version");expectedMods.put("sts1-state-notes",Recorder.VERSION);if(!"embedded-capture-only-1".equals(Recorder.string(manifest,"save_state")))throw new IOException("Missing embedded adapter identity");
+        Map<String,String> expectedMods=new HashMap<>();expectedMods.put("basemod","5.56.0");expectedMods.put("stslib","2.12.0");expectedMods.put("spire-ledger",ANY_VERSION);if(!"embedded-capture-only-1".equals(Recorder.string(manifest,"save_state")))throw new IOException("Missing embedded adapter identity");
         JsonArray recordedMods=manifest.getAsJsonArray("mods");if(recordedMods==null)throw new IOException("Missing recording environment");
-        for(JsonElement item:recordedMods){JsonObject mod=item.getAsJsonObject();String id=Recorder.string(mod,"id");if(Boolean.getBoolean("sts1state.fixture")&&"state-notes-replay-probe".equals(id))continue;String version=expectedMods.remove(id);if(version==null||!version.equals(Recorder.string(mod,"version")))throw new IOException("Unsupported recording mod: "+id);}
+        for(JsonElement item:recordedMods){JsonObject mod=item.getAsJsonObject();String id=Recorder.string(mod,"id");if(Boolean.getBoolean("spireledger.fixture")&&"spire-ledger-replay-probe".equals(id))continue;String version=expectedMods.remove(id);if(version==null||!(version==ANY_VERSION||version.equals(Recorder.string(mod,"version"))))throw new IOException("Unsupported recording mod: "+id);}
         if(!expectedMods.isEmpty())throw new IOException("Incomplete recording dependencies");
         JsonObject selected=null;
         for(JsonElement item:manifest.getAsJsonArray("snapshots"))if(Recorder.string(ref,"snapshot_id").equals(Recorder.string(item.getAsJsonObject(),"snapshot_id"))){if(selected!=null)throw new IOException("Duplicate snapshot identity");selected=item.getAsJsonObject();}
@@ -178,11 +180,11 @@ final class ReplayLauncher {
                 if (Files.exists(p)) return p;
             }
         } catch (Throwable ignored) {}
-        Path local = Paths.get("mods/STS1StateNotes.jar");
+        Path local = Paths.get("mods/SpireLedger.jar");
         if (Files.exists(local)) return local;
-        Path buildJar = Paths.get("build/STS1StateNotes.jar");
+        Path buildJar = Paths.get("build/SpireLedger.jar");
         if (Files.exists(buildJar)) return buildJar;
-        throw new FileNotFoundException("Cannot locate STS1StateNotes.jar");
+        throw new FileNotFoundException("Cannot locate SpireLedger.jar");
     }
 
     static long getProcessPid(Process process) {
@@ -245,7 +247,7 @@ final class ReplayLauncher {
         Files.write(saveStateOptionsDir.resolve("options.properties"), "num_save_states=0\n".getBytes(StandardCharsets.UTF_8));
 
         // Copy target run directory into isolated practice instance home
-        Path targetRunHome = instanceDir.resolve("home/.sts1-state-notes/runs").resolve(summary.id);
+        Path targetRunHome = instanceDir.resolve("home/.spire-ledger/runs").resolve(summary.id);
         Files.createDirectories(targetRunHome.resolve("replay/turns"));
         Path manifestSrc = runDir.resolve("replay/manifest.json");
         if (Files.exists(manifestSrc)) {
@@ -265,15 +267,15 @@ final class ReplayLauncher {
         Files.copy(desktopJar, instanceDir.resolve("desktop-1.0.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(baseModJar, instanceDir.resolve("mods/BaseMod.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stslibJar, instanceDir.resolve("mods/StSLib.jar"), StandardCopyOption.REPLACE_EXISTING);
-        Files.copy(stateNotesJar, instanceDir.resolve("mods/STS1StateNotes.jar"), StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(stateNotesJar, instanceDir.resolve("mods/SpireLedger.jar"), StandardCopyOption.REPLACE_EXISTING);
 
         List<String> cmd = new ArrayList<>();
         cmd.add(jreJava.toString());
         cmd.add("-Dfile.encoding=UTF-8");
-        cmd.add("-Dsts1state.experimentalTurns=true");
-        cmd.add("-Dsts1state.practiceMode=true");
-        cmd.add("-Dsts1state.practiceRunId=" + summary.id);
-        cmd.add("-Dsts1state.practiceSnapshotId=" + snapshotId);
+        cmd.add("-Dspireledger.experimentalTurns=true");
+        cmd.add("-Dspireledger.practiceMode=true");
+        cmd.add("-Dspireledger.practiceRunId=" + summary.id);
+        cmd.add("-Dspireledger.practiceSnapshotId=" + snapshotId);
         cmd.add("-Duser.home=" + instanceDir.resolve("home").toAbsolutePath().toString());
         cmd.add("-Djava.io.tmpdir=" + instanceDir.resolve("temp").toAbsolutePath().toString());
         cmd.add("-jar");
@@ -281,13 +283,13 @@ final class ReplayLauncher {
         cmd.add("--skip-launcher");
         cmd.add("--skip-intro");
         cmd.add("--mods");
-        cmd.add("basemod,stslib,sts1-state-notes");
+        cmd.add("basemod,stslib,spire-ledger");
         // A fixture observes the actual child launch; it never prepares the child's battle.
-        if(Boolean.getBoolean("sts1state.fixture")&&Boolean.getBoolean("sts1state.launchPracticeProbe")){
-            Files.copy(findModJar("state-notes-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"));
-            cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",state-notes-replay-probe");
-            cmd.add(1,"-Dsts1state.fixture=true");cmd.add(1,"-Dsts1state.productionPractice=true");cmd.add(1,"-Dsts1state.replayMode=restore");
-            cmd.add(1,"-Dsts1state.replaySource="+System.getProperty("user.dir"));cmd.add(1,"-Dsts1state.replayCharacter="+System.getProperty("sts1state.replayCharacter","IRONCLAD"));cmd.add(1,"-Dsts1state.replayScenario="+System.getProperty("sts1state.replayScenario","ordinary"));
+        if(Boolean.getBoolean("spireledger.fixture")&&Boolean.getBoolean("spireledger.launchPracticeProbe")){
+            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"));
+            cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",spire-ledger-replay-probe");
+            cmd.add(1,"-Dspireledger.fixture=true");cmd.add(1,"-Dspireledger.productionPractice=true");cmd.add(1,"-Dspireledger.replayMode=restore");
+            cmd.add(1,"-Dspireledger.replaySource="+System.getProperty("user.dir"));cmd.add(1,"-Dspireledger.replayCharacter="+System.getProperty("spireledger.replayCharacter","IRONCLAD"));cmd.add(1,"-Dspireledger.replayScenario="+System.getProperty("spireledger.replayScenario","ordinary"));
         }
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -393,12 +395,12 @@ final class ReplayLauncher {
                 AbstractDungeon.ftue = null;
                 TurnAdapter.restore(targetSnapshot);
                 practiceInitialized = true;
-                System.out.println("[State Notes] Practice snapshot successfully restored: " + practiceTargetSnapshotId);
+                System.out.println("[Spire Ledger] Practice snapshot successfully restored: " + practiceTargetSnapshotId);
                 JsonObject receipt=new JsonObject();receipt.addProperty("status","ready");receipt.addProperty("run_id",practiceTargetRunId);receipt.addProperty("snapshot_id",practiceTargetSnapshotId);receipt.addProperty("interactive",TurnAdapter.stable());
                 Files.write(Paths.get("practice-startup.json"),receipt.toString().getBytes(StandardCharsets.UTF_8));
             }
         } catch (Exception ex) {
-            System.err.println("[State Notes] Failed to restore practice snapshot: " + ex.getMessage());
+            System.err.println("[Spire Ledger] Failed to restore practice snapshot: " + ex.getMessage());
             ex.printStackTrace();
             ReplaySafety.quarantine(ex);
             try{JsonObject receipt=new JsonObject();receipt.addProperty("status","failed");receipt.addProperty("error",ex.toString());Files.write(Paths.get("practice-startup.json"),receipt.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException receiptFailure){receiptFailure.printStackTrace();}

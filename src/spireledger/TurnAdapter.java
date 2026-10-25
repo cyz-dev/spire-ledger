@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import com.megacrit.cardcrawl.actions.GameActionManager;
@@ -13,7 +13,8 @@ import java.util.*;
 
 /** The single tested SaveState 1.3 path. No bundled third-party implementation. */
 final class TurnAdapter {
-    static final String ID="state-notes-savestate-1.3-capture-only-2";
+    // Bump when captured state or restore semantics change: old attachments must then be refused.
+    static final String ID="spire-ledger-savestate-1.3-capture-only-2";
     static final String[] POOLS={"srcColorlessCardPool","srcCurseCardPool","srcCommonCardPool","srcUncommonCardPool","srcRareCardPool","colorlessCardPool","curseCardPool","commonCardPool","uncommonCardPool","rareCardPool"};
     static int checkedInt(JsonElement value){if(value==null||!value.isJsonPrimitive())throw new IllegalArgumentException("missing integer");return Integer.parseInt(value.getAsString());}
     static JsonObject environment()throws Exception{

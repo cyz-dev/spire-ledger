@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import basemod.BaseMod;
 import basemod.interfaces.*;
@@ -63,7 +63,7 @@ public class NativeProbe implements PostUpdateSubscriber,PostInitializeSubscribe
         Settings.isTouchScreen=true;java.lang.reflect.Field f=CardRewardScreen.class.getDeclaredField("touchCard");f.setAccessible(true);f.set(AbstractDungeon.cardRewardScreen,reward.cards.get(0));
         Object button=StateMod.field(AbstractDungeon.cardRewardScreen,"confirmButton");com.megacrit.cardcrawl.helpers.Hitbox hb=(com.megacrit.cardcrawl.helpers.Hitbox)StateMod.field(button,"hb");hb.clicked=true;
         AbstractDungeon.cardRewardScreen.update();Settings.isTouchScreen=false;
-        require(System.getProperty("sts1state.expectUiActor","unknown").equals(Recorder.string(lastDecision(),"action_source")),"actual native UI classification");anchorChecks.add("native_ui_"+Recorder.string(lastDecision(),"action_source"));
+        require(System.getProperty("spireledger.expectUiActor","unknown").equals(Recorder.string(lastDecision(),"action_source")),"actual native UI classification");anchorChecks.add("native_ui_"+Recorder.string(lastDecision(),"action_source"));
     }
     int decisions(){int n=0;for(JsonElement e:StateMod.recorder.document().getAsJsonArray("records"))if("decision".equals(Recorder.string(e.getAsJsonObject(),"type")))n++;return n;}
     static void require(boolean b,String reason){if(!b)throw new AssertionError(reason);}
@@ -77,14 +77,14 @@ public class NativeProbe implements PostUpdateSubscriber,PostInitializeSubscribe
             if(!StateMod.ready()||CardCrawlGame.dungeon==null)return;
             if(AbstractDungeon.ftue!=null)AbstractDungeon.ftue=null;
             require(Snapshot.blockingEffects(Collections.singletonList(new PendingEffect())),"unknown pending effect must block");
-            if(stage==1&&Boolean.getBoolean("sts1state.crossJvm")){
+            if(stage==1&&Boolean.getBoolean("spireledger.crossJvm")){
                 fixture(41);CardCrawlGame.loadingSave=true;nativeCall(com.badlogic.gdx.Gdx.app.getApplicationListener(),"loadPlayerSave",new Class<?>[]{AbstractPlayer.class},AbstractDungeon.player);CardCrawlGame.loadingSave=false;StateMod.ensure();
-                require(StateMod.recorder.runId.equals(System.getProperty("sts1state.expectedRun")),"cross JVM run restored");
+                require(StateMod.recorder.runId.equals(System.getProperty("spireledger.expectedRun")),"cross JVM run restored");
                 JsonObject point=null,load=null;for(JsonElement element:StateMod.recorder.document().getAsJsonArray("records")){JsonObject e=element.getAsJsonObject();if("checkpoint".equals(Recorder.string(e,"type")))point=e;if("load".equals(Recorder.string(e,"type")))load=e;}
                 require(load!=null&&"local_checkpoint_found".equals(Recorder.string(load,"parent_status")),"cross JVM checkpoint parent");require(point!=null&&Snapshot.buildSignature(point.getAsJsonObject("state")).equals(Snapshot.buildSignature(Snapshot.capture())),"cross JVM actual loaded build");StateMod.end("cross-jvm-native-load-fixture");JsonObject report=new JsonObject();report.addProperty("status","pass");report.addProperty("run_id",StateMod.recorder.runId);report.addProperty("branch_id",StateMod.recorder.branch);report.addProperty("evidence","second JVM; original loadPlayerSave + BaseMod disk fields; not main-menu continue UI");Files.write(Paths.get("cross-jvm-result.json"),report.toString().getBytes(StandardCharsets.UTF_8));stage=99;com.badlogic.gdx.Gdx.app.exit();return;
             }
-            if(stage==1&&Boolean.getBoolean("sts1state.uiOnly")){fixture(1);TipTracker.disableAllFtues();StateMod.ensure();stage=41;return;}
-            if(stage==1&&Boolean.getBoolean("sts1state.miscOnly")){fixture(1);TipTracker.disableAllFtues();StateMod.ensure();open("RitualDagger");reward.cards.add(CardLibrary.getCard("RitualDagger").makeCopy());anchor("native_nonzero_misc_candidates");require(lastDecision().getAsJsonArray("candidates").size()==3,"two same-name candidates plus actual skip");stage=50;return;}
+            if(stage==1&&Boolean.getBoolean("spireledger.uiOnly")){fixture(1);TipTracker.disableAllFtues();StateMod.ensure();stage=41;return;}
+            if(stage==1&&Boolean.getBoolean("spireledger.miscOnly")){fixture(1);TipTracker.disableAllFtues();StateMod.ensure();open("RitualDagger");reward.cards.add(CardLibrary.getCard("RitualDagger").makeCopy());anchor("native_nonzero_misc_candidates");require(lastDecision().getAsJsonArray("candidates").size()==3,"two same-name candidates plus actual skip");stage=50;return;}
             switch(stage){
             case 1: fixture(1);require("OTHER".equals(Snapshot.source(false)),"non-reward selection must not inherit monster-room reward source");AbstractDungeon.getCurrRoom().phase=AbstractRoom.RoomPhase.COMBAT;require("COMBAT_SELECTION".equals(Snapshot.source(false)),"Discovery in combat is not a permanent reward");require("COMBAT_SELECTION".equals(Snapshot.source(true)),"combat phase cannot be a postcombat reward");AbstractDungeon.getCurrRoom().phase=AbstractRoom.RoomPhase.COMPLETE;require("COMBAT_REWARD".equals(Snapshot.source(true)),"real reward classification");TipTracker.disableAllFtues();require(StateMod.reviewedMod("stslib","2.12.0")&&!StateMod.reviewedMod("RunHistoryPlus","1.8.3")&&!StateMod.reviewedMod("automation-mod","1.8.3"),"only BaseMod + StSLib reviewed");StateMod.ensure();deckSize=AbstractDungeon.player.masterDeck.size();open("Inflame");stage++;break;
             case 2: int n=decisions();AbstractDungeon.closeCurrentScreen();new FrozenEgg2().instantObtain(AbstractDungeon.player,AbstractDungeon.player.relics.size(),true);AbstractDungeon.cardRewardScreen.reopen();require(decisions()==n,"close/reopen must not commit");AbstractDungeon.player.gold=117;pick();require(lastDecision().getAsJsonObject("before").get("gold").getAsInt()==117,"current gold");require(lastDecision().getAsJsonObject("before").getAsJsonArray("relics").toString().contains("Frozen Egg 2"),"egg at confirm");stage++;break;

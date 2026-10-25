@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 import com.google.gson.*;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +27,12 @@ public final class HistoryIndexCheck {
         JsonObject conflict=run(1,now);JsonObject contradictory=Recorder.copy(conflict.getAsJsonArray("records").get(1).getAsJsonObject());contradictory.addProperty("status","interrupted");conflict.getAsJsonArray("records").add(contradictory);check(HistoryIndex.summarize(conflict,false).skips==0,"conflicting result not complete");
         start=System.nanoTime();for(int i=0;i<100;i++)HistoryIndex.filter(index.runs,"IRONCLAD",-1,"",30,"Bash",false,now);long filtering=(System.nanoTime()-start)/1000000;
         for(Path p:files)check(Arrays.equals(before.get(p),Files.readAllBytes(p)),"read only");
+        // State Notes 0.4.0 records keep their old schema name and directory; both are read, unknown schemas are not.
+        Path legacy=root.resolveSibling(root.getFileName()+"-legacy");JsonObject old=run(7,now);old.addProperty("schema","sts1-state-v1");old.getAsJsonObject("metadata").addProperty("run_id","legacy-run");
+        Path oldFile=legacy.resolve("legacy-run/run.json");Files.createDirectories(oldFile.getParent());Files.write(oldFile,old.toString().getBytes(StandardCharsets.UTF_8));
+        JsonObject alien=run(8,now);alien.addProperty("schema","other-v9");alien.getAsJsonObject("metadata").addProperty("run_id","alien-run");Path alienFile=legacy.resolve("alien-run/run.json");Files.createDirectories(alienFile.getParent());Files.write(alienFile,alien.toString().getBytes(StandardCharsets.UTF_8));
+        HistoryIndex.Index both=HistoryIndex.scan(Arrays.asList(root,legacy),null);boolean sawLegacy=false,sawAlien=false;for(HistoryIndex.Summary x:both.runs){sawLegacy|=x.id.equals("legacy-run");sawAlien|=x.id.equals("alien-run");}
+        check(sawLegacy&&!sawAlien&&both.runs.size()==index.runs.size()+1,"legacy schema and directory");
         System.out.println("HistoryIndexCheck PASS: 1200 UI-only fixture runs, scan_ms="+scan+", 100_filters_ms="+filtering+", read-only, mixed class/outcome/date/SL/pending/conflict/corruption");
     }
 }

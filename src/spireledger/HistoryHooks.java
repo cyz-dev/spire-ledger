@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import basemod.ModPanel;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -13,7 +13,7 @@ public final class HistoryHooks {
         @SpirePostfixPatch public static void add(MainMenuScreen menu){try{java.lang.reflect.Field index=MenuButton.class.getDeclaredField("index");index.setAccessible(true);for(MenuButton b:menu.buttons){index.setInt(b,index.getInt(b)+1);b.hb.moveY(b.hb.cY+MenuButton.SPACE_Y);}menu.buttons.add(0,new MenuButton(STATE_NOTES,0));}catch(Exception e){throw new IllegalStateException(e);}}
     }
     @SpirePatch(clz=MenuButton.class,method=SpirePatch.CONSTRUCTOR,paramtypez={MenuButton.ClickResult.class,int.class}) public static class Label {
-        @SpirePostfixPatch public static void label(MenuButton button,MenuButton.ClickResult r){if(r!=STATE_NOTES)return;try{java.lang.reflect.Field f=MenuButton.class.getDeclaredField("label");f.setAccessible(true);String label=HistoryScreen.tr("构筑记录","State Notes");f.set(button,label);button.hb.resize(FontHelper.getSmartWidth(FontHelper.buttonLabelFont,label,9999,1)+100*com.megacrit.cardcrawl.core.Settings.scale,button.hb.height);button.hb.move(button.hb.width/2+75*com.megacrit.cardcrawl.core.Settings.scale,button.hb.cY);}catch(Exception e){throw new IllegalStateException(e);}}
+        @SpirePostfixPatch public static void label(MenuButton button,MenuButton.ClickResult r){if(r!=STATE_NOTES)return;try{java.lang.reflect.Field f=MenuButton.class.getDeclaredField("label");f.setAccessible(true);String label=HistoryScreen.tr("尖塔账本","Spire Ledger");f.set(button,label);button.hb.resize(FontHelper.getSmartWidth(FontHelper.buttonLabelFont,label,9999,1)+100*com.megacrit.cardcrawl.core.Settings.scale,button.hb.height);button.hb.move(button.hb.width/2+75*com.megacrit.cardcrawl.core.Settings.scale,button.hb.cY);}catch(Exception e){throw new IllegalStateException(e);}}
     }
     @SpirePatch(clz=MenuButton.class,method="buttonEffect") public static class Open {
         @SpirePrefixPatch public static SpireReturn<Void> open(MenuButton b){if(b.result==STATE_NOTES){HistoryScreen.open();return SpireReturn.Return(null);}return SpireReturn.Continue();}

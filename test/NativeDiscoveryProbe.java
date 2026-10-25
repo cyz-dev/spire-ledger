@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 import basemod.BaseMod;
 import basemod.interfaces.PostUpdateSubscriber;
 import com.badlogic.gdx.Gdx;

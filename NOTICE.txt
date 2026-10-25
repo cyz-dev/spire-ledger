@@ -1,15 +1,23 @@
-Spire Ledger
+Spire Ledger 0.5.0
 Copyright (C) 2026 CYZ
 
 Project-owned code is licensed under the GNU General Public License v3.0 (see LICENSE).
+Spire Ledger succeeds State Notes 0.4.0 (same author).
 
-Embedded third-party component (planned, arrives with the State Notes migration):
-- STSStateSaver / SaveStateMod 1.3.0 by Board Engineer
-  https://github.com/boardengineer/STSStateSaver
-  Modified at build time to capture-only (gameplay patches removed).
-  Upstream provides no LICENSE, COPYING or NOTICE file and has not granted redistribution
-  permission; it is NOT covered by this project's GPL grant. License request:
-  https://github.com/boardengineer/STSStateSaver/issues/13
+Includes a restricted binary adaptation of STSStateSaver / SaveStateMod 1.3.0
+by Board Engineer: https://github.com/boardengineer/STSStateSaver
+Reviewed upstream main: 00dbbcb7f1e67743797e4d7fb714cb899f7f2eaa
+Source binary SHA256: 5aab52140fb890bc1f71cde73b67958b7f43b5c5ed5c26b71b28ba3d18c6eefa
+Changes: disable 126 gameplay/fast/UI patches; retain two internal observation
+counters; initialize only state factories; remove standalone Mod metadata and
+initializer, embed classes under the single Spire Ledger Mod identity.
 
-Metric definitions were informed by TinyCat (MI, MPL-2.0, https://github.com/haotiangod/tinycattrack);
-no TinyCat source files are included.
+No LICENSE/COPYING/NOTICE or redistribution license was found in the reviewed
+upstream tree or binary, and no permission is asserted. A request for a license
+or permission is open at https://github.com/boardengineer/STSStateSaver/issues/13.
+The GPL grant above does NOT cover the included upstream implementation; it is
+credited here and is not relicensed.
+
+Metric definitions were informed by TinyCat (MI, MPL-2.0,
+https://github.com/haotiangod/tinycattrack); no TinyCat source files are included.
+Game assets, BaseMod, StSLib, ModTheSpire and native test drivers are not included.

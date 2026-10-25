@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import com.evacipated.cardcrawl.modthespire.*;
@@ -8,7 +8,7 @@ import java.util.*;
 
 /** Stable player-turn capture in the explicitly supported dependency combination. */
 final class TurnRecorder {
-    static boolean enabled = Boolean.getBoolean("sts1state.experimentalTurns") || readPreference();
+    static boolean enabled = Boolean.getBoolean("spireledger.experimentalTurns") || readPreference();
     static boolean failed;
     static String status = enabled ? "Turn recording ready" : "Turn recording off";
     static String combatId = "", lastKey = "";
@@ -31,7 +31,7 @@ final class TurnRecorder {
         } catch (Exception ignored) {}
         status = enabled ? "Turn recording ready" : "Turn recording off";
     }
-    static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}Map<String,String> required=new HashMap<>();required.put("basemod","5.56.0");required.put("stslib","2.12.0");if(Loader.MODINFOS==null)return false;for(ModInfo mod:Loader.MODINFOS){if("sts1-state-notes".equals(mod.ID))continue;if(Boolean.getBoolean("sts1state.fixture")&&"state-notes-replay-probe".equals(mod.ID))continue;String version=required.remove(mod.ID);if(version==null||!version.equals(String.valueOf(mod.ModVersion)))return false;}return required.isEmpty()&&"12-18-2022".equals(Loader.STS_VERSION);}
+    static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}Map<String,String> required=new HashMap<>();required.put("basemod","5.56.0");required.put("stslib","2.12.0");if(Loader.MODINFOS==null)return false;for(ModInfo mod:Loader.MODINFOS){if("spire-ledger".equals(mod.ID))continue;if(Boolean.getBoolean("spireledger.fixture")&&"spire-ledger-replay-probe".equals(mod.ID))continue;String version=required.remove(mod.ID);if(version==null||!version.equals(String.valueOf(mod.ModVersion)))return false;}return required.isEmpty()&&"12-18-2022".equals(Loader.STS_VERSION);}
     static void battle(){if(restoringCombat)restoringCombat=false;else combatId=UUID.randomUUID().toString();lastKey="";}
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
@@ -56,6 +56,6 @@ final class TurnRecorder {
             else if(!AbstractDungeon.actionManager.cardsPlayedThisTurn.isEmpty()||GameActionManager.damageReceivedThisTurn!=0||GameActionManager.totalDiscardedThisTurn!=0){entry.addProperty("availability","missing");entry.addProperty("reason","first_action_or_opening_discard_already_observed");}
             else {long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);entry.addProperty("reason","player_turn_ready");}
             JsonObject ref=files.publish(entry,snapshot);lastKey=key;if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);status="recorded".equals(Recorder.string(ref,"availability"))?"Turn saved; practice ready":"Turn unavailable: "+Recorder.string(ref,"reason");
-        }catch(Exception ex){DiagnosticReport.error("turn_recording",ex);failed=true;status="Turn recording stopped: "+ex.getClass().getSimpleName();System.err.println("[State Notes] "+status);ex.printStackTrace();}
+        }catch(Exception ex){DiagnosticReport.error("turn_recording",ex);failed=true;status="Turn recording stopped: "+ex.getClass().getSimpleName();System.err.println("[Spire Ledger] "+status);ex.printStackTrace();}
     }
 }

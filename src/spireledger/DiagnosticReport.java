@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class DiagnosticReport {
  static final int MAX_FILE=2*1024*1024,MAX_TOTAL=8*1024*1024;
  static final AtomicBoolean busy=new AtomicBoolean();
- static final ExecutorService writer=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"state-notes-diagnostic");t.setDaemon(true);return t;});
+ static final ExecutorService writer=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"spire-ledger-diagnostic");t.setDaemon(true);return t;});
  static volatile String status="";static volatile Path lastOutput;static volatile JsonObject checkpoint,replayTarget;
  static final Deque<JsonObject> errors=new ArrayDeque<>();static boolean held;
  static void rememberCheckpoint(JsonObject snapshot){checkpoint=Recorder.copy(snapshot);}
@@ -29,7 +29,7 @@ final class DiagnosticReport {
   if(!busy.compareAndSet(false,true))return false;
   try{
   status=HistoryScreen.tr("正在导出本地错误报告…","Exporting local error report…");
-  JsonObject context=new JsonObject();context.addProperty("schema","sts1-state-diagnostic-v1");context.addProperty("mod_version",Recorder.VERSION);context.addProperty("game_version",Loader.STS_VERSION);context.addProperty("mts_version",String.valueOf(Loader.MTS_VERSION));context.addProperty("embedded_save_state","1.3.0/capture-only-1/embedded-1");context.addProperty("session_kind",ReplaySafety.practice()?"practice":"normal");context.addProperty("quarantined",ReplaySafety.quarantined);context.addProperty("privacy","local only; no raw save, account, audio, screenshot, full log, database or upload; diagnostics are not training permission");
+  JsonObject context=new JsonObject();context.addProperty("schema","spire-ledger-diagnostic-v1");context.addProperty("mod_version",Recorder.VERSION);context.addProperty("game_version",Loader.STS_VERSION);context.addProperty("mts_version",String.valueOf(Loader.MTS_VERSION));context.addProperty("embedded_save_state","1.3.0/capture-only-1/embedded-1");context.addProperty("session_kind",ReplaySafety.practice()?"practice":"normal");context.addProperty("quarantined",ReplaySafety.quarantined);context.addProperty("privacy","local only; no raw save, account, audio, screenshot, full log, database or upload; diagnostics are not training permission");
   JsonArray mods=new JsonArray();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){JsonObject mod=new JsonObject();mod.addProperty("id",info.ID);mod.addProperty("version",String.valueOf(info.ModVersion));mods.add(mod);}context.add("mods",mods);
   JsonArray recent=new JsonArray();synchronized(DiagnosticReport.class){for(JsonObject e:errors)recent.add(Recorder.copy(e));}context.add("recent_errors",recent);
   if(StateMod.recorder!=null){context.addProperty("run_id",StateMod.recorder.runId);context.addProperty("branch_id",StateMod.recorder.branch);context.add("recent_events",StateMod.recorder.recent(24));}
@@ -49,14 +49,14 @@ final class DiagnosticReport {
   return value;
  }
  static Path write(Path output,Map<String,JsonElement> input)throws IOException{
-  Path allowed=StateMod.ROOT.getParent().toAbsolutePath().normalize(),dir=output.toAbsolutePath().normalize();if(!dir.startsWith(allowed))throw new IOException("Diagnostic output outside State Notes directory");
+  Path allowed=StateMod.ROOT.getParent().toAbsolutePath().normalize(),dir=output.toAbsolutePath().normalize();if(!dir.startsWith(allowed))throw new IOException("Diagnostic output outside Spire Ledger directory");
   Path walk=dir;while(walk!=null&&walk.startsWith(allowed)){if(Files.isSymbolicLink(walk))throw new IOException("Diagnostic link rejected");walk=walk.getParent();}
   Files.createDirectories(dir);JsonObject report=new JsonObject();int total=0;
   for(Map.Entry<String,JsonElement> entry:input.entrySet()){if(!entry.getKey().matches("[a-z_]+"))throw new IOException("Invalid report section");JsonElement clean=sanitize(entry.getValue());int size=clean.toString().getBytes(StandardCharsets.UTF_8).length;if(size>MAX_FILE||total+size>MAX_TOTAL)throw new IOException("Diagnostic size limit");total+=size;report.add(entry.getKey(),clean);}
-  String name="state-notes-report-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())+"-"+UUID.randomUUID().toString().substring(0,8)+".json";Path target=dir.resolve(name),tmp=dir.resolve(name+".tmp");
+  String name="spire-ledger-report-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())+"-"+UUID.randomUUID().toString().substring(0,8)+".json";Path target=dir.resolve(name),tmp=dir.resolve(name+".tmp");
   try{Files.write(tmp,new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(report).getBytes(StandardCharsets.UTF_8));try{Files.move(tmp,target,StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(tmp,target);}return target;
   }catch(IOException e){Files.deleteIfExists(tmp);throw e;}
  }
- static void openFolder(){try{Path dir=StateMod.ROOT.getParent().resolve("bug-reports");java.nio.file.Files.createDirectories(dir);if(java.awt.Desktop.isDesktopSupported())java.awt.Desktop.getDesktop().open(dir.toFile());else status=HistoryScreen.tr("报告目录：","Report folder: ")+"~/.sts1-state-notes/bug-reports";}catch(Exception e){error("diagnostic_open_folder",e);status=HistoryScreen.tr("无法打开报告目录：","Cannot open report folder: ")+e.getClass().getSimpleName();}}
+ static void openFolder(){try{Path dir=StateMod.ROOT.getParent().resolve("bug-reports");java.nio.file.Files.createDirectories(dir);if(java.awt.Desktop.isDesktopSupported())java.awt.Desktop.getDesktop().open(dir.toFile());else status=HistoryScreen.tr("报告目录：","Report folder: ")+"~/.spire-ledger/bug-reports";}catch(Exception e){error("diagnostic_open_folder",e);status=HistoryScreen.tr("无法打开报告目录：","Cannot open report folder: ")+e.getClass().getSimpleName();}}
  static void draw(SpriteBatch sb){if(status.isEmpty())return;FontHelper.renderFontLeftTopAligned(sb,FontHelper.cardDescFont_N,status,20,35,Color.WHITE);}
 }

@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import com.google.gson.*;
 import java.io.*;
@@ -9,7 +9,7 @@ import java.util.zip.*;
 
 /** Independent completed files, followed by an atomic manifest publication. */
 final class TurnFiles {
-    static final String SCHEMA="sts1-turn-replay-v1";
+    static final String SCHEMA="spire-ledger-turn-v1";
     static final int MAX_BYTES=2*1024*1024, MAX_POINTS=10000;
     final Path directory;
     final JsonObject manifest;
@@ -20,7 +20,7 @@ final class TurnFiles {
         else {manifest=Recorder.copy(environment);manifest.addProperty("schema",SCHEMA);manifest.addProperty("run_id",runId);manifest.add("snapshots",new JsonArray());}
     }
     static JsonObject read(Path path)throws IOException {if(Files.isSymbolicLink(path)||Files.size(path)>MAX_BYTES)throw new IOException("Replay file bounds");try{return new JsonParser().parse(new String(Files.readAllBytes(path),StandardCharsets.UTF_8)).getAsJsonObject();}catch(RuntimeException ex){throw new IOException("Invalid replay JSON",ex);}}
-    static void atomic(Path path,byte[] bytes)throws IOException {Path tmp=path.resolveSibling(path.getFileName()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp.toFile())){out.write(bytes);out.flush();out.getFD().sync();}try{Files.move(tmp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException ex){Files.move(tmp,path,StandardCopyOption.REPLACE_EXISTING);}}
+    static void atomic(Path path,byte[] bytes)throws IOException {Path tmp=path.resolveSibling(path.getFileName()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp.toFile())){out.write(bytes);out.flush();out.getFD().sync();}Recorder.replace(tmp,path);}
     JsonObject publish(JsonObject entry,JsonObject snapshot)throws IOException {
         JsonArray entries=manifest.getAsJsonArray("snapshots");if(entries.size()>=MAX_POINTS)throw new IOException("Replay point limit");
         JsonObject ref=Recorder.copy(entry);String id=UUID.randomUUID().toString();ref.addProperty("snapshot_id",id);

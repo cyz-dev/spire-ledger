@@ -1,4 +1,4 @@
-package sts1state;
+package spireledger;
 
 import basemod.interfaces.TextReceiver;
 import basemod.patches.com.megacrit.cardcrawl.helpers.input.ScrollInputProcessor.TextInput;
@@ -26,7 +26,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     static String tr(String cn,String en){return zh()?cn:en;}
     static void open(){if(active()||CardCrawlGame.cardPopup.isOpen||CardCrawlGame.relicPopup.isOpen)return;instance=new HistoryScreen();instance.refresh();consume();}
     static void consume(){InputHelper.justClickedLeft=false;InputHelper.justReleasedClickLeft=false;InputHelper.justClickedRight=false;InputHelper.pressedEscape=false;com.megacrit.cardcrawl.helpers.controller.CInputActionSet.cancel.unpress();com.megacrit.cardcrawl.helpers.controller.CInputActionSet.select.unpress();com.megacrit.cardcrawl.helpers.controller.CInputActionSet.proceed.unpress();}
-    final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"state-notes-history-read");t.setDaemon(true);return t;});
+    final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"spire-ledger-history-read");t.setDaemon(true);return t;});
     Future<HistoryIndex.Index> indexTask;Future<JsonObject> detailTask;
     HistoryIndex.Index index=new HistoryIndex.Index();List<HistoryIndex.Summary> filtered=new ArrayList<>();
     JsonObject live,detail;HistoryIndex.Summary selected;
@@ -73,7 +73,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     }
     DropdownMenu dropdown(String[] options){return new DropdownMenu(this,options,FontHelper.cardDescFont_N,Settings.CREAM_COLOR,8);}
     void close(){typing=false;TextInput.stopTextReceiver(this);for(DropdownMenu d:filters)d.isOpen=false;CardCrawlGame.isPopupOpen=oldPopup;cancel.hideInstantly();io.shutdownNow();instance=null;consume();}
-    void refresh(){if(indexTask!=null&&!indexTask.isDone())return;live=StateMod.recorder==null?null:StateMod.recorder.document();message=tr("正在读取本地摘要…","Reading local summaries…");indexTask=io.submit(()->HistoryIndex.scan(StateMod.ROOT,live));}
+    void refresh(){if(indexTask!=null&&!indexTask.isDone())return;live=StateMod.recorder==null?null:StateMod.recorder.document();message=tr("正在读取本地摘要…","Reading local summaries…");indexTask=io.submit(()->HistoryIndex.scan(Arrays.asList(StateMod.ROOT,StateMod.LEGACY_ROOT),live));}
     static String cardName(String id){com.megacrit.cardcrawl.cards.AbstractCard c=CardLibrary.getCard(id);return c==null?id:c.name;}
     static String relicName(String id){com.megacrit.cardcrawl.relics.AbstractRelic r=RelicLibrary.getRelic(id);return r==null||!id.equals(r.relicId)?id:r.name;}
     static String className(String id){switch(id){case "IRONCLAD":return tr("战士","Ironclad");case "THE_SILENT":return tr("猎人","Silent");case "DEFECT":return tr("机器人","Defect");case "WATCHER":return tr("观者","Watcher");default:return id.equals("unknown")?tr("未知职业","Unknown class"):id;}}
@@ -164,7 +164,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void render(SpriteBatch sb){
         if(!historyMode){stats.render(sb);return;}
         sb.setColor(new Color(.045f,.06f,.085f,1));sb.draw(ImageMaster.WHITE_SQUARE_IMG,0,0,Settings.WIDTH,Settings.HEIGHT);sb.setColor(Color.WHITE);
-        FontHelper.renderFontLeftTopAligned(sb,FontHelper.buttonLabelFont,tr("构筑记录","State Notes"),Settings.WIDTH*.06f,Settings.HEIGHT*.95f,Settings.GOLD_COLOR);
+        FontHelper.renderFontLeftTopAligned(sb,FontHelper.buttonLabelFont,tr("尖塔账本","Spire Ledger"),Settings.WIDTH*.06f,Settings.HEIGHT*.95f,Settings.GOLD_COLOR);
         if(selected==null){
             box(sb,keyword,typing?new Color(.21f,.26f,.32f,1):new Color(.12f,.16f,.20f,1));text(sb,fit(query.isEmpty()?tr("搜索种子 / 卡牌 / 遗物（名称或ID）","Search seed / card / relic name or ID"):query+(typing?" |":""),keyword.width-20*Settings.scale),keyword.x+10*Settings.scale,keyword.cY+10*Settings.scale,Settings.CREAM_COLOR);
             button(sb,clear,tr("清空筛选","Clear"));button(sb,refresh,tr("刷新","Refresh"));
