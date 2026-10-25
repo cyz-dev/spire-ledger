@@ -99,3 +99,5 @@ Spire Ledger（尖塔账本）是《杀戮尖塔 1》的本地记录、统计与
 - 发布渠道（Steam Workshop、GitHub Release 或两者）与公开源码时间。blocks: 发布。
 - 每日挑战、自定义、无尽模式和存档位的默认统计范围（上文为建议值）。本机 762 局里有 70 局在存档位 2，有 7 局是每日、无尽或指定种子局。blocks: M2 样本范围。
 - 性能上限的具体数值。blocks: M1 验收。
+- 原版 `.run` 没有放弃标志：本机 45 局既非胜利也没有 `killed_by`。建议把这类局判为放弃，因为原版只在一局结束时写 `.run`；“未完成”只用于没有结局事件的本 Mod 记录。现有实现把其中 43 局判为未完成，TinyCat 全部算放弃。blocks: M2 胜负口径。
+- 吃一堑、炼制药水等 Meta 成长杂项是否进入 M1 记录（只有 RunHistoryPlus 提供，见 [m1-field-gaps.md](m1-field-gaps.md) 5.6）。blocks: M1 范围。
