@@ -9,7 +9,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0。
 - 在 ModTheSpire 里只勾选 BaseMod、StSLib 和 Spire Ledger。第 B10、B11 项另说。
-- 测试用的 `SpireLedger.jar` 由维护者提供。
+- 测试用的 `SpireLedger.jar` 从 [GitHub Releases](https://github.com/Yongzhaooo/spire-ledger/releases) 下载最新的预发布版（当前为 v0.5.0-beta.1）。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
 
 ## A. 必测（需要真人玩）
