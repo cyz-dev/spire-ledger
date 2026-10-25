@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/integration-instance',[switch]$PrepareOnly,[switch]$WithHistory,[switch]$UiOnly,[switch]$MiscOnly,[switch]$WaitForExit)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/integration-instance',[switch]$PrepareOnly,[switch]$WithHistory,[switch]$UiOnly,[switch]$MiscOnly,[switch]$WaitForExit,[switch]$Headless)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -32,10 +32,10 @@ try {
  $env:APPDATA="$instance\home";$env:LOCALAPPDATA="$instance\home";$env:TEMP="$instance\temp";$env:TMP="$instance\temp"
  $mods=if($WithHistory){'basemod,stslib,spire-ledger'}else{'basemod,stslib,spire-ledger,spire-ledger-probe'}
  $uiActor=if($WithHistory){'human'}else{'unknown'}
- $args=@('-Dfile.encoding=UTF-8','-Dspireledger.fixture=true',('-Dspireledger.expectUiActor='+$uiActor),('"-Duser.home='+$instance+'/home"'),('"-Djava.io.tmpdir='+$instance+'/temp"'),'-jar','ModTheSpire.jar','--skip-launcher','--skip-intro','--mods',$mods)
- if($UiOnly){$args=@('-Dspireledger.uiOnly=true')+$args}
- if($MiscOnly){$args=@('-Dspireledger.miscOnly=true')+$args}
- $proc=Start-Process -FilePath "$Game\jre\bin\java.exe" -ArgumentList $args -WorkingDirectory $instance -WindowStyle Hidden -RedirectStandardOutput "$instance\stdout.log" -RedirectStandardError "$instance\stderr.log" -PassThru
+ $props=@('-Dfile.encoding=UTF-8','-Dspireledger.fixture=true',('-Dspireledger.expectUiActor='+$uiActor))
+ if($UiOnly){$props=@('-Dspireledger.uiOnly=true')+$props}
+ if($MiscOnly){$props=@('-Dspireledger.miscOnly=true')+$props}
+ $proc=Start-Probe $Game $instance $props $mods -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\probe-result.json"
  if($WaitForExit){

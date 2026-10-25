@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-history-ui-01',[string]$Language="ZHS",[int]$Width=1024,[int]$Height=768,[switch]$RealLayout,[switch]$PrepareOnly,[switch]$WaitForExit)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-history-ui-01',[string]$Language="ZHS",[int]$Width=1024,[int]$Height=768,[switch]$RealLayout,[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -37,8 +37,8 @@ if($PrepareOnly){Write-Output "Prepared isolated instance: $instance";return}
 $oldApp=$env:APPDATA;$oldLocal=$env:LOCALAPPDATA;$oldTemp=$env:TEMP;$oldTmp=$env:TMP
 try {
  $env:APPDATA="$instance\home";$env:LOCALAPPDATA="$instance\home";$env:TEMP="$instance\temp";$env:TMP="$instance\temp"
- $args=@(('-Dspireledger.realLayout='+$RealLayout.ToString().ToLowerInvariant()),('-Dspireledger.uiLanguage='+$Language),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true',('"-Duser.home='+$instance+'/home"'),('"-Djava.io.tmpdir='+$instance+'/temp"'),'-jar','ModTheSpire.jar','--skip-launcher','--skip-intro','--mods','basemod,stslib,spire-ledger,spire-ledger-stats-ui-probe')
- $proc=Start-Process -FilePath "$Game\jre\bin\java.exe" -ArgumentList $args -WorkingDirectory $instance -WindowStyle Hidden -RedirectStandardOutput "$instance\stdout.log" -RedirectStandardError "$instance\stderr.log" -PassThru
+ $args=@(('-Dspireledger.realLayout='+$RealLayout.ToString().ToLowerInvariant()),('-Dspireledger.uiLanguage='+$Language),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true')
+ $proc=Start-Probe $Game $instance $args 'basemod,stslib,spire-ledger,spire-ledger-stats-ui-probe' -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\ui-probe-result.json"
  if($WaitForExit){
