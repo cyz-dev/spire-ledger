@@ -78,13 +78,14 @@ final class Snapshot {
             &&!blockingEffects(AbstractDungeon.effectsQueue)&&!blockingEffects(AbstractDungeon.effectList)&&!blockingEffects(AbstractDungeon.topLevelEffects)&&!blockingEffects(AbstractDungeon.topLevelEffectsQueue)
             &&!SoulGroup.isActive()&&(AbstractDungeon.actionManager==null||(AbstractDungeon.actionManager.actions.isEmpty()&&AbstractDungeon.actionManager.currentAction==null));
     }
-    static final Set<String> QUIET=new HashSet<>(Arrays.asList("com.megacrit.cardcrawl.vfx.RarePotionParticleEffect","com.megacrit.cardcrawl.vfx.UncommonPotionParticleEffect","com.megacrit.cardcrawl.vfx.InfiniteSpeechBubble","com.megacrit.cardcrawl.vfx.SpeechTextEffect"));
+    static final Set<String> QUIET=new HashSet<>(Arrays.asList("com.megacrit.cardcrawl.vfx.RarePotionParticleEffect","com.megacrit.cardcrawl.vfx.UncommonPotionParticleEffect","com.megacrit.cardcrawl.vfx.InfiniteSpeechBubble","com.megacrit.cardcrawl.vfx.SpeechTextEffect","com.megacrit.cardcrawl.vfx.ChestShineEffect"));
     static boolean blockingEffects(List<AbstractGameEffect> effects){
         // Original scene and rare-potion sparkles respawn without mutating builds/resources.
         // The precise potion class was verified after Tiny House stalled the native fixture.
         // All other live effects, including mod subclasses, continue to block settlement.
         // Uncommon potion sparkles respawn like rare ones (verified when a shop potion stalled the M1 fixture).
         // Neow's talk() bubble lives until the room transition clears effectList; without this its choice settles only after floor 1 (or its first combat).
+        // TreasureRoom.updateShiny spawns chest shine every 0.2s until the chest opens; it only animates its own fields.
         for(AbstractGameEffect e:effects)if(!e.isDone&&!e.getClass().getName().startsWith("com.megacrit.cardcrawl.vfx.scene.")&&!QUIET.contains(e.getClass().getName()))return true;
         return false;
     }
