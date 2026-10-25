@@ -17,9 +17,11 @@ import com.megacrit.cardcrawl.cards.CardGroup;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
 import javassist.CannotCompileException;
+import javassist.CtBehavior;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.neow.NeowEvent;
 import com.megacrit.cardcrawl.saveAndContinue.SaveFile;
+import com.megacrit.cardcrawl.screens.stats.StatsScreen;
 import com.megacrit.cardcrawl.shop.*;
 
 public final class Hooks {
@@ -95,6 +97,11 @@ public final class Hooks {
     }
     @SpirePatch(clz=AbstractDungeon.class,method="nextRoomTransition",paramtypez={SaveFile.class}) public static class RoomExit {
         @SpirePrefixPatch public static void before(){StateMod.leaveRoom();}
+    }
+    // Entry sample: floorNum is already advanced; relic onEnterRoom/justEnteredRoom and room onPlayerEntry have not run.
+    @SpirePatch(clz=AbstractDungeon.class,method="nextRoomTransition",paramtypez={SaveFile.class}) public static class RoomEntry {
+        @SpireInsertPatch(locator=Locator.class) public static void before(){StateMod.enterRoom();}
+        static class Locator extends SpireInsertLocator {public int[] Locate(CtBehavior m)throws Exception{return LineFinder.findInOrder(m,new Matcher.MethodCallMatcher(StatsScreen.class,"incrementFloorClimbed"));}}
     }
     @SpirePatch(clz=GridCardSelectScreen.class,method="open",paramtypez={CardGroup.class,int.class,String.class,boolean.class,boolean.class,boolean.class,boolean.class}) public static class Grid {
         @SpirePrefixPatch public static void before(){StateMod.mutation("grid_selection; pending until effects settle");}

@@ -14,6 +14,7 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.*;
 import com.megacrit.cardcrawl.rewards.RewardItem;
 import com.megacrit.cardcrawl.screens.CardRewardScreen;
+import com.megacrit.cardcrawl.map.MapRoomNode;
 import com.megacrit.cardcrawl.neow.*;
 import com.megacrit.cardcrawl.rooms.*;
 import com.megacrit.cardcrawl.shop.ShopScreen;
@@ -113,6 +114,12 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         String k=key(room)+":leave";JsonObject before=Snapshot.capture();
         // Leaving has no effect to wait for: its anchor is also its settled result.
         if(recorder.begin(k,"SHOP",before,Snapshot.shop(AbstractDungeon.shopScreen),"leave",actor(),shopVisit(room))!=null)recorder.settleKey(k,before);});}
+    static void enterRoom(){if(!ready())return;safely(()->{ensure();MapRoomNode n=AbstractDungeon.nextRoom;JsonObject e=Recorder.object("floor_enter");
+        e.addProperty("act",AbstractDungeon.actNum);e.addProperty("floor",AbstractDungeon.floorNum);
+        // A "?" node is still EventRoom here; the rolled room appears in the later floor record.
+        e.addProperty("room",n==null||n.room==null?"unknown":n.room.getClass().getSimpleName());if(n!=null){e.addProperty("x",n.x);e.addProperty("y",n.y);}
+        e.addProperty("hp",AbstractDungeon.player.currentHealth);e.addProperty("max_hp",AbstractDungeon.player.maxHealth);e.addProperty("gold",AbstractDungeon.player.gold);e.addProperty("gold_gained",CardCrawlGame.goldGained);
+        e.addProperty("timing","before_room_entry_effects");recorder.append(e);});}
     static void mutation(String reason){if(!ready())return;safely(()->{ensure();if(mutationBefore==null){mutationBefore=Snapshot.capture();mutationReason=reason;JsonObject e=Recorder.object("mutation_pending");e.addProperty("reason",reason);e.add("before",mutationBefore);recorder.append(e);recorder.flush();}});}
     // Bind the synchronous on-disk Metrics object before its UUID is generated. Upload
     // Metrics objects can generate a different UUID later and are deliberately ignored.
