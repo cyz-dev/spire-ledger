@@ -146,8 +146,8 @@ product.md 把以下三项记录口径交给本文。
 | 决策 | `source` | 必记内容 | 状态 |
 |---|---|---|---|
 | 战后选牌 | `COMBAT_REWARD` | 全部候选牌（ID、升级），跳过、歌唱碗、最终离开分别记录；暂时关闭后重新打开不算新选择；确认前快照 | 已有（`Hooks.java:38-71`） |
-| 尼奥 | `NEOW_OPTION` | 四个选项的 `slot`、`reward_type`、`drawback`、`label`；选中项；前后快照（效果落定后取 `after`）；`miniBlessing` 等变体用 `variant` 标出 | M1 新增 |
-| 商店 | `shop_offer` / `shop_result` | 入店：每件商品的种类、ID、升级、展示价、可买状态，删牌价与可用性；离店：已购商品、实付价、前后金币 | M1 新增 |
+| 尼奥 | `NEOW_OPTION` | 全部选项（完整祝福 4 个、mini 2 个）的 `slot`、`reward_type`、`drawback`、`label`；选中项；前后快照（效果落定后取 `after`）；`miniBlessing` 等变体用 `variant` 标出 | M1 新增 |
+| 商店 | `shop_offer` 记录 + `SHOP` 决策 | 首次打开商店界面：`shop_offer` 记每件商品的种类、ID、升级、展示价（折扣后）、可买状态，删牌价与可用性；每次购买是一个 `SHOP` 决策（带 `shop_key` 与前后快照），离店是最终离开决策；已购商品、实付价和前后金币由这些决策推出；暂时关闭再打开不新增记录 | M1 已实现（567de80） |
 | Boss 遗物 | — | 不需要 Ledger 记录：`.run` 的 `boss_relics` 已含全部候选 | 不新增 |
 | 火堆网格选择 | `mutation_pending` | 选前牌组（已有），供火堆偏好免重建 | 已有 |
 | 事件 | — | metrics-v1 没有需要事件候选的指标 | 不新增 |
