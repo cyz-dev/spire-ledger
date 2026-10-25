@@ -10,7 +10,7 @@ Product spec: [product.md](product.md)
 | 包 | 职责 | 改动节奏 | 环境要求 | 状态 |
 |---|---|---|---|---|
 | `record` | 唯一的局内事实写者：决策锚点与全部候选（含商店、尼奥选项及代价）、`gold_gained`、楼层快照、来源标记；每局另写摘要 | 慢；记录 schema 只增不改 | 宽，标注来源 | `~/.spire-ledger/runs/<run_id>/` |
-| `stats` | 读本 Mod 记录与原版 `.run`（旧局的 RunHistoryPlus 字段可选读取），按 play_id 合并成统一的单局模型，每个字段标明精确、估算或缺失；指标、幕划分、排名算法都是纯函数 | 中 | 纯 Java，不依赖游戏类，离线可测 | 只派生；缓存按文件修改时间失效 |
+| `stats` | 读本 Mod 记录与原版 `.run`（旧局的 RunHistoryPlus 字段与 Relic Stats 的 `relic_stats` 可选读取），按 play_id 合并成统一的单局模型，每个字段标明精确、估算或缺失；指标、幕划分、排名算法都是纯函数 | 中 | 纯 Java，不依赖游戏类，离线可测 | 只派生；缓存按文件修改时间失效 |
 | `views` | 游戏内统计、历史、复盘界面；CSV 与 Tierlist 图片导出 | 中 | 游戏 UI | 导出目录 |
 | `replay` | 回合快照采集与恢复，内嵌改造后的 SaveState | 慢 | 严格；兼容键 = 保存实现标识 + 快照 schema | 回合附件 |
 
@@ -69,13 +69,12 @@ TinyCat 约 1.8 万行中约 37% 是值得重写的领域知识（幕划分、�
 - **M0 迁入与修复**：State Notes 代码迁入并改名（modid、包名、数据目录、schema 名、jar 名）；修写入锁冲突；重打兼容键与 jar 版本解绑。验收：`-Check` 全过；锁冲突测试转绿；一次 replay 探针通过。不可逆点：无（未公开发布）。
 - **M1 记录补字段与摘要**：`gold_gained`、尼奥选项与代价、商店候选，以及 TinyCat 指标清单中 RunHistoryPlus 独有且需要的字段（先出字段缺口表）；每局摘要。验收：记录检查；千局摘要索引耗时实测。
 - **M2 统计内核**：统一单局模型；State Notes 现有指标与 TinyCat 核心指标（卡牌抓率、遭遇战损、金币）迁入。验收：真值金币夹具；与 TinyCat 逐表对数。
-- **M3 其余指标与导出**：Plackett-Luce、Jenks、怪物危险度、尼奥；CSV 与 Tierlist 图片；求解器同装来源标记（含求解器仓库一侧的 `withAutomation` 调用）。
+- **M3 其余指标与导出**：Plackett-Luce、Jenks、怪物危险度、尼奥；遗物效果量（读 `relic_stats`，遗物语义对照表覆盖本机样本出现的全部遗物，未收录的遗物显示为缺失而非 0）；CSV 与 Tierlist 图片；求解器同装来源标记（含求解器仓库一侧的 `withAutomation` 调用）。
 - **M4 CI 与发布**：自托管 runner 工作流；发布由用户逐次授权。不可逆点：modid `spire-ledger` 与记录 schema 公开后只能兼容扩展。
 
 State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 ## Open decisions
 
-- State Notes 本机旧记录（`~/.sts1-state-notes/`）是迁移到新目录、由新 Mod 兼容读取，还是只保留只读。blocks: M0。
-- SlaySpire1RL `import_run.py` 跟随新 schema 名的时机。blocks: M0 收口。
+- 已决定（2026-10-25）：State Notes 旧记录留在 `~/.sts1-state-notes/` 原地只读，新 Mod 同时读旧 schema `sts1-state-v1`；SlaySpire1RL `import_run.py` 同时接受两个 schema 名。
 - 是否保留 State Notes 的 Git 历史迁入（历史中含内部证据路径与记录，影响日后公开）。blocks: M0。
