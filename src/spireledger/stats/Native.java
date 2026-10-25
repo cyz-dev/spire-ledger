@@ -10,15 +10,19 @@ final class Native {
     static final String N=Fact.NATIVE;
     static final Set<String> ACT1_BOSS=set("The Guardian","Hexaghost","Slime Boss"),ACT2_BOSS=set("Champ","Automaton","Collector"),ACT3_BOSS=set("Awakened One","Time Eater","Donu and Deca"),ACT4=set("Shield and Spear","The Heart");
     static final Pattern SLOT=Pattern.compile("^(\\d+)_");
-    static final int START_GOLD=99;
+    /** The Neow constant of TinyCat 4.5.6's gold estimate (Run.getNeowBonusDeduction, fitted on exact goldGained): by neow_bonus, 45 for any other bonus, 0 with the NO_GOLD cost. */
+    static final Map<String,Integer> GOLD_DEDUCTION=new HashMap<>();
+    static{String[] k={"TWO_FIFTY_GOLD","HUNDRED_GOLD","RANDOM_COMMON_RELIC","REMOVE_CARD","ONE_RARE_RELIC","REMOVE_TWO","TRANSFORM_TWO_CARDS","TRANSFORM_CARD","UPGRADE_CARD","THREE_SMALL_POTIONS","RANDOM_COLORLESS_2","THREE_RARE_CARDS","THREE_ENEMY_KILL"};
+        int[] v={55,40,35,40,45,40,55,60,60,45,60,45,40};for(int i=0;i<k.length;i++)GOLD_DEDUCTION.put(k[i],v[i]);}
+    static int goldDeduction(JsonObject o){return "NO_GOLD".equals(str(o,"neow_cost"))?0:GOLD_DEDUCTION.getOrDefault(str(o,"neow_bonus"),45);}
     static Set<String> set(String... s){return new HashSet<>(Arrays.asList(s));}
     static Fact<String> text(JsonObject o,String k){String v=str(o,k);return v.isEmpty()?Fact.missing(N):Fact.of(v,N);}
 
-    /** Act boundaries from boss floors (metrics.md 6.4): first act-1 and act-2 boss, last act-3 boss; 16/33/51 without them. */
+    /** Act boundaries from boss floors (metrics.md 6.4): first act-1 and act-2 boss, last act-3 boss; 17/34/52 without them. */
     static int[] bounds(JsonArray fights){int b1=Integer.MAX_VALUE,b2=Integer.MAX_VALUE,b3=-1;
         for(JsonElement e:fights)if(e.isJsonObject()){String name=str(e.getAsJsonObject(),"enemies");Integer floor=integer(e.getAsJsonObject(),"floor");if(floor==null)continue;
             if(ACT1_BOSS.contains(name))b1=Math.min(b1,floor);if(ACT2_BOSS.contains(name))b2=Math.min(b2,floor);if(ACT3_BOSS.contains(name))b3=Math.max(b3,floor);}
-        return new int[]{b1==Integer.MAX_VALUE?16:b1,b2==Integer.MAX_VALUE?33:b2,b3<0?51:b3};}
+        return new int[]{b1==Integer.MAX_VALUE?17:b1,b2==Integer.MAX_VALUE?34:b2,b3<0?52:b3};}
     static int act(int[] b,int floor){return floor<=b[0]?1:floor<=b[1]?2:floor<=b[2]?3:4;}
 
     static Run read(JsonObject o,String dir,String file){
@@ -102,10 +106,9 @@ final class Native {
     /** Shop item ID: potions are bought under the ID or the display name, so "Swift Potion" becomes SwiftPotion (metrics.md 6.5); cards lose +N. */
     static String item(String id){return id.endsWith(" Potion")?id.replace(" ",""):cardId(id);}
 
-    /** metrics.md 5.2 estimate: first floor's gold less the start, plus later gains, plus 12 with Maw Bank. */
-    static Fact<Double> goldEstimate(JsonObject o){JsonArray g=arr(o,"gold_per_floor");if(g.size()==0)return Fact.missing(N);double total=0;Integer prev=null;
+    /** metrics.md 5.2 estimate, TinyCat's formula: first floor's gold less the Neow constant (clamped at 0, as TinyCat), plus later gains, plus 12 with Maw Bank. */
+    static Fact<Double> goldEstimate(JsonObject o){JsonArray g=arr(o,"gold_per_floor");if(g.size()==0)return Fact.missing(N);double total=0;Integer prev=null;int start=goldDeduction(o);
         for(JsonElement e:g){Integer v=integer(e);if(v==null)return Fact.missing(N);
-            // contract gap: a Neow NO_GOLD start would make the first term negative, but gains never subtract, so it is clamped at 0.
-            total+=prev==null?Math.max(0,v-START_GOLD):Math.max(0,v-prev);prev=v;}
+            total+=prev==null?Math.max(0,v-start):Math.max(0,v-prev);prev=v;}
         if(strings(arr(o,"relics")).contains("MawBank"))total+=12;return Fact.estimated(total,N);}
 }

@@ -132,7 +132,13 @@ public final class StatsCheck {
   // TinyCat core: hp loss with an exact entry (H via floor_enter) and the floor-1 estimate (V3, D4: 60+10-6; D1 floor 3 loses 0), heal split, gold exact and estimated.
   Metric loss=m(m,"hp_loss:1:Jaw Worm");check(is(loss,18,4)&&loss.estimated==2,"hp loss exact and estimated: "+loss.numerator+"/"+loss.denominator+" est "+loss.estimated);
   check(m(m,"hp_loss_heal:1:Hexaghost").denominator==3&&m(m,"hp_loss_heal:1:Hexaghost").numerator==0&&m(m,"hp_loss_noheal:1:Jaw Worm").denominator==3,"heal split at Burning Blood's 6");
-  check(is(m(m,"gold_gained:exact"),300,1)&&is(m(m,"gold_gained:estimated"),61,1)&&m(m,"gold_gained").estimated==1&&is(m(m,"gold_gained"),361,2),"gold exact from gold_gained, estimate from gold_per_floor");
+  check(is(m(m,"gold_gained:exact"),300,1)&&is(m(m,"gold_gained:estimated"),115,1)&&m(m,"gold_gained").estimated==1&&is(m(m,"gold_gained"),415,2),"gold exact from gold_gained, estimate from gold_per_floor (no neow_bonus: TinyCat deducts 45)");
+  // metrics.md 5.2 TinyCat formula: the Neow constant depends on neow_bonus (HUNDRED_GOLD 40) and is 0 with the NO_GOLD cost; was a flat 99.
+  JsonObject g1=nativeRun("G1",20,3,false,"Jaw Worm","3:M:Jaw Worm:40"),g2=nativeRun("G2",20,3,false,"Jaw Worm","3:M:Jaw Worm:40");g1.addProperty("neow_bonus","HUNDRED_GOLD");g1.addProperty("neow_cost","NONE");g1.add("gold_per_floor",new JsonParser().parse("[150,140,200]"));
+  g2.addProperty("neow_bonus","TWO_FIFTY_GOLD");g2.addProperty("neow_cost","NO_GOLD");g2.add("gold_per_floor",new JsonParser().parse("[50,60]"));
+  check(is(m(metrics(Stats.build(Arrays.asList(nf(g1,"IRONCLAD","g1.run"),nf(g2,"IRONCLAD","g2.run")),Collections.emptyList()),all),"gold_gained:estimated"),230,2),"gold estimate: Neow constant by bonus, none with NO_GOLD (170 + 60)");
+  // metrics.md 6.4: without boss fights the act bounds fall back to 17/34/52, so floor 17 is still act 1.
+  check(metrics(Stats.build(Arrays.asList(nf(nativeRun("NB",20,17,false,"Cultist","17:M:Cultist:5"),"IRONCLAD","nb.run")),Collections.emptyList()),all).containsKey("hp_loss:1:Cultist"),"act fallback 17/34/52 without boss fights");
   check(m(m,"act_hp_loss:1").denominator>0&&m(m,"coverage:act_hp_loss").unit.equals("run_act"),"act HP loss per run and act");
   // 10.8 coverage in each metric's own unit; fights fall back to runs when some run's fights are unknown.
   check(m(m,"coverage:act").unit.equals("run_act")&&m(m,"coverage:boss_relics").unit.equals("run_act")&&m(m,"coverage:damage").unit.equals("run")&&m(m,"coverage:reward").unit.equals("run")&&m(m,"win").coverUnit.equals("run"),"10.8 coverage units with unknown fights");
@@ -186,6 +192,10 @@ public final class StatsCheck {
   check(row(doc,"purchase","ALL","{\"act\":\"0\",\"item\":\"SwiftPotion\"}").get("value").getAsDouble()==2&&row(doc,"purchase","ALL","{\"act\":\"2\",\"item\":\"Inflame\"}").get("value").getAsDouble()==1,"potion IDs normalized, cards lose +N, act 0 sums");
   check(row(doc,"shop_visits","ALL","{\"act\":\"1\"}").get("value").getAsDouble()==2&&row(doc,"shop_visits","ALL","{\"act\":\"0\"}").get("value").getAsDouble()==3,"shop visits from $ floors");
   check(row(doc,"campfire","ALL","{\"act\":\"0\",\"action\":\"TOTAL\"}").get("value").getAsDouble()==2&&row(doc,"upgrade","ALL","{\"source\":\"campfire\",\"act\":\"1\",\"card\":\"Bash\"}").get("value").getAsDouble()==1,"campfire actions and upgrades per act");
+  // metrics.md 1.2: a scope with no runs (WATCHER here) counts known zeros; its rates and means stay missing.
+  JsonObject none=row(doc,"win","WATCHER","{}"),allPurges=row(doc,"purges","WATCHER","{\"source\":\"ALL\"}");
+  check(none.get("numerator").getAsDouble()==0&&nul(none,"value")&&row(doc,"purges","WATCHER","{\"source\":\"SHOP\"}").get("value").getAsDouble()==0&&allPurges.get("value").getAsDouble()==0&&allPurges.get("partial_sources").getAsJsonArray().size()==0
+   &&row(doc,"campfire","WATCHER","{\"act\":\"0\",\"action\":\"TOTAL\"}").get("value").getAsDouble()==0&&row(doc,"time","WATCHER","{\"result\":\"all\"}").get("numerator").getAsDouble()==0,"empty scope: counts and sums are 0, not null");
   JsonObject fish=row(doc,"event_related","ALL","{\"act\":\"1\",\"event\":\"Big Fish\"}");check(fish.get("denominator").getAsDouble()==1&&fish.get("numerator").getAsDouble()==0,"event win rate once per run per act");
  }
  static void boundary(Path src)throws Exception{int files=0;try(DirectoryStream<Path> d=Files.newDirectoryStream(src,"*.java")){for(Path p:d){files++;for(String line:Files.readAllLines(p,StandardCharsets.UTF_8)){String t=line.trim();

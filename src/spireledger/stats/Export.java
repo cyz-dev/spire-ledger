@@ -51,12 +51,12 @@ public final class Export {
         JsonObject row(String metric,Map<String,String> dims,Double value,Double numerator,Double denominator,int samples,String status){
             JsonObject r=new JsonObject();r.addProperty("metric",metric);r.addProperty("scope",scope);JsonObject d=new JsonObject();for(Map.Entry<String,String> e:dims.entrySet())d.addProperty(e.getKey(),e.getValue());r.add("dims",d);
             r.addProperty("value",value);r.addProperty("numerator",numerator);r.addProperty("denominator",denominator);r.addProperty("sample_size",samples);r.addProperty("status",status);out.add(r);return r;}
-        /** A rate or mean; nothing to divide by is missing, never 0. */
+        /** A rate or mean; nothing to divide by is missing, never 0. Over a scope with no runs the numerator is a sum over nothing, a known 0 (metrics.md 1.2). */
         JsonObject ratio(String metric,Map<String,String> dims,double numerator,double denominator,int samples,String status){boolean none=denominator==0;
-            return row(metric,dims,none?null:numerator/denominator,none?null:numerator,denominator,samples,none?"missing":status!=null?status:numerator==0?"zero":"ok");}
+            return row(metric,dims,none?null:numerator/denominator,none&&!runs.isEmpty()?null:numerator,denominator,samples,none?"missing":status!=null?status:numerator==0?"zero":"ok");}
         JsonObject from(String metric,Map<String,String> dims,Metric m){return ratio(metric,dims,m.numerator,m.denominator,m.samples,m.denominator==0?null:m.status);}
-        /** A count over the runs that carry its field; no such run is missing. */
-        void count(String metric,Map<String,String> dims,Integer have,double n){if(have==null)row(metric,dims,null,null,null,0,"missing");else row(metric,dims,n,n,null,have,n==0?"zero":"ok");}
+        /** A count over the runs that carry its field; runs without it make it missing, a scope with no runs counts a known 0. */
+        void count(String metric,Map<String,String> dims,Integer have,double n){if(have==null&&!runs.isEmpty())row(metric,dims,null,null,null,0,"missing");else row(metric,dims,n,n,null,have==null?0:have,n==0?"zero":"ok");}
 
         void all(){Map<String,Metric> m=Metrics.compute(selection(),f);kernel(m);splits(m);combats();counts();}
         Stats.Selection selection(){Stats.Selection s=new Stats.Selection();s.runs.addAll(runs);return s;}
@@ -101,9 +101,9 @@ public final class Export {
             for(Map.Entry<String,double[]> e:events.entrySet()){String[] k=e.getKey().split("\u0000",2);ratio("event_related",dims("act",k[0],"event",k[1]),e.getValue()[0],e.getValue()[1],(int)e.getValue()[1],null);}
             // Purges by source over all acts, act 0 included; ALL adds the known sources and names the ones some run lacks.
             Map<String,Double> bySource=new LinkedHashMap<>();for(String s:PURGES)bySource.put(s,sums.getOrDefault("0|purge:"+s,0.0));
-            double total=0;JsonArray partial=new JsonArray();for(String s:PURGES){Integer h=have.get(PURGE_FIELD.get(s));count("purges",dims("source",s),h,bySource.get(s));if(h!=null)total+=bySource.get(s);if(h==null||h<runs.size())partial.add(new JsonPrimitive(s));
+            double total=0;JsonArray partial=new JsonArray();for(String s:PURGES){Integer h=have.get(PURGE_FIELD.get(s));count("purges",dims("source",s),h,bySource.get(s));if(h!=null)total+=bySource.get(s);if((h==null?0:h)<runs.size())partial.add(new JsonPrimitive(s));
                 if(s.equals("EMPTY_CAGE")&&h!=null)out.get(out.size()-1).getAsJsonObject().addProperty("estimated",(int)(bySource.get(s)/2));}
-            count("purges",dims("source","ALL"),runs.isEmpty()?null:runs.size(),total);out.get(out.size()-1).getAsJsonObject().add("partial_sources",partial);
+            count("purges",dims("source","ALL"),runs.size(),total);out.get(out.size()-1).getAsJsonObject().add("partial_sources",partial);
             for(Map.Entry<String,Double> e:sums.entrySet()){String[] k=e.getKey().split("\\|",2);String act=k[0],key=k[1];double v=e.getValue();
                 if(key.equals("purge:SHOP")&&!act.equals("0"))count("purges",dims("source","SHOP","act",act),have.get("items_purged"),v);
                 else if(key.startsWith("campfire:"))count("campfire",dims("act",act,"action",key.substring(9)),have.get("campfire_choices"),v);
