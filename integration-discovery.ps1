@@ -1,4 +1,4 @@
-param([ValidateSet('Vanilla','Adapted','Original')][string]$Dependency='Adapted',[string]$Instance='spire-ledger-dev/codex-discovery-adapted-01',[string]$Game='D:/SteamLibrary/steamapps/common/SlayTheSpire')
+param([ValidateSet('Vanilla','Adapted','Original')][string]$Dependency='Adapted',[string]$Instance='spire-ledger-dev/codex-discovery-adapted-01',[string]$Game='D:/SteamLibrary/steamapps/common/SlayTheSpire',[switch]$Headless)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -20,8 +20,7 @@ if($Dependency -eq 'Original'){$mods='basemod,stslib,SaveStateMod,spire-ledger,s
 $oldApp=$env:APPDATA;$oldLocal=$env:LOCALAPPDATA;$oldTemp=$env:TEMP;$oldTmp=$env:TMP
 try{
  $env:APPDATA="$dir/home";$env:LOCALAPPDATA="$dir/home";$env:TEMP="$dir/temp";$env:TMP="$dir/temp"
- $arguments=@('-Dfile.encoding=UTF-8',('"-Duser.home='+$dir+'/home"'),('"-Djava.io.tmpdir='+$dir+'/temp"'),'-jar','ModTheSpire.jar','--skip-launcher','--skip-intro','--mods',$mods)
- $proc=Start-Process -FilePath "$Game/jre/bin/java.exe" -ArgumentList $arguments -WorkingDirectory $dir -WindowStyle Hidden -RedirectStandardOutput "$dir/stdout.log" -RedirectStandardError "$dir/stderr.log" -PassThru
+ $proc=Start-Probe $Game $dir @('-Dfile.encoding=UTF-8') $mods -Headless:$Headless
  $proc.WaitForExit();[IO.File]::WriteAllText("$dir/process-result.json",('{"exit_code":'+$proc.ExitCode+'}'),$utf8)
  if($proc.ExitCode -ne 0){throw "Discovery process exit $($proc.ExitCode)"}
  $report=Get-Content -Raw -Encoding UTF8 "$dir/discovery-result.json" | ConvertFrom-Json
