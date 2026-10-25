@@ -97,8 +97,17 @@ public class RecorderCheck {
         f=new JsonObject();StateMod.act3Facts(f,4,51,true);need(f.get("act3_cleared").getAsBoolean()&&f.get("heart_kill").getAsBoolean()&&f.get("act3_cleared_floor").getAsInt()==51,"heart kill");
         System.out.println("RecorderCheck M1: PASS");
     }
+    /** Real records appended one by one, with a flush after each: verifyText compares every spliced run.json and summary.json with a full toString. */
+    static void replay(Path samples,Path source)throws Exception {
+        JsonObject run=read(source);JsonObject meta=run.getAsJsonObject("metadata");meta.remove("run_id");Recorder r=new Recorder(samples,meta,null);
+        for(JsonElement e:run.getAsJsonArray("records")){JsonObject o=e.getAsJsonObject();for(String k:java.util.Arrays.asList("seq","branch_id","time_ms"))o.remove(k);r.append(o);r.flush();}
+        r.close();System.out.println("RecorderCheck incremental text: PASS "+run.getAsJsonArray("records").size()+" records of "+source.getFileName());
+    }
     public static void main(String[] args)throws Exception {
         Path samples=Paths.get(args[0]);Files.createDirectories(samples);
+        Recorder.verifyText=true; // every flush below, including restore and SL paths, must splice the same bytes as a full serialization
+        if(args.length>1){replay(samples,Paths.get(args[1]));return;}
+        replay(samples,samples.toAbsolutePath().getParent().getParent().resolve("samples").resolve("native-run.json")); // build.ps1 passes <repo>/build/<dir>
         if(!StateMod.reviewedMod("basemod","5.56.0")||!StateMod.reviewedMod("stslib","2.12.0")||StateMod.reviewedMod("RunHistoryPlus","1.8.3"))throw new AssertionError("only BaseMod + StSLib keep the human source label");
         JsonObject meta=parse("{\"game_version\":\"test\",\"mod_version\":\"0.1.0\",\"seed\":\"-9223372036854775808\",\"play_id\":\"synthetic-contract-check\",\"coverage\":\"synthetic; not a real played run\"}");
         lockedRunJson(samples,meta);
