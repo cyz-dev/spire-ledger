@@ -43,5 +43,7 @@ if($Check){
   if($LASTEXITCODE -ne 0){throw 'DiagnosticReportCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.TurnFilesCheck (Join-Path $out ('turn-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'TurnFilesCheck failed'}
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.RelicStatsCheck
+  if($LASTEXITCODE -ne 0){throw 'RelicStatsCheck failed'}
 }
 Get-Item "$out\SpireLedger.jar" | Select-Object FullName,Length
