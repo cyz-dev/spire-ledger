@@ -142,11 +142,21 @@ public final class Recorder implements AutoCloseable {
         // Same projection on every flush; a summary that misses this write keeps its old marker, so readers rebuild from the record.
         for(;summarized<records.size();summarized++)summary.add(records.get(summarized).getAsJsonObject());
         // Serialized here so the writer never reads live JSON; a newer flush replaces a job that has not started.
-        String[] job={root.toString(),summary.document(SCHEMA,root.get("metadata"),journal.getChannel().size(),sequence).toString()};
+        long bytes=journal.getChannel().size();String[] job={runText(),summary.text(SCHEMA,root.get("metadata"),bytes,sequence)};
+        if(verifyText&&!(job[0].equals(root.toString())&&job[1].equals(summary.document(SCHEMA,root.get("metadata"),bytes,sequence).toString())))throw new IllegalStateException("incremental text differs from full serialization");
         if(nextWrite.getAndSet(job)==null)written=WRITER.submit(this::writeLatest);
         Path html=directory.resolve("review.html");if(!Files.exists(html))try(InputStream in=Recorder.class.getResourceAsStream("/review.html")){if(in!=null)Files.copy(in,html);}
         rethrowWriteFailure();
     }
+    static volatile boolean verifyText; // checks only: every flush compares its spliced text with a full serialization
+    private final StringBuilder recordText=new StringBuilder();private int serialized;
+    // records only grows and its elements are never changed after append, so each record is serialized once.
+    private String runText(){
+        for(;serialized<records.size();serialized++)(serialized>0?recordText.append(','):recordText).append(records.get(serialized).toString());
+        JsonObject head=new JsonObject();for(Map.Entry<String,JsonElement> e:root.entrySet())head.add(e.getKey(),e.getValue()==records?new JsonArray():e.getValue());return splice(head,recordText);
+    }
+    /** head's last key is an empty array; its text with that array replaced by body equals the full document's toString. */
+    static String splice(JsonObject head,CharSequence body){String h=head.toString();if(!h.endsWith("[]}"))throw new IllegalStateException("records is not the last key");return new StringBuilder(h.length()+body.length()).append(h,0,h.length()-2).append(body).append("]}").toString();}
     private void writeLatest(){
         String[] job=nextWrite.getAndSet(null);if(job==null)return;
         try{// run.json is a derived view of events and segments; a reader holding it open must not stop recording.

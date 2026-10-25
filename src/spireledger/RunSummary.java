@@ -34,9 +34,16 @@ final class RunSummary {
         JsonElement candidates=e.get("candidates");if(candidates!=null&&candidates.isJsonArray()){JsonArray out=new JsonArray();for(JsonElement c:candidates.getAsJsonArray()){if(!c.isJsonObject()){out.add(c);continue;}JsonObject p=primitives(c.getAsJsonObject());JsonElement card=c.getAsJsonObject().get("card");if(card!=null&&card.isJsonObject())p.add("card",pick(card.getAsJsonObject(),CARD));out.add(p);}s.add("candidates",out);}
         records.add(s);
     }
-    JsonObject document(String sourceSchema,JsonElement metadata,long eventsBytes,int lastSeq){
+    JsonObject document(String sourceSchema,JsonElement metadata,long eventsBytes,int lastSeq){return document(sourceSchema,metadata,eventsBytes,lastSeq,records);}
+    private final StringBuilder recordText=new StringBuilder();private int serialized;
+    // Projected records never change after add, so a flush serializes only the new ones and splices them behind the small head.
+    String text(String sourceSchema,JsonElement metadata,long eventsBytes,int lastSeq){
+        for(;serialized<records.size();serialized++)(serialized>0?recordText.append(','):recordText).append(records.get(serialized).toString());
+        return Recorder.splice(document(sourceSchema,metadata,eventsBytes,lastSeq,new JsonArray()),recordText);
+    }
+    private JsonObject document(String sourceSchema,JsonElement metadata,long eventsBytes,int lastSeq,JsonArray list){
         JsonObject o=new JsonObject();o.addProperty("schema",SCHEMA);o.addProperty("source_schema",sourceSchema);o.addProperty("events_bytes",eventsBytes);o.addProperty("last_seq",lastSeq);o.addProperty("record_count",records.size());o.add("metadata",metadata);
-        JsonArray ids=new JsonArray(),names=new JsonArray();for(String x:sets.cardIds)ids.add(x);for(String x:sets.names)names.add(x);o.add("card_ids",ids);o.add("card_names",names);o.add("relics",relics);o.add("records",records);return o;
+        JsonArray ids=new JsonArray(),names=new JsonArray();for(String x:sets.cardIds)ids.add(x);for(String x:sets.names)names.add(x);o.add("card_ids",ids);o.add("card_names",names);o.add("relics",relics);o.add("records",list);return o;
     }
     static JsonObject project(JsonObject run,long eventsBytes,int lastSeq){RunSummary s=new RunSummary();for(JsonElement e:HistoryIndex.array(run,"records"))if(e.isJsonObject())s.add(e.getAsJsonObject());return s.document(HistoryIndex.str(run,"schema"),HistoryIndex.obj(run,"metadata"),eventsBytes,lastSeq);}
     /** The summary only when its marker matches the journal now; null sends the reader to the full record. Never writes. */
