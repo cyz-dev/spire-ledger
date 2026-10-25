@@ -72,9 +72,9 @@ public final class Hooks {
     }
     public static void abandon(){StateMod.abandon();}
     @SpirePatch(clz=ProceedButton.class,method="goToTreasureRoom") public static class BossExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
-    @SpirePatch(clz=ProceedButton.class,method="goToVictoryRoomOrTheDoor") public static class Act3Exit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
+    @SpirePatch(clz=ProceedButton.class,method="goToVictoryRoomOrTheDoor") public static class Act3Exit { @SpirePrefixPatch public static void before(){StateMod.abandon();StateMod.act3Exit();} }
     @SpirePatch(clz=ProceedButton.class,method="goToDoubleBoss") public static class DoubleBossExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
-    @SpirePatch(clz=ProceedButton.class,method="goToTrueVictoryRoom") public static class HeartExit { @SpirePrefixPatch public static void before(){StateMod.abandon();} }
+    @SpirePatch(clz=ProceedButton.class,method="goToTrueVictoryRoom") public static class HeartExit { @SpirePrefixPatch public static void before(){StateMod.abandon();StateMod.heartExit();} }
     @SpirePatch(clz=NeowEvent.class,method="buttonEffect") public static class NeowOption {
         @SpirePrefixPatch public static void before(NeowEvent __instance,int buttonPressed){StateMod.neow(__instance,buttonPressed);}
     }

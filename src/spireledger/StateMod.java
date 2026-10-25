@@ -39,7 +39,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static JsonObject loading,last,mutationBefore;
     static String mutationReason;
     static final Map<Object,Recorder> metricsOwners=Collections.synchronizedMap(new IdentityHashMap<Object,Recorder>());
-    static int lastFloor=-1,lastAct=-1;
+    static int lastFloor=-1,lastAct=-1,act3Floor=-1;
+    static boolean heartExit;
     static long nextObserve;
     static Object player;
     static boolean startRequested=true,loadingExpected=false;
@@ -81,6 +82,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         if(loading!=null&&loading.has("deck"))Snapshot.restoreIdentities(loading.getAsJsonArray("deck"));
         JsonObject state=Snapshot.capture();JsonObject e=Recorder.object("coverage");e.addProperty("status",loadingExpected?"loaded":"started");e.addProperty("floor_start",AbstractDungeon.floorNum);e.add("state",state);recorder.append(e);
         if(loadingExpected)recorder.resume(loading==null?new JsonObject():loading,state);
+        // The game save is the lineage truth: an SL to before the act-3 exit must forget it.
+        act3Floor=loading!=null&&loading.has("act3_cleared_floor")?loading.get("act3_cleared_floor").getAsInt():-1;heartExit=false;
         loading=null;loadingExpected=false;player=AbstractDungeon.player;startRequested=false;last=state;recorder.flush();status="Recording "+recorder.runId.substring(0,8);
     }
     static JsonArray candidates(List<AbstractCard> cards,boolean skip,boolean bowl){JsonArray all=new JsonArray();for(int i=0;i<cards.size();i++){JsonObject c=Recorder.object("card");c.addProperty("candidate_id","card:"+i);c.add("card",Snapshot.card(cards.get(i)));all.add(c);}if(skip){JsonObject c=Recorder.object("skip");c.addProperty("candidate_id","skip");all.add(c);}if(bowl){JsonObject c=Recorder.object("bowl");c.addProperty("candidate_id","bowl");all.add(c);}return all;}
@@ -120,17 +123,21 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         e.addProperty("room",n==null||n.room==null?"unknown":n.room.getClass().getSimpleName());if(n!=null){e.addProperty("x",n.x);e.addProperty("y",n.y);}
         e.addProperty("hp",AbstractDungeon.player.currentHealth);e.addProperty("max_hp",AbstractDungeon.player.maxHealth);e.addProperty("gold",AbstractDungeon.player.gold);e.addProperty("gold_gained",CardCrawlGame.goldGained);
         e.addProperty("timing","before_room_entry_effects");recorder.append(e);});}
+    static void act3Exit(){act3Floor=AbstractDungeon.floorNum;}
+    static void heartExit(){heartExit=true;}
+    // m1-field-gaps section 7: the final act-3 boss exit, being in act 4, or a heart kill each mean act 3 was cleared.
+    static void act3Facts(JsonObject e,int act,int exitFloor,boolean heart){e.addProperty("act3_cleared",exitFloor>=0||act>=4||heart);if(exitFloor>=0)e.addProperty("act3_cleared_floor",exitFloor);else e.add("act3_cleared_floor",JsonNull.INSTANCE);e.addProperty("heart_kill",heart);}
     static void mutation(String reason){if(!ready())return;safely(()->{ensure();if(mutationBefore==null){mutationBefore=Snapshot.capture();mutationReason=reason;JsonObject e=Recorder.object("mutation_pending");e.addProperty("reason",reason);e.add("before",mutationBefore);recorder.append(e);recorder.flush();}});}
     // Bind the synchronous on-disk Metrics object before its UUID is generated. Upload
     // Metrics objects can generate a different UUID later and are deliberately ignored.
     static void metricsStarted(Object metrics){if(!enabled||failed)return;safely(()->{if(ready())ensure();if(recorder!=null)metricsOwners.put(metrics,recorder);});}
     static void metricsFinished(Object metrics,boolean death,boolean heart){Recorder target=metricsOwners.remove(metrics);if(target==null)return;safely(()->{Object params=field(metrics,"params");Object value=((Map<?,?>)params).get("play_id");if(!(value instanceof String)||!((String)value).matches("[a-fA-F0-9-]{36}"))throw new IOException("Missing native metrics play_id");JsonObject e=Recorder.object("game_play_id");e.addProperty("play_id",(String)value);e.addProperty("source","original_metrics_disk_save");e.addProperty("victory",!death);e.addProperty("heart_kill",!death&&heart);target.append(e);target.export();});}
-    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
+    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
     @Override public void receiveStartGame(){startRequested=true;loadingExpected=loadingExpected||CardCrawlGame.loadingSave;}
     @Override public void onLoad(JsonObject data){loading=data;loadingExpected=true;startRequested=true;TurnRecorder.restoreCombat(data==null?new JsonObject():data);}
     @Override public JsonObject onSave(){
         if(!ready())return null;
-        final JsonObject[] result={null};safely(()->{ensure();result[0]=recorder.checkpoint(Snapshot.capture());result[0].add("deck",Snapshot.capture().get("deck"));result[0].addProperty("combat_id",TurnRecorder.combatId);});return result[0];
+        final JsonObject[] result={null};safely(()->{ensure();result[0]=recorder.checkpoint(Snapshot.capture());result[0].add("deck",Snapshot.capture().get("deck"));result[0].addProperty("combat_id",TurnRecorder.combatId);if(act3Floor>=0)result[0].addProperty("act3_cleared_floor",act3Floor);});return result[0];
     }
     @Override public void receivePostUpdate(){
         ReplayLauncher.checkPracticeStartup();
