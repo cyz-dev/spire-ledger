@@ -66,7 +66,7 @@
      "tinycat_metric": "value", "ledger_metric": "purges", "fields": {"value": "value"}},
 
     {"id": "campfire_action", "tables": {"campfireActionsTotal": {"act": "0"}, "campfireActionsAct1": {"act": "1"}, "campfireActionsAct2": {"act": "2"}, "campfireActionsAct3": {"act": "3"}, "campfireActionsAct4": {"act": "4"}},
-     "only_keys": ["REST", "RECALL", "PURGE", "LIFT", "DIG", "SMITH"], "key_dim": "action", "tinycat_metric": "rate", "ledger_metric": "campfire", "fields": {"denominator": "value"}},
+     "only_keys": ["REST", "RECALL", "PURGE", "LIFT", "DIG"], "key_dim": "action", "tinycat_metric": "rate", "ledger_metric": "campfire", "fields": {"denominator": "value"}},
     {"id": "campfire_total", "tables": {"campfireActionsAct1": {"act": "1", "action": "TOTAL"}, "campfireActionsAct2": {"act": "2", "action": "TOTAL"}, "campfireActionsAct3": {"act": "3", "action": "TOTAL"}, "campfireActionsAct4": {"act": "4", "action": "TOTAL"}},
      "key_value": "火堆总数", "tinycat_metric": "rate", "ledger_metric": "campfire", "fields": {"denominator": "value"}},
     {"id": "campfire_smith_card", "tables": {"campfireActionsTotal": {"act": "0", "source": "campfire"}, "campfireActionsAct1": {"act": "1", "source": "campfire"}, "campfireActionsAct2": {"act": "2", "source": "campfire"}, "campfireActionsAct3": {"act": "3", "source": "campfire"}, "campfireActionsAct4": {"act": "4", "source": "campfire"}},
@@ -75,7 +75,7 @@
 
     {"id": "shop_purchase", "tables": {"shopActionsTotal": {"act": "0"}, "shopActionsAct1": {"act": "1"}, "shopActionsAct2": {"act": "2"}, "shopActionsAct3": {"act": "3"}, "shopActionsAct4": {"act": "4"}},
      "exclude_keys": ["商店删牌", "商店总数", "有效商店数"], "key_dim": "item", "alias": "card", "tinycat_metric": "rate", "ledger_metric": "purchase", "fields": {"denominator": "value"}},
-    {"id": "shop_purge", "tables": {"shopActionsTotal": {"act": "0", "source": "SHOP"}, "shopActionsAct1": {"act": "1", "source": "SHOP"}, "shopActionsAct2": {"act": "2", "source": "SHOP"}, "shopActionsAct3": {"act": "3", "source": "SHOP"}, "shopActionsAct4": {"act": "4", "source": "SHOP"}},
+    {"id": "shop_purge", "tables": {"shopActionsTotal": {"source": "SHOP"}, "shopActionsAct1": {"act": "1", "source": "SHOP"}, "shopActionsAct2": {"act": "2", "source": "SHOP"}, "shopActionsAct3": {"act": "3", "source": "SHOP"}, "shopActionsAct4": {"act": "4", "source": "SHOP"}},
      "key_value": "商店删牌", "tinycat_metric": "rate", "ledger_metric": "purges", "fields": {"denominator": "value"}},
     {"id": "shop_visits", "tables": {"shopActionsTotal": {"act": "0"}, "shopActionsAct1": {"act": "1"}, "shopActionsAct2": {"act": "2"}, "shopActionsAct3": {"act": "3"}, "shopActionsAct4": {"act": "4"}},
      "key_value": "商店总数", "tinycat_metric": "rate", "ledger_metric": "shop_visits", "fields": {"denominator": "value"}},

@@ -96,6 +96,7 @@ TinyCat 的默认口径写死在 `Run.valid`：只收 A20，排除每日、特�
 - `card`、`encounter`、`item` 用 `.run` 里的原始 ID（卡牌去掉 `+N`），工具按 `mapping.json` 的别名表换成 TinyCat 的名称；药水按 metrics.md 6.5 归一成无空格 ID。
 - 比率或均值行在样本为 0 时可以省略；全部比较字段都是 0 或 `null` 的行与缺行视为相同。
 - 表中没有的 Ledger 指标不影响结果，只在报告的 `ledger_only_metrics` 里列出。
+- 火堆的 `SMITH` 合计行不参与比较：TinyCat 把带 `data` 的锻造拆成按卡牌的行（`campfireActionStats`），这些行与 `upgrade` 比。`shopActionsTotal` 的“商店删牌”对应 `purges` 里不带 `act` 的 `SHOP` 行（全部幕合计）。
 
 ## 3. 比对与归类
 
