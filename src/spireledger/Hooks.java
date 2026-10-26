@@ -128,6 +128,12 @@ public final class Hooks {
         @SpirePrefixPatch public static void before(ConfirmPopup __instance){StateMod.abandoning=__instance.type==ConfirmPopup.ConfirmType.ABANDON_MID_RUN;}
         @SpirePostfixPatch public static void after(){StateMod.abandoning=false;}
     }
+    @SpirePatch(clz=ConfirmPopup.class,method="abandonRunFromMainMenu",paramtypez={AbstractPlayer.class}) public static class AbandonSavedRun {
+        @SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(MethodCall c)throws CannotCompileException {
+            if(c.getClassName().equals("com.megacrit.cardcrawl.saveAndContinue.SaveAndContinue")&&c.getMethodName().equals("loadSaveFile"))c.replace("{ $_ = $proceed($$); spireledger.Hooks.abandonSaved($_); }");
+        }};}
+    }
+    public static void abandonSaved(SaveFile save){StateMod.abandonSaved(save);}
     @SpirePatch(clz=VictoryScreen.class,method=SpirePatch.CONSTRUCTOR,paramtypez={MonsterGroup.class}) public static class Victory {
         @SpirePostfixPatch public static void after(){StateMod.end("victory");}
     }

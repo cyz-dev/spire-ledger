@@ -20,6 +20,8 @@ import java.util.concurrent.*;
 
 /** Native, read-only overlay. Game update is paused; its screen and reward state stay intact. */
 final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,TextReceiver {
+    final RunReview review=new RunReview(this);
+    final Hitbox latestTab=new Hitbox(Settings.WIDTH*.14f,36*Settings.scale),historyTab=new Hitbox(Settings.WIDTH*.14f,36*Settings.scale);
     static HistoryScreen instance;boolean historyMode;final StatsScreen stats;boolean currentRequested;final Hitbox home=new Hitbox(160*Settings.scale,36*Settings.scale);
     static boolean active(){return instance!=null;}
     static boolean zh(){return Settings.language==Settings.GameLanguage.ZHS||Settings.language==Settings.GameLanguage.ZHT;}
@@ -31,9 +33,9 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     HistoryIndex.Index index=new HistoryIndex.Index();List<HistoryIndex.Summary> filtered=new ArrayList<>();
     JsonObject live,detail;HistoryIndex.Summary selected;
     final MenuCancelButton cancel=new MenuCancelButton();
-    final DropdownMenu[] filters=new DropdownMenu[5];
-    final int[] selections=new int[5];
-    final String[] characters={"","IRONCLAD","THE_SILENT","DEFECT","WATCHER"},outcomes={"","current","victory","death","incomplete"};
+    final DropdownMenu[] filters=new DropdownMenu[7];
+    final int[] selections=new int[7];final List<String> months=new ArrayList<>();
+    final String[] characters={"","IRONCLAD","THE_SILENT","DEFECT","WATCHER"},outcomes={"","current","victory","death","abandon","interrupted","incomplete"};
     final Hitbox keyword=new Hitbox(Settings.WIDTH*.50f,40*Settings.scale),clear=new Hitbox(135*Settings.scale,40*Settings.scale),refresh=new Hitbox(135*Settings.scale,40*Settings.scale);
     final Hitbox prev=new Hitbox(150*Settings.scale,40*Settings.scale),next=new Hitbox(150*Settings.scale,40*Settings.scale),diagnostics=new Hitbox(210*Settings.scale,40*Settings.scale);
     final Hitbox[] rows=new Hitbox[6];final ScrollBar bar;
@@ -59,15 +61,16 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void styledText(SpriteBatch sb,String value,float x,float y,Tone tone){BitmapFont font=tone==Tone.HEADER?FontHelper.buttonLabelFont:FontHelper.cardDescFont_N;float oldX=font.getData().scaleX,oldY=font.getData().scaleY;Color old=font.getColor().cpy();try{float scale=tone==Tone.HEADER?1:1.12f;font.getData().setScale(oldX*scale,oldY*scale);FontHelper.renderFontLeftTopAligned(sb,font,value,x,y,color(tone));}finally{font.getData().setScale(oldX,oldY);font.setColor(old);}}
     String fit(String value,float width){return HistoryLayout.fit(value,width,t->measure(FontHelper.cardDescFont_N,t,1));}
     HistoryScreen(){
-        cancel.show(tr("返回","Back"));home.move(Settings.WIDTH*.86f,Settings.HEIGHT*.95f);historyMode=StateMod.ready();currentRequested=historyMode;stats=new StatsScreen(this);
+        cancel.show(tr("关闭账本","Close"));latestTab.move(Settings.WIDTH*.55f,Settings.HEIGHT*.95f);historyTab.move(Settings.WIDTH*.72f,Settings.HEIGHT*.95f);home.resize(Settings.WIDTH*.14f,36*Settings.scale);home.move(Settings.WIDTH*.89f,Settings.HEIGHT*.95f);historyMode=true;currentRequested=true;stats=new StatsScreen(this);
         for(int i=0;i<sections.length;i++){sections[i]=new Hitbox(Settings.WIDTH*.17f,40*Settings.scale);sections[i].move(Settings.WIDTH*(.15f+i*.21f),Settings.HEIGHT*.735f);}
         filters[0]=dropdown(new String[]{tr("职业：全部","Class: all"),tr("战士","Ironclad"),tr("猎人","Silent"),tr("机器人","Defect"),tr("观者","Watcher")});
         String[] a=new String[22];a[0]=tr("进阶：全部","Ascension: all");for(int i=1;i<a.length;i++)a[i]="A"+(i-1);filters[1]=dropdown(a);
-        filters[2]=dropdown(new String[]{tr("结果：全部","Result: all"),tr("进行中","In progress"),tr("胜利","Victory"),tr("死亡","Death"),tr("未完成","Incomplete")});
-        filters[3]=dropdown(new String[]{tr("时间：全部","Date: all"),tr("近7天","Last 7 days"),tr("近30天","Last 30 days")});
+        filters[2]=dropdown(new String[]{tr("结果：全部","Result: all"),tr("进行中","In progress"),tr("胜利","Victory"),tr("死亡","Death"),tr("放弃","Abandoned"),tr("中断","Interrupted"),tr("未完成","Incomplete")});
+        setMonths();
         filters[4]=dropdown(new String[]{tr("分支：全部","Branches: all"),tr("仅SL","SL only")});
-        keyword.move(Settings.WIDTH*.31f,Settings.HEIGHT*.75f);clear.move(Settings.WIDTH*.70f,Settings.HEIGHT*.75f);refresh.move(Settings.WIDTH*.85f,Settings.HEIGHT*.75f);
-        for(int i=0;i<rows.length;i++){rows[i]=new Hitbox(Settings.WIDTH*.83f,Settings.HEIGHT*.063f);rows[i].move(Settings.WIDTH*.48f,Settings.HEIGHT*(.585f-i*.071f));}
+        filters[6]=dropdown(new String[]{tr("当前存档位：","Current save slot: ")+CardCrawlGame.saveSlot,tr("旧记录：存档未知","Legacy: slot unknown")});
+        keyword.move(Settings.WIDTH*.31f,Settings.HEIGHT*.68f);clear.move(Settings.WIDTH*.70f,Settings.HEIGHT*.68f);refresh.move(Settings.WIDTH*.85f,Settings.HEIGHT*.68f);
+        for(int i=0;i<rows.length;i++){rows[i]=new Hitbox(Settings.WIDTH*.83f,Settings.HEIGHT*.063f);rows[i].move(Settings.WIDTH*.48f,Settings.HEIGHT*(.535f-i*.068f));}
         prev.move(Settings.WIDTH*.33f,Settings.HEIGHT*.13f);next.move(Settings.WIDTH*.50f,Settings.HEIGHT*.13f);diagnostics.move(Settings.WIDTH*.67f,Settings.HEIGHT*.13f);replayButton.move(Settings.WIDTH*.84f,Settings.HEIGHT*.13f);
         bar=new ScrollBar(this,Settings.WIDTH*.95f,Settings.HEIGHT*.41f,Settings.HEIGHT*.42f);
     }
@@ -77,8 +80,9 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     static String cardName(String id){com.megacrit.cardcrawl.cards.AbstractCard c=CardLibrary.getCard(id);return c==null?id:c.name;}
     static String relicName(String id){com.megacrit.cardcrawl.relics.AbstractRelic r=RelicLibrary.getRelic(id);return r==null||!id.equals(r.relicId)?id:r.name;}
     static String className(String id){switch(id){case "IRONCLAD":return tr("战士","Ironclad");case "THE_SILENT":return tr("猎人","Silent");case "DEFECT":return tr("机器人","Defect");case "WATCHER":return tr("观者","Watcher");default:return id.equals("unknown")?tr("未知职业","Unknown class"):id;}}
-    String outcome(String id){switch(id){case "current":return tr("进行中","In progress");case "victory":return tr("胜利","Victory");case "death":return tr("死亡","Death");default:return tr("未完成","Incomplete");}}
-    void filter(){filtered=HistoryIndex.filter(index.runs,characters[selections[0]],selections[1]-1,outcomes[selections[2]],selections[3]==1?7:selections[3]==2?30:0,query,selections[4]==1,System.currentTimeMillis());offset=0;}
+    String outcome(String id){switch(id){case "current":return tr("进行中","In progress");case "victory":return tr("胜利","Victory");case "death":return tr("死亡","Death");case "abandon":return tr("放弃","Abandoned");case "interrupted":return tr("中断","Interrupted");default:return tr("未完成","Incomplete");}}
+    void setMonths(){Set<String> available=new TreeSet<>(Comparator.reverseOrder());SimpleDateFormat format=new SimpleDateFormat("yyyy-MM",Locale.ROOT);for(HistoryIndex.Summary s:index.runs)if(s.time>0)available.add(format.format(new Date(s.time)));months.clear();months.addAll(available);String[] from=new String[months.size()+1],to=new String[months.size()+1];from[0]=tr("起始月份：不限","From: any month");to[0]=tr("结束月份：不限","To: any month");for(int i=0;i<months.size();i++)from[i+1]=to[i+1]=months.get(i);filters[3]=dropdown(from);filters[5]=dropdown(to);selections[3]=selections[5]=0;}
+    void filter(){long from=StatsScreen.month(months,selections[3],false),to=StatsScreen.month(months,selections[5],true);filtered=HistoryIndex.filter(index.runs,characters[selections[0]],selections[1]-1,outcomes[selections[2]],0,query,selections[4]==1,System.currentTimeMillis(),selections[6]==0?Integer.valueOf(CardCrawlGame.saveSlot):null,from,to);offset=0;}
     DropdownMenu focusMenu;List<Integer> focusEvents=new ArrayList<>();
     @Override public void changedSelectionTo(DropdownMenu menu,int index,String option){
         if(menu==focusMenu){eventIndex=focusEvents.get(index);makeLines();return;}
@@ -91,7 +95,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     int controllerFocus;
     void controller(List<Hitbox> targets){if(!Settings.isControllerMode||targets.isEmpty())return;com.megacrit.cardcrawl.helpers.controller.CInputAction up=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.up,down=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.down,left=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.left,right=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.right;if(up.isJustPressed()||left.isJustPressed()){controllerFocus--;up.unpress();left.unpress();}else if(down.isJustPressed()||right.isJustPressed()){controllerFocus++;down.unpress();right.unpress();}else return;controllerFocus=Math.floorMod(controllerFocus,targets.size());com.megacrit.cardcrawl.helpers.controller.CInputHelper.setCursor(targets.get(controllerFocus));}
     void select(HistoryIndex.Summary s){
-        selected=s;detail=null;manifest=null;availableTurns.clear();turnMenu=null;turnSelection=0;events.clear();lines.clear();eventIndex=lineOffset=0;raw=false;expandedDeck=false;branchMenu=null;branchSelection=0;message=tr("正在读取此局…","Reading selected run…");
+        review.reset();selected=s;detail=null;manifest=null;availableTurns.clear();turnMenu=null;turnSelection=0;events.clear();lines.clear();eventIndex=lineOffset=0;raw=false;expandedDeck=false;branchMenu=null;branchSelection=0;message=tr("正在读取此局…","Reading selected run…");
         detailTask=io.submit(()->{
             JsonObject d=s.current&&live!=null&&s.id.equals(HistoryIndex.str(HistoryIndex.obj(live,"metadata"),"run_id"))?live:HistoryIndex.readDetail(s.file);
             try{
@@ -102,13 +106,29 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             return d;
         });
     }
+    void dismissMenus(){typing=false;TextInput.stopTextReceiver(this);for(DropdownMenu d:filters)d.isOpen=false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu))if(d!=null)d.isOpen=false;stats.dismissMenus();CardCrawlGame.isPopupOpen=oldPopup;consume();}
+    void footer(){prev.move(Settings.WIDTH*.33f,Settings.HEIGHT*.13f);next.move(Settings.WIDTH*.50f,Settings.HEIGHT*.13f);}
+    void showLatest(){dismissMenus();historyMode=true;HistoryIndex.Summary run=HistoryIndex.latest(index.runs,CardCrawlGame.saveSlot,Boolean.getBoolean("spireledger.fixture"));if(run!=null)select(run);else showHistory();}
+    void showHistory(){dismissMenus();currentRequested=false;historyMode=true;selected=null;detail=null;detailTask=null;manifest=null;raw=false;lineOffset=0;footer();}
+    void showStats(){dismissMenus();currentRequested=false;historyMode=false;footer();stats.rebuild();}
+    boolean navigate(){
+        if(!historyMode&&stats.openDropdown())return false;
+        if(historyMode){for(DropdownMenu d:filters)if(d.isOpen)return false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu))if(d!=null&&d.isOpen)return false;}
+        if(click(latestTab)){if(indexTask!=null)currentRequested=true;else showLatest();return true;}
+        if(click(historyTab)){showHistory();return true;}
+        if(click(home)){showStats();return true;}return false;
+    }
+    void navigation(SpriteBatch sb){HistoryIndex.Summary newest=HistoryIndex.latest(index.runs,CardCrawlGame.saveSlot,Boolean.getBoolean("spireledger.fixture"));boolean latest=historyMode&&selected!=null&&newest!=null&&selected.id.equals(newest.id);tab(sb,latestTab,tr("最近一局","Latest run"),latest);tab(sb,historyTab,tr("历史对局","Run history"),historyMode&&!latest);tab(sb,home,tr("个人统计","Statistics"),!historyMode);}
+    void tab(SpriteBatch sb,Hitbox hitbox,String label,boolean active){if(!active){button(sb,hitbox,label);return;}box(sb,hitbox,new Color(.27f,.24f,.15f,1));FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,label,hitbox.cX,hitbox.cY,Settings.GOLD_COLOR);}
+
     void update(){
 
-        if(indexTask!=null&&indexTask.isDone()){try{index=indexTask.get();for(HistoryIndex.Summary s:index.runs){StringBuilder names=new StringBuilder();for(String id:s.cardIds)names.append(' ').append(cardName(id));for(String id:s.relicIds)names.append(' ').append(relicName(id));s.localizedSearch=names.toString().toLowerCase(Locale.ROOT);}message="";filter();if(currentRequested){currentRequested=false;for(HistoryIndex.Summary r:index.runs)if(r.current){select(r);break;}}}catch(Exception e){message=tr("读取失败：","Read failed: ")+e.getClass().getSimpleName();}indexTask=null;}
+        if(indexTask!=null&&indexTask.isDone()){try{index=indexTask.get();for(HistoryIndex.Summary s:index.runs){StringBuilder names=new StringBuilder();for(String id:s.cardIds)names.append(' ').append(cardName(id));for(String id:s.relicIds)names.append(' ').append(relicName(id));s.localizedSearch=names.toString().toLowerCase(Locale.ROOT);}message="";setMonths();filter();if(currentRequested){currentRequested=false;showLatest();}}catch(Exception e){message=tr("读取失败：","Read failed: ")+e.getClass().getSimpleName();}indexTask=null;}
         if(detailTask!=null&&detailTask.isDone()){try{detail=detailTask.get();for(JsonElement e:HistoryIndex.array(detail,"records"))if(e.isJsonObject()){JsonObject o=e.getAsJsonObject();String t=HistoryIndex.str(o,"type");if(Arrays.asList("decision","build_change","load","floor","ending","coverage","turn_snapshot","turn_rollback").contains(t))events.add(o);}message="";prepareFloors();makeLines();}catch(Exception e){message=tr("此局文件无法读取：","Cannot read run: ")+e.getClass().getSimpleName();}detailTask=null;}
-        if(!historyMode){stats.update();return;}if(click(home)){historyMode=false;selected=null;stats.rebuild();consume();return;}
-        cancel.update();if(cancel.hb.clicked||InputHelper.pressedEscape){cancel.hb.clicked=false;if(selected!=null){selected=null;detail=null;detailTask=null;lineOffset=0;consume();}else close();return;}
-        if(selected==null){for(DropdownMenu d:filters)d.update();boolean dropdownOpen=false;for(DropdownMenu d:filters)dropdownOpen|=d.isOpen;if(dropdownOpen)return;List<Hitbox> controls=new ArrayList<>();for(DropdownMenu d:filters)controls.add(d.getHitbox());controls.addAll(Arrays.asList(keyword,clear,refresh));for(int i=0;i<rows.length&&offset+i<filtered.size();i++)controls.add(rows[i]);controls.addAll(Arrays.asList(prev,next,home,cancel.hb));controller(controls);
+        if(navigate())return;
+        if(!historyMode){stats.update();return;}
+        if(selected!=null&&!raw){if(click(review.back)||com.megacrit.cardcrawl.helpers.controller.CInputActionSet.cancel.isJustPressed())cancel.hb.clicked=true;}else cancel.update();if(cancel.hb.clicked||InputHelper.pressedEscape){cancel.hb.clicked=false;if(raw){raw=false;makeLines();consume();}else close();return;}
+        if(selected==null){for(DropdownMenu d:filters)d.update();boolean dropdownOpen=false;for(DropdownMenu d:filters)dropdownOpen|=d.isOpen;if(dropdownOpen)return;List<Hitbox> controls=new ArrayList<>();for(DropdownMenu d:filters)controls.add(d.getHitbox());controls.addAll(Arrays.asList(keyword,clear,refresh));for(int i=0;i<rows.length&&offset+i<filtered.size();i++)controls.add(rows[i]);controls.addAll(Arrays.asList(prev,next,latestTab,historyTab,home,cancel.hb));controller(controls);
             if(click(keyword)){typing=true;TextInput.startTextReceiver(this);}else if(InputHelper.justClickedLeft&&!keyword.hovered){typing=false;TextInput.stopTextReceiver(this);}
             if(click(clear))clear();if(click(refresh))refresh();
             for(int i=0;i<rows.length;i++)if(offset+i<filtered.size()&&click(rows[i])){select(filtered.get(offset+i));return;}
@@ -116,6 +136,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             if(InputHelper.scrolledDown)offset+=3;if(InputHelper.scrolledUp)offset-=3;
             offset=Math.max(0,Math.min(Math.max(0,filtered.size()-rows.length),offset));
         }else {
+            if(!raw){review.update();return;}
             if(focusMenu!=null){focusMenu.update();if(focusMenu.isOpen)return;}
             if(raw&&branchMenu!=null){branchMenu.update();if(branchMenu.isOpen)return;}
             if(turnMenu!=null){turnMenu.update();if(turnMenu.isOpen)return;}
@@ -123,13 +144,18 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             if(focusMenu!=null)controls.add(focusMenu.getHitbox());
             if(raw&&branchMenu!=null)controls.add(branchMenu.getHitbox());
             if(turnMenu!=null)controls.add(turnMenu.getHitbox());
-            controls.addAll(Arrays.asList(prev,next,diagnostics,replayButton,home,cancel.hb));
+            controls.addAll(Arrays.asList(prev,next,diagnostics,replayButton,latestTab,historyTab,home,cancel.hb));
             controller(controls);
             for(int i=0;i<sections.length;i++)if(click(sections[i])){if(i==0)expandedDeck=false;else if(i==1||i==3)expandedDeck=true;makeLines();lineOffset=sectionRows[i];}
             if(click(prev)&&floorIndex>0){floorIndex--;focusFloor();makeLines();}
             if(click(next)&&floorIndex+1<floorOrder.size()){floorIndex++;focusFloor();makeLines();}
             if(click(diagnostics)){raw=!raw;makeLines();}
-            if(!availableTurns.isEmpty()&&turnSelection<availableTurns.size()&&click(replayButton)){
+            if(!availableTurns.isEmpty()&&turnSelection<availableTurns.size()&&click(replayButton))replaySelected();
+            if(InputHelper.scrolledDown)lineOffset+=3;if(InputHelper.scrolledUp)lineOffset-=3;lineOffset=Math.max(0,Math.min(maxLineOffset(),lineOffset));
+        }
+        bar.update();bar.parentScrolledToPercent(selected==null?(filtered.size()<=6?0:(float)offset/(filtered.size()-6)):(maxLineOffset()==0?0:(float)lineOffset/maxLineOffset()));
+    }
+    void replaySelected(){
                 JsonObject targetTurn=availableTurns.get(turnSelection);
                 Path runDir=selected.file!=null?selected.file.getParent():StateMod.ROOT.resolve(selected.id);
                 if(ReplayLauncher.canReplayCurrent(targetTurn)){
@@ -151,10 +177,6 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
                         message=tr("启动练习失败：","Launch practice failed: ")+ex.getMessage();
                     }
                 }
-            }
-            if(InputHelper.scrolledDown)lineOffset+=3;if(InputHelper.scrolledUp)lineOffset-=3;lineOffset=Math.max(0,Math.min(maxLineOffset(),lineOffset));
-        }
-        bar.update();bar.parentScrolledToPercent(selected==null?(filtered.size()<=6?0:(float)offset/(filtered.size()-6)):(maxLineOffset()==0?0:(float)lineOffset/maxLineOffset()));
     }
     @Override public void scrolledUsingBar(float p){if(selected==null)offset=Math.round(p*Math.max(0,filtered.size()-6));else lineOffset=Math.round(p*maxLineOffset());}
     void text(SpriteBatch sb,String value,float x,float y,Color color){FontHelper.renderFontLeftTopAligned(sb,FontHelper.cardDescFont_N,value,x,y,color);}
@@ -162,15 +184,16 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void box(SpriteBatch sb,Hitbox h,Color color){sb.setColor(color);sb.draw(ImageMaster.WHITE_SQUARE_IMG,h.x,h.y,h.width,h.height);sb.setColor(Color.WHITE);}
     
     void render(SpriteBatch sb){
-        if(!historyMode){stats.render(sb);return;}
+        if(!historyMode){stats.render(sb);navigation(sb);return;}
         sb.setColor(new Color(.045f,.06f,.085f,1));sb.draw(ImageMaster.WHITE_SQUARE_IMG,0,0,Settings.WIDTH,Settings.HEIGHT);sb.setColor(Color.WHITE);
         FontHelper.renderFontLeftTopAligned(sb,FontHelper.buttonLabelFont,tr("尖塔账本","Spire Ledger"),Settings.WIDTH*.06f,Settings.HEIGHT*.95f,Settings.GOLD_COLOR);
+        if(selected!=null&&!raw){review.render(sb);navigation(sb);return;}
         if(selected==null){
             box(sb,keyword,typing?new Color(.21f,.26f,.32f,1):new Color(.12f,.16f,.20f,1));text(sb,fit(query.isEmpty()?tr("搜索种子 / 卡牌 / 遗物（名称或ID）","Search seed / card / relic name or ID"):query+(typing?" |":""),keyword.width-20*Settings.scale),keyword.x+10*Settings.scale,keyword.cY+10*Settings.scale,Settings.CREAM_COLOR);
             button(sb,clear,tr("清空筛选","Clear"));button(sb,refresh,tr("刷新","Refresh"));
-            text(sb,tr("匹配 ","Matches ")+filtered.size()+" / "+index.runs.size()+tr(" 局 · 最新在前 · 合并重复 "," runs · newest first · duplicates ")+index.duplicates+tr(" · 损坏 "," · unreadable ")+index.errors.size(),Settings.WIDTH*.06f,Settings.HEIGHT*.68f,Settings.GOLD_COLOR);
-            if(!message.isEmpty())text(sb,message,Settings.WIDTH*.06f,Settings.HEIGHT*.64f,Color.SALMON);
-            if(filtered.isEmpty())text(sb,index.runs.isEmpty()?tr("暂无记录。启用记录后正常打牌即可。","No records yet. Enable recording and play."):tr("没有匹配的对局。可清空筛选。","No matching runs. Clear filters to show all."),Settings.WIDTH*.06f,Settings.HEIGHT*.55f,Settings.CREAM_COLOR);
+            text(sb,tr("匹配 ","Matches ")+filtered.size()+tr(" 局 · 最新在前 · 合并重复 "," runs · newest first · duplicates ")+index.duplicates+tr(" · 损坏 "," · unreadable ")+index.errors.size(),Settings.WIDTH*.06f,Settings.HEIGHT*.61f,Settings.GOLD_COLOR);
+            if(!message.isEmpty())text(sb,message,Settings.WIDTH*.06f,Settings.HEIGHT*.585f,Color.SALMON);
+            if(filtered.isEmpty())text(sb,index.runs.isEmpty()?tr("暂无构筑记录；原版战绩可在个人统计中查看。","No Ledger records; native history is available in Personal statistics."):tr("没有匹配的对局。旧记录可选“存档未知”。","No matching runs. For legacy records, choose slot unknown."),Settings.WIDTH*.06f,Settings.HEIGHT*.55f,Settings.CREAM_COLOR);
             for(int i=0;i<rows.length&&offset+i<filtered.size();i++){
                 HistoryIndex.Summary r=filtered.get(offset+i);Hitbox h=rows[i];box(sb,h,h.hovered?new Color(.20f,.25f,.30f,1):new Color(.10f,.14f,.18f,1));
                 String date=r.time==0?tr("日期未知","Unknown date"):new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(r.time));float x=h.x+12*Settings.scale,y=h.y+h.height-7*Settings.scale,w=h.width-24*Settings.scale;
@@ -185,7 +208,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             button(sb,prev,tr("上一页","Previous"));button(sb,next,tr("下一页","Next"));
             text(sb,(filtered.isEmpty()?0:offset+1)+"–"+Math.min(filtered.size(),offset+6)+" / "+filtered.size(),Settings.WIDTH*.75f,Settings.HEIGHT*.13f,Settings.CREAM_COLOR);
             // Render dropdowns last so open rows cover, rather than overlap, the list.
-            float[] x={.06f,.28f,.43f,.62f,.80f};for(int i=0;i<filters.length;i++)filters[i].render(sb,Settings.WIDTH*x[i],Settings.HEIGHT*.84f);
+            float[] x={.06f,.28f,.48f,.06f,.72f,.32f,.60f};for(boolean open:new boolean[]{false,true})for(int i=0;i<filters.length;i++)if(filters[i].isOpen==open)filters[i].render(sb,Settings.WIDTH*x[i],Settings.HEIGHT*(i==3||i>=5?.77f:.84f));
             if(!index.errors.isEmpty())text(sb,fit(tr("无法读取：","Unreadable: ")+String.join("; ",index.errors),Settings.WIDTH*.70f),Settings.WIDTH*.24f,Settings.HEIGHT*.05f,Color.SALMON);
         }else{
             text(sb,className(selected.character)+" A"+selected.ascension+" · "+outcome(selected.outcome)+tr(" · 种子 "," · Seed ")+selected.seed,Settings.WIDTH*.06f,Settings.HEIGHT*.83f,Settings.GOLD_COLOR);
@@ -207,14 +230,14 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(selected!=null&&focusMenu!=null)focusMenu.render(sb,Settings.WIDTH*.06f,Settings.HEIGHT*.78f);
         if(raw&&selected!=null&&branchMenu!=null)branchMenu.render(sb,Settings.WIDTH*.64f,Settings.HEIGHT*.78f);
         if(selected!=null&&turnMenu!=null)turnMenu.render(sb,Settings.WIDTH*.45f,Settings.HEIGHT*.78f);
-        button(sb,home,tr("个人统计","Personal stats"));bar.render(sb);cancel.render(sb);
+        navigation(sb);bar.render(sb);cancel.render(sb);
     }
     void add(String value){add(value,Tone.NORMAL);}
     void add(String value,Tone tone){BitmapFont font=tone==Tone.HEADER?FontHelper.buttonLabelFont:FontHelper.cardDescFont_N;float scale=tone==Tone.HEADER?1:1.12f;for(String line:HistoryLayout.wrap(value,contentWidth(),t->measure(font,t,scale)))lines.add(new Row(line,"",tone,tone,false));}
     void pair(String left,String right,Tone l,Tone r){List<String> a=HistoryLayout.wrap(left,cellWidth(),t->measure(FontHelper.cardDescFont_N,t,1.12f)),b=HistoryLayout.wrap(right,cellWidth(),t->measure(FontHelper.cardDescFont_N,t,1.12f));for(int i=0;i<Math.max(a.size(),b.size());i++)lines.add(new Row(i<a.size()?a.get(i):"",i<b.size()?b.get(i):"",l,r,true));}
     void section(int tab,String name){sectionRows[tab]=lines.size();add(name,Tone.HEADER);}
     static String roomName(String id,boolean zh){String[][] rooms={{"MonsterRoom","普通战斗","Monster"},{"MonsterRoomElite","精英战斗","Elite"},{"MonsterRoomBoss","首领战斗","Boss"},{"EventRoom","事件","Event"},{"RestRoom","休息处","Rest site"},{"ShopRoom","商店","Shop"},{"TreasureRoom","宝箱","Treasure"},{"TreasureRoomBoss","首领宝箱","Boss treasure"},{"NeowRoom","涅奥","Neow"},{"VictoryRoom","胜利","Victory"},{"TrueVictoryRoom","心脏胜利","Heart victory"},{"EmptyRoom","空房间","Empty room"}};for(String[] r:rooms)if(r[0].equals(id))return zh?r[1]:r[2];return null;}
-    String friendly(String id){String room=roomName(id,zh());if(room!=null)return room;if(id.equals("interrupted"))return tr("中断","Interrupted");if(!zh())return id;switch(id){case "decision":return "选牌记录";case "build_change":return "构筑变化";case "load":return "读档";case "floor":return "楼层快照";case "ending":return "结局";case "coverage":return "记录范围";case "human":return "原版人类路径";case "known_automation":return "已知自动化";case "unknown":return "来源未核实";case "confirmed":return "已完成";case "pending":return "等待结算";case "conflict":return "记录冲突 · 不计完成";case "COMBAT_REWARD":return "战后奖励";case "COMBAT_SELECTION":return "战斗内选牌";case "NEOW":return "涅奥";case "EVENT":return "事件";case "OTHER":return "其他来源";case "settled":return "已结算";case "no_change_or_cancelled":return "未变化或已取消";case "victory":return "胜利";case "death":return "死亡";case "local_checkpoint_found":return "已关联本地保存点";default:return id.isEmpty()?tr("未知","Unknown"):id;}}
+    String friendly(String id){String room=roomName(id,zh());if(room!=null)return room;if(id.equals("interrupted"))return tr("中断","Interrupted");if(!zh())return id;switch(id){case "decision":return "选牌记录";case "build_change":return "构筑变化";case "load":return "读档";case "floor":return "楼层快照";case "ending":return "结局";case "coverage":return "记录范围";case "human":return "原版人类路径";case "known_automation":return "已知自动化";case "unknown":return "来源未核实";case "confirmed":return "已完成";case "pending":return "等待结算";case "conflict":return "记录冲突 · 不计完成";case "COMBAT_REWARD":return "战后奖励";case "COMBAT_SELECTION":return "战斗内选牌";case "NEOW":return "涅奥";case "EVENT":return "事件";case "OTHER":return "其他来源";case "settled":return "已结算";case "no_change_or_cancelled":return "未变化或已取消";case "victory":return "胜利";case "death":return "死亡";case "abandon":return "放弃";case "local_checkpoint_found":return "已关联本地保存点";default:return id.isEmpty()?tr("未知","Unknown"):id;}}
     String value(JsonObject o,String key){String v=HistoryIndex.str(o,key);return v.isEmpty()?"?":v;}
     String resources(JsonObject s){int occupied=0;for(JsonElement e:HistoryIndex.array(s,"potions"))if(e.isJsonObject()&&!"Potion Slot".equals(HistoryIndex.str(e.getAsJsonObject(),"id")))occupied++;return tr("生命 ","HP ")+value(s,"hp")+"/"+value(s,"max_hp")+tr("   金币 ","   Gold ")+value(s,"gold")+tr("   药水 ","   Potions ")+(s.has("potions")?occupied+" / "+HistoryIndex.array(s,"potions").size():"?");}
     String card(JsonObject c){String id=HistoryIndex.str(c,"id");String name=cardName(id);if(name.equals(id)&&!HistoryIndex.str(c,"name").isEmpty())name=HistoryIndex.str(c,"name");if(name.isEmpty())name=tr("卡牌身份缺失","Missing card identity");int u=HistoryIndex.num(c,"upgrades",0);if(u>0)name=name.replaceFirst("\\+\\d*$","")+"+"+u;else if(!c.has("upgrades"))name+=tr("（升级未知）"," (upgrade unknown)");List<String> values=new ArrayList<>();if(HistoryIndex.num(c,"misc",0)!=0)values.add(tr("永久值 ","Permanent ")+value(c,"misc"));for(String k:Arrays.asList("base_damage","base_block","base_magic"))if(HistoryIndex.num(c,k,-1)>0)values.add((k.equals("base_damage")?tr("伤害 ","Damage "):k.equals("base_block")?tr("格挡 ","Block "):tr("数值 ","Value "))+value(c,k));if(c.has("base_cost")){int cost=HistoryIndex.num(c,"base_cost",-2);if(cost>=0)values.add(tr("费用 ","Cost ")+cost);else if(cost==-1)values.add(tr("X费用","X cost"));}if(c.has("bottle_flame")||c.has("bottle_lightning")||c.has("bottle_tornado"))values.add(tr("瓶装","Bottled"));return name+(values.isEmpty()?"":" · "+String.join(" · ",values));}
@@ -302,13 +325,13 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             add(tr("回合重打：已就绪（","Turn practice: ready (")+availableTurns.size()+tr(" 个回合点）· "," snapshots) · ")+(canCurrent?tr("当前战斗可直接重打","in-combat restart"):tr("退出局可启动独立练习","launch isolated practice")),Tone.GOOD);
         }else if(manifest!=null){
             if(!restoreAllowed){
-                add(tr("回合重打：历史记录环境不受支持，无可恢复附件。","Turn practice: unsupported recording environment; restore unavailable."),Tone.MUTED);
+                add(tr("这局当时未保存回合快照，无法补录。更新后新战斗可在已验证的求解器与外观 Mod 组合中录制。","No turn snapshot was saved for this run; past turns cannot be reconstructed. Record a new battle with the reviewed solver and cosmetic mods."),Tone.WARN);
             }else{
                 add(tr("回合重打：本层无可恢复的回合快照。","Turn practice: no recoverable turn snapshot on this floor."),Tone.MUTED);
             }
             turnMenu=null;
         }else{
-            add(tr("回合重打：旧无快照记录，无可恢复附件。","Turn practice: older run without snapshot; no recoverable attachment."),Tone.MUTED);
+            add(tr("回合重打：此局没有快照附件。开启回合快照后，在支持的环境中进入新的玩家回合，再从此处选择回合点。","Turn practice: this run has no snapshots. Enable turn recording, enter a new player turn in a supported environment, then select a checkpoint here."),Tone.MUTED);
             turnMenu=null;
         }
         if(raw){add(tr("高级诊断 · 原始事件","Advanced diagnostics · original events"),Tone.HEADER);for(JsonObject e:events)if(floor(e)==selectedFloor)add(e.toString(),Tone.MUTED);}

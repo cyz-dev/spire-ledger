@@ -27,7 +27,6 @@ import java.util.*;
 /** Launcher and runtime manager for in-combat replay and isolated historical practice. */
 final class ReplayLauncher {
     // Attachments are keyed by snapshot schema, TurnAdapter.ID and save_state identity, not by our jar version.
-    private static final String ANY_VERSION="*";
     static String practiceTargetRunId = System.getProperty("spireledger.practiceRunId", "");
     static String practiceTargetSnapshotId = System.getProperty("spireledger.practiceSnapshotId", "");
     static boolean practiceInitialized = false;
@@ -37,10 +36,8 @@ final class ReplayLauncher {
         if(!runId.matches("[a-fA-F0-9-]{36}"))throw new IOException("Invalid run identity");
         JsonObject manifest=TurnFiles.read(runDir.resolve("replay/manifest.json"));
         if(!TurnFiles.SCHEMA.equals(Recorder.string(manifest,"schema"))||!runId.equals(Recorder.string(manifest,"run_id"))||!TurnAdapter.ID.equals(Recorder.string(manifest,"adapter"))||!manifest.has("restore_available")||!manifest.get("restore_available").getAsBoolean()||!"12-18-2022".equals(Recorder.string(manifest,"game_version")))throw new IOException("Unsupported or mismatched replay manifest");
-        Map<String,String> expectedMods=new HashMap<>();expectedMods.put("basemod","5.56.0");expectedMods.put("stslib","2.12.0");expectedMods.put("spire-ledger",ANY_VERSION);if(!"embedded-capture-only-1".equals(Recorder.string(manifest,"save_state")))throw new IOException("Missing embedded adapter identity");
-        JsonArray recordedMods=manifest.getAsJsonArray("mods");if(recordedMods==null)throw new IOException("Missing recording environment");
-        for(JsonElement item:recordedMods){JsonObject mod=item.getAsJsonObject();String id=Recorder.string(mod,"id");if(Boolean.getBoolean("spireledger.fixture")&&"spire-ledger-replay-probe".equals(id))continue;String version=expectedMods.remove(id);if(version==null||!(version==ANY_VERSION||version.equals(Recorder.string(mod,"version"))))throw new IOException("Unsupported recording mod: "+id);}
-        if(!expectedMods.isEmpty())throw new IOException("Incomplete recording dependencies");
+        if(!"embedded-capture-only-1".equals(Recorder.string(manifest,"save_state")))throw new IOException("Missing embedded adapter identity");
+        if(!ReplayEnvironment.accepts(manifest.getAsJsonArray("mods")))throw new IOException("Unsupported recording mods or versions");
         JsonObject selected=null;
         for(JsonElement item:manifest.getAsJsonArray("snapshots"))if(Recorder.string(ref,"snapshot_id").equals(Recorder.string(item.getAsJsonObject(),"snapshot_id"))){if(selected!=null)throw new IOException("Duplicate snapshot identity");selected=item.getAsJsonObject();}
         if(selected==null||!selected.equals(ref)||!"recorded".equals(Recorder.string(ref,"availability")))throw new IOException("Snapshot reference is not the published manifest entry");
@@ -88,7 +85,8 @@ final class ReplayLauncher {
         }
         Path runDir=snapshotPath.getParent().getParent().getParent();
         JsonObject snapshot = readTarget(runDir,runDir.getFileName().toString(),ref);
-        TurnAdapter.restore(snapshot);
+        SolverReplay.beforeRestore();
+        try{TurnAdapter.restore(snapshot);}finally{SolverReplay.afterRestore();}
         if (StateMod.recorder != null) {
             String parentBranch = Recorder.string(ref, "branch_id");
             JsonObject details = new JsonObject();
@@ -223,6 +221,8 @@ final class ReplayLauncher {
         Path baseModJar = findModJar("basemod");
         Path stslibJar = findModJar("stslib");
         Path stateNotesJar = findStateNotesJar();
+        Path speedModJar=null;
+        for(ModInfo mod:Loader.MODINFOS)if(StateMod.SPEED_MOD.equals(mod.ID))speedModJar=findModJar(StateMod.SPEED_MOD);
 
         Path turnFile = resolveTurnPath(runDir, Recorder.string(ref, "relative_path"));
         readTarget(runDir,summary.id,ref);
@@ -268,6 +268,15 @@ final class ReplayLauncher {
         Files.copy(baseModJar, instanceDir.resolve("mods/BaseMod.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stslibJar, instanceDir.resolve("mods/StSLib.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stateNotesJar, instanceDir.resolve("mods/SpireLedger.jar"), StandardCopyOption.REPLACE_EXISTING);
+        if(speedModJar!=null){
+            Files.copy(speedModJar,instanceDir.resolve("mods/SuperFastMode.jar"));
+            Path config=Paths.get(com.evacipated.cardcrawl.modthespire.lib.ConfigUtils.CONFIG_DIR,"SuperFastMode","SuperFastModeConfig.properties");
+            if(Files.isRegularFile(config)){
+                String os=System.getProperty("os.name","").toLowerCase(Locale.ROOT);
+                Path configRoot=instanceDir.resolve("home").resolve(os.contains("win")?"ModTheSpire":os.contains("mac")?"Library/Preferences/ModTheSpire":".config/ModTheSpire");
+                Path target=configRoot.resolve("SuperFastMode/SuperFastModeConfig.properties");Files.createDirectories(target.getParent());Files.copy(config,target);
+            }
+        }
 
         List<String> cmd = new ArrayList<>();
         cmd.add(jreJava.toString());
@@ -283,12 +292,13 @@ final class ReplayLauncher {
         cmd.add("--skip-launcher");
         cmd.add("--skip-intro");
         cmd.add("--mods");
-        cmd.add("basemod,stslib,spire-ledger");
+        cmd.add("basemod,stslib,spire-ledger"+(speedModJar==null?"":","+StateMod.SPEED_MOD));
         // A fixture observes the actual child launch; it never prepares the child's battle.
         if(Boolean.getBoolean("spireledger.fixture")&&Boolean.getBoolean("spireledger.launchPracticeProbe")){
             Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"));
             cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",spire-ledger-replay-probe");
             cmd.add(1,"-Dspireledger.fixture=true");cmd.add(1,"-Dspireledger.productionPractice=true");cmd.add(1,"-Dspireledger.replayMode=restore");
+            if(Boolean.getBoolean("spireledger.superFastModeProbe"))cmd.add(1,"-Dspireledger.superFastModeProbe=true");
             cmd.add(1,"-Dspireledger.replaySource="+System.getProperty("user.dir"));cmd.add(1,"-Dspireledger.replayCharacter="+System.getProperty("spireledger.replayCharacter","IRONCLAD"));cmd.add(1,"-Dspireledger.replayScenario="+System.getProperty("spireledger.replayScenario","ordinary"));
         }
 

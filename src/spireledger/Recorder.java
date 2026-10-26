@@ -11,7 +11,7 @@ import java.util.zip.*;
 
 /** JSON values only: never retain game objects or RNGs. Called on the game thread. */
 public final class Recorder implements AutoCloseable {
-    public static final String SCHEMA="spire-ledger-v1", VERSION="0.5.0-beta.1";
+    public static final String SCHEMA="spire-ledger-v1", VERSION="0.5.0-beta.2";
     // State Notes 0.4.0 wrote the same record shape under its old schema name; read it, never write it.
     static final String LEGACY_SCHEMA="sts1-state-v1";
     static boolean knownSchema(String schema){return SCHEMA.equals(schema)||LEGACY_SCHEMA.equals(schema);}

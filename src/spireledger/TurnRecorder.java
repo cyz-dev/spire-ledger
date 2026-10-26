@@ -31,7 +31,7 @@ final class TurnRecorder {
         } catch (Exception ignored) {}
         status = enabled ? "Turn recording ready" : "Turn recording off";
     }
-    static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}Map<String,String> required=new HashMap<>();required.put("basemod","5.56.0");required.put("stslib","2.12.0");if(Loader.MODINFOS==null)return false;for(ModInfo mod:Loader.MODINFOS){if("spire-ledger".equals(mod.ID))continue;if(Boolean.getBoolean("spireledger.fixture")&&"spire-ledger-replay-probe".equals(mod.ID))continue;String version=required.remove(mod.ID);if(version==null||!version.equals(String.valueOf(mod.ModVersion)))return false;}return required.isEmpty()&&"12-18-2022".equals(Loader.STS_VERSION);}
+    static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}return ReplayEnvironment.loaded();}
     static void battle(){if(restoringCombat)restoringCombat=false;else combatId=UUID.randomUUID().toString();lastKey="";}
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){

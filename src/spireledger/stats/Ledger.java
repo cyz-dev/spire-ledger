@@ -67,6 +67,7 @@ public final class Ledger {
         r.screens=Fact.of(screens,L);if(!actors.isEmpty())r.actor=Fact.of(actors.size()==1?actors.iterator().next():"mixed",L);
 
         if(ending==null){r.outcome=Fact.of("incomplete",L);return r;}
+        r.current=false;
         JsonObject state=obj(ending,"state");if(isArray(state,"deck")){Set<String> deck=new LinkedHashSet<>();for(JsonElement c:arr(state,"deck")){String id=c.isJsonObject()?str(c.getAsJsonObject(),"id"):"";if(!id.isEmpty())deck.add(id);}r.deck=Fact.of(deck,L);r.deckSize=Fact.amount(arr(state,"deck").size(),L);}
         Boolean victory=play==null?null:bool(play,"victory"),cleared=bool(ending,"act3_cleared");String end=str(ending,"outcome");
         r.heart=Fact.agree(Fact.of(bool(ending,"heart_kill"),L),Fact.of(play==null?null:bool(play,"heart_kill"),L));

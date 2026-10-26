@@ -51,10 +51,11 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     interface Action {void run()throws Exception;}
     static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status="Recording stopped: "+ex.getClass().getSimpleName()+" (see log)";System.err.println("[Spire Ledger] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[Spire Ledger] Last export failed; recover events.jsonl");}recorder=null;}}
     static boolean ready(){return enabled&&!failed&&!ReplaySafety.quarantined&&!CardCrawlGame.loadingSave&&CardCrawlGame.mode==CardCrawlGame.GameMode.GAMEPLAY&&AbstractDungeon.player!=null&&AbstractDungeon.player.masterDeck!=null&&AbstractDungeon.getCurrMapNode()!=null&&AbstractDungeon.getCurrMapNode().getRoom()!=null;}
-    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id);}
+    static final String SPEED_MOD="superfastmode",SPEED_VERSION="1.0.8";
+    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id)||SPEED_MOD.equals(id)&&SPEED_VERSION.equals(version);}
     static String actor(){
         if(automation!=null)return "known_automation";
-        // Only BaseMod + StSLib are supported; any other mod makes the action source unknown.
+        // Unreviewed mods leave the action source unknown, even on a native UI path.
         if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS)if(!reviewedMod(info.ID,String.valueOf(info.ModVersion)))return "unknown";
         // Direct mod calls cannot be identified as human actions. Only native UI commit call chains qualify.
         for(StackTraceElement f:Thread.currentThread().getStackTrace()){
@@ -73,7 +74,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         rewardKeys.clear();seen.clear();Snapshot.identities.clear();last=null;mutationBefore=null;lastFloor=-1;lastAct=-1;abandoning=false;
         JsonObject meta=new JsonObject();meta.addProperty("mod_version",Recorder.VERSION);meta.addProperty("game_version",CardCrawlGame.VERSION_NUM);meta.addProperty("seed",String.valueOf(Settings.seed));meta.addProperty("save_slot",CardCrawlGame.saveSlot);meta.add("play_id",JsonNull.INSTANCE);meta.addProperty("play_id_status","unknown_until_game_metrics");meta.addProperty("coverage",loadingExpected?"loaded_or_partial":"from_enable_or_start");meta.addProperty("privacy","local; no account, paths, audio, images or upload");meta.addProperty("checkpoint_attachments",false);
         JsonArray mods=new JsonArray();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){JsonObject mod=new JsonObject();mod.addProperty("id",info.ID);mod.addProperty("version",String.valueOf(info.ModVersion));mods.add(mod);}meta.add("mods",mods);
-        meta.addProperty("human_path_review","native UI; BaseMod + StSLib only; other mods unknown");
+        meta.addProperty("human_path_review","native UI; BaseMod + StSLib, optionally SuperFastMode 1.0.8; other mods unknown");
         if(Boolean.getBoolean("spireledger.practiceMode")){meta.addProperty("session_kind","practice");meta.addProperty("parent_run_id",ReplayLauncher.practiceTargetRunId);meta.addProperty("parent_snapshot_id",ReplayLauncher.practiceTargetSnapshotId);}
         if(Boolean.getBoolean("spireledger.fixture"))meta.addProperty("dataset_origin","test_fixture");
         String restore=loading==null?null:Recorder.string(loading,"run_id");
@@ -133,6 +134,31 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static void metricsStarted(Object metrics){if(!enabled||failed)return;safely(()->{if(ready())ensure();if(recorder!=null)metricsOwners.put(metrics,recorder);});}
     static void metricsFinished(Object metrics,boolean death,boolean heart){Recorder target=metricsOwners.remove(metrics);if(target==null)return;safely(()->{Object params=field(metrics,"params");Object value=((Map<?,?>)params).get("play_id");if(!(value instanceof String)||!((String)value).matches("[a-fA-F0-9-]{36}"))throw new IOException("Missing native metrics play_id");JsonObject e=Recorder.object("game_play_id");e.addProperty("play_id",(String)value);e.addProperty("source","original_metrics_disk_save");e.addProperty("victory",!death);e.addProperty("heart_kill",!death&&heart);target.append(e);target.export();});}
     static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);e.addProperty("outcome_basis","death_screen_cause");act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
+    /** Main-menu abandon uses only the checkpoint already read by vanilla, never a seed or most-recent guess. */
+    static boolean abandonSaved(Path root,JsonObject ref,int slot)throws IOException {
+        String id=HistoryIndex.str(ref,"run_id"),point=HistoryIndex.str(ref,"checkpoint_id"),branch=HistoryIndex.str(ref,"branch_id");
+        if(!id.matches("[a-fA-F0-9-]{36}")||point.isEmpty()||branch.isEmpty())return false;
+        Path dir=root.resolve(id);if(!Files.isDirectory(dir)||Files.isSymbolicLink(dir))return false;
+        if(!Files.isRegularFile(dir.resolve("events.jsonl")))return false;
+        JsonObject doc=HistoryIndex.journal(dir),meta=HistoryIndex.obj(doc,"metadata");
+        if(!id.equals(HistoryIndex.str(meta,"run_id"))||HistoryIndex.num(meta,"save_slot",-1)!=slot)return false;
+        JsonObject checkpoint=null;for(JsonElement x:HistoryIndex.array(doc,"records")){JsonObject e=x.getAsJsonObject();if("checkpoint".equals(HistoryIndex.str(e,"type"))&&point.equals(HistoryIndex.str(e,"checkpoint_id"))&&branch.equals(HistoryIndex.str(e,"branch_id")))checkpoint=e;}
+        if(checkpoint==null)return false;
+        try(Recorder target=new Recorder(root,meta,id)){
+            JsonObject state=HistoryIndex.obj(checkpoint,"state");target.resume(ref,state);
+            JsonObject end=Recorder.object("ending");end.addProperty("outcome","abandon");end.addProperty("outcome_basis","main_menu_saved_checkpoint");end.addProperty("effects_settled",false);end.add("state",state);target.append(end);target.export();
+        }return true;
+    }
+    static void abandonSaved(com.megacrit.cardcrawl.saveAndContinue.SaveFile save){
+        if(!enabled||failed||ReplaySafety.quarantined||save==null)return;
+        safely(()->{
+            Map<String,JsonElement> fields=basemod.patches.com.megacrit.cardcrawl.saveAndContinue.SaveFile.ModSaves.modSaves.get(save);
+            JsonElement value=fields==null?null:fields.get("spire-ledger:checkpoint");if(value==null||!value.isJsonObject())return;
+            JsonObject ref=value.getAsJsonObject();
+            if(recorder!=null&&recorder.runId.equals(Recorder.string(ref,"run_id"))){recorder.close();recorder=null;}
+            if(abandonSaved(ROOT,ref,CardCrawlGame.saveSlot))status="Archived abandon";
+        });
+    }
     @Override public void receiveStartGame(){startRequested=true;loadingExpected=loadingExpected||CardCrawlGame.loadingSave;}
     @Override public void onLoad(JsonObject data){loading=data;loadingExpected=true;startRequested=true;TurnRecorder.restoreCombat(data==null?new JsonObject():data);}
     @Override public JsonObject onSave(){

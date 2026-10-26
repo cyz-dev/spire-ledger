@@ -45,6 +45,10 @@ if($Check){
   if($LASTEXITCODE -ne 0){throw 'HistoryIndexCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.HistoryLayoutCheck
   if($LASTEXITCODE -ne 0){throw 'HistoryLayoutCheck failed'}
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.RunReviewCheck
+  if($LASTEXITCODE -ne 0){throw 'RunReviewCheck failed'}
+  & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.StatsDisplayCheck
+  if($LASTEXITCODE -ne 0){throw 'StatsDisplayCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.StatsCheck (Join-Path $out ('stats-checks-'+[Guid]::NewGuid().ToString('N'))) "$PSScriptRoot\src\spireledger\stats"
   if($LASTEXITCODE -ne 0){throw 'StatsCheck failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.SummaryCheck (Join-Path $out ('summary-checks-'+[Guid]::NewGuid().ToString('N'))) "$PSScriptRoot\samples"

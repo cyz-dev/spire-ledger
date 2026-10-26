@@ -1,0 +1,39 @@
+package spireledger;
+
+import com.evacipated.cardcrawl.modthespire.*;
+import com.google.gson.*;
+import java.util.*;
+
+/** One version contract for recording and reading turn attachments. */
+final class ReplayEnvironment {
+    static final Map<String,String> OPTIONAL;
+    static {
+        Map<String,String> mods=new LinkedHashMap<>();
+        mods.put("superfastmode","1.0.8");
+        mods.put("sts1solver","0.9.6");
+        mods.put("coloredmap","2.4.1");
+        mods.put("coloredpowertips","2.3.0");
+        mods.put("HighlightPath","0.0.3");
+        OPTIONAL=Collections.unmodifiableMap(mods);
+    }
+    static boolean accepts(JsonArray mods) {
+        if(mods==null)return false;
+        Map<String,String> remaining=new HashMap<>(OPTIONAL);
+        remaining.put("basemod","5.56.0");remaining.put("stslib","2.12.0");remaining.put("spire-ledger","*");
+        for(JsonElement item:mods){
+            if(!item.isJsonObject())return false;
+            JsonObject mod=item.getAsJsonObject();String id=Recorder.string(mod,"id");
+            if(Boolean.getBoolean("spireledger.fixture")&&"spire-ledger-replay-probe".equals(id))continue;
+            String version=remaining.remove(id);
+            if(version==null||!(version.equals("*")||version.equals(Recorder.string(mod,"version"))))return false;
+        }
+        for(String id:OPTIONAL.keySet())remaining.remove(id);
+        return remaining.isEmpty();
+    }
+    static boolean loaded() {
+        if(Loader.MODINFOS==null||!"12-18-2022".equals(Loader.STS_VERSION))return false;
+        JsonArray mods=new JsonArray();
+        for(ModInfo info:Loader.MODINFOS){JsonObject mod=new JsonObject();mod.addProperty("id",info.ID);mod.addProperty("version",String.valueOf(info.ModVersion));mods.add(mod);}
+        return accepts(mods);
+    }
+}

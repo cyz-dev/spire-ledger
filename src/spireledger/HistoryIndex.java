@@ -12,6 +12,7 @@ final class HistoryIndex {
     static final long MAX_BYTES=32L*1024*1024;
     static final class Summary {
         String playId="",sessionKind="",fileSignature="",lastBranch="";boolean conflict;String metadataSignature="";final Map<String,String> eventSignatures=new HashMap<>();Path file;String id,seed="",character="unknown",outcome="incomplete",search="";
+        Integer saveSlot;
         int ascension=-1,floor,picks,skips,bowls,changes,pending,unknown;
         long time;boolean fixture,current,summarized;int records;
         final Set<String> branches=new LinkedHashSet<>(),cardIds=new HashSet<>(),relicIds=new HashSet<>(),names=new HashSet<>();
@@ -29,7 +30,7 @@ final class HistoryIndex {
     }
     static final class Builder {
         final Summary s=new Summary();final Map<String,JsonObject> decisions=new LinkedHashMap<>(),results=new HashMap<>();final Map<String,String> signatures=new HashMap<>();final Set<String> conflicts=new HashSet<>();int count;String lastBranch="";final Map<String,String> endings=new HashMap<>();
-        void metadata(JsonObject m){s.metadataSignature=signature(m);s.id=str(m,"run_id");s.seed=str(m,"seed");s.fixture="test_fixture".equals(str(m,"dataset_origin"));s.playId=str(m,"play_id");s.sessionKind=str(m,"session_kind");}
+        void metadata(JsonObject m){s.metadataSignature=signature(m);int slot=num(m,"save_slot",-1);s.saveSlot=slot<0?null:slot;s.id=str(m,"run_id");s.seed=str(m,"seed");s.fixture="test_fixture".equals(str(m,"dataset_origin"));s.playId=str(m,"play_id");s.sessionKind=str(m,"session_kind");}
         void event(JsonObject e){
             if(++count>50000)throw new IllegalArgumentException("too many records");String eventKey=e.has("seq")?str(e,"seq"):String.valueOf(count),sig=sig(e);String previous=s.eventSignatures.putIfAbsent(eventKey,sig);if(previous!=null&&!previous.equals(sig))s.conflict=true;
             try{s.time=Math.max(s.time,e.has("time_ms")?e.get("time_ms").getAsLong():0);}catch(Exception ignored){}
@@ -39,12 +40,12 @@ final class HistoryIndex {
             String type=str(e,"type"),id=str(e,"decision_id");if(type.equals("game_play_id")&&!str(e,"play_id").isEmpty())s.playId=str(e,"play_id");
             if(type.equals("decision")||type.equals("result")){Map<String,JsonObject> map=type.equals("decision")?decisions:results;String signature=sig,key=type+":"+id;String prior=signatures.putIfAbsent(key,signature);if(prior!=null&&!prior.equals(signature))conflicts.add(id);if(prior==null){JsonObject small=new JsonObject();for(String k:Arrays.asList("action_source","candidate_id","status"))if(e.has(k))small.add(k,e.get(k));if(type.equals("decision")){JsonArray candidates=new JsonArray();for(JsonElement c:array(e,"candidates")){JsonObject candidate=new JsonObject();for(String k:Arrays.asList("candidate_id","type"))if(c.isJsonObject()&&c.getAsJsonObject().has(k))candidate.add(k,c.getAsJsonObject().get(k));candidates.add(candidate);}small.add("candidates",candidates);}map.put(id,small);}}
             if(type.equals("build_change")&&"settled".equals(str(e,"status")))s.changes++;
-            if(type.equals("ending")){String outcome=str(e,"outcome");endings.put(b,outcome.equals("victory")?"victory":outcome.equals("death")?"death":"incomplete");}
+            if(type.equals("ending")){String outcome=str(e,"outcome");endings.put(b,outcome.equals("victory")?"victory":outcome.equals("death")?"death":outcome.equals("abandon")?"abandon":"incomplete");}
         }
         Summary finish(boolean current){
             if(s.id==null||s.id.isEmpty())throw new IllegalArgumentException("missing run_id");
             s.lastBranch=lastBranch;s.records=count;
-            s.conflict|=!conflicts.isEmpty();s.current=current;s.outcome=endings.containsKey(lastBranch)?endings.get(lastBranch):current?"current":"incomplete";
+            s.conflict|=!conflicts.isEmpty();s.current=current;s.outcome=endings.containsKey(lastBranch)?endings.get(lastBranch):current?"current":"interrupted";
             for(Map.Entry<String,JsonObject> item:decisions.entrySet()){
                 JsonObject d=item.getValue(),r=results.get(item.getKey());
                 if(!"human".equals(str(d,"action_source")))s.unknown++;
@@ -105,9 +106,21 @@ final class HistoryIndex {
         if(live!=null){Summary s=summarize(live,true);Summary old=byId.put(s.id,s);if(old!=null){s.file=old.file;s.conflict|=old.conflict;}}
         index.runs.addAll(byId.values());index.runs.sort(Comparator.comparingLong((Summary s)->s.time).reversed().thenComparing(s->s.id));return index;
     }
+    static Summary latest(List<Summary> runs,int slot,boolean fixtures){
+        Summary newest=null,current=null;
+        for(Summary run:runs){
+            if(!Objects.equals(run.saveSlot,slot)||run.conflict||run.fixture&&!fixtures||"practice".equals(run.sessionKind))continue;
+            if(newest==null||run.time>newest.time)newest=run;
+            if(run.current&&"current".equals(run.outcome)&&(current==null||run.time>current.time))current=run;
+        }
+        return current!=null?current:newest;
+    }
     static List<Summary> filter(List<Summary> runs,String character,int ascension,String outcome,int days,String query,boolean sl,long now){
         List<Summary> out=new ArrayList<>();String q=query.trim().toLowerCase(Locale.ROOT);
         for(Summary s:runs)if((character.isEmpty()||s.character.equals(character))&&(ascension<0||s.ascension==ascension)&&(outcome.isEmpty()||s.outcome.equals(outcome))&&(days==0||(s.time>0&&s.time>=now-days*86400000L))&&(!sl||s.branches.size()>1)&&(q.isEmpty()||s.search.contains(q)||s.localizedSearch.contains(q)))out.add(s);return out;
+    }
+    static List<Summary> filter(List<Summary> runs,String character,int ascension,String outcome,int days,String query,boolean sl,long now,Integer slot,long from,long to){
+        List<Summary> out=new ArrayList<>();for(Summary s:filter(runs,character,ascension,outcome,days,query,sl,now))if(Objects.equals(s.saveSlot,slot)&&(from==0||s.time>=from)&&(to==0||s.time<to))out.add(s);return out;
     }
     static JsonObject readDetail(Path file)throws IOException {JsonObject o=document(file);summarize(o,false);return o;}
 }

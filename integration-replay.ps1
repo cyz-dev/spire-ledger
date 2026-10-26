@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless,[switch]$SuperFastMode,[switch]$SolverCombination)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -11,6 +11,21 @@ if(-not(Test-Path "$instance\desktop-1.0.jar")){Copy-Item "$Game\desktop-1.0.jar
 Copy-Item "$workshop\1605060445\ModTheSpire.jar" $instance
 Copy-Item "$workshop\1605833019\BaseMod.jar" "$instance\mods"
 Copy-Item "$workshop\1609158507\StSLib.jar" "$instance\mods"
+$mods='basemod,stslib,spire-ledger,spire-ledger-replay-probe'
+if($SuperFastMode){
+ Copy-Item "$Game\mods\SuperFastMode.jar" "$instance\mods"
+ $mods+=',superfastmode'
+ # ConfigUtils uses LOCALAPPDATA on Windows and user.home/.config on Linux.
+ foreach($configRoot in @("$instance\home\ModTheSpire","$instance\home\.config\ModTheSpire")){
+  New-Item -ItemType Directory -Force "$configRoot\SuperFastMode" | Out-Null
+  [IO.File]::WriteAllText("$configRoot\SuperFastMode\SuperFastModeConfig.properties","EXISTS=YES INDEED I EXIST`nisDeltaMultiplied=true`nisInstantLerp=true`ndeltaMultiplier=10.0`n",$utf8)
+ }
+}
+if($SolverCombination){
+ foreach($relative in @('3814773843/STS1CombatSolver.jar','1611666859/ColoredMap.jar','1748973286/coloredPowertips.jar','1611047977/HighlightPath.jar')){Copy-Item (Join-Path $workshop $relative) "$instance/mods"}
+ if(-not(Test-Path "$instance/mods/sts1-solver-runtime")){Copy-Item "$workshop/3814773843/sts1-solver-runtime" "$instance/mods/sts1-solver-runtime" -Recurse}
+ $mods+=',sts1solver,coloredmap,coloredpowertips,HighlightPath'
+}
 if($Mode -eq "restore"){
     if(-not $Source){throw "Restore source required"}
     $Source=(Resolve-Path (Resolve-RunPath $Source)).Path
@@ -30,7 +45,9 @@ $oldApp=$env:APPDATA;$oldLocal=$env:LOCALAPPDATA;$oldTemp=$env:TEMP;$oldTmp=$env
 try {
  $env:APPDATA="$instance\home";$env:LOCALAPPDATA="$instance\home";$env:TEMP="$instance\temp";$env:TMP="$instance\temp"
  $args=@(("-Dspireledger.diagnosticProbe="+$Diagnostic.ToString().ToLowerInvariant()),("-Dspireledger.replayCurrentProbe="+$ReplayCurrent.ToString().ToLowerInvariant()),("-Dspireledger.replayFailure="+$Failure),("-Dspireledger.launchPracticeProbe="+$LaunchPractice.ToString().ToLowerInvariant()),("-Dspireledger.productionRestore="+$ProductionRestore.ToString().ToLowerInvariant()),("-Dspireledger.productionPractice="+$ProductionPractice.ToString().ToLowerInvariant()),("-Dspireledger.practiceMode="+$ProductionPractice.ToString().ToLowerInvariant()),("-Dspireledger.practiceRunId="+$PracticeRunId),("-Dspireledger.practiceSnapshotId="+$PracticeSnapshotId),("-Dspireledger.experimentalTurns="+$ExperimentalTurns.ToString().ToLowerInvariant()),("-Dspireledger.replayNoCapture="+$NoCapture.ToString().ToLowerInvariant()),("-Dspireledger.replayCharacter="+$Character),("-Dspireledger.replayScenario="+$Scenario),('-Dspireledger.replayRepair='+$Repair.ToString().ToLowerInvariant()),('-Dspireledger.replayMode='+$Mode),('"-Dspireledger.replaySource='+$Source+'"'),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true')
- $proc=Start-Probe $Game $instance $args 'basemod,stslib,spire-ledger,spire-ledger-replay-probe' -Headless:$Headless
+ $args+=('-Dspireledger.superFastModeProbe='+$SuperFastMode.ToString().ToLowerInvariant())
+ $args+=('-Dspireledger.solverCombinationProbe='+$SolverCombination.ToString().ToLowerInvariant())
+ $proc=Start-Probe $Game $instance $args $mods -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\replay-probe-result.json"
  if($WaitForExit){

@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-history-ui-01',[string]$Language="ZHS",[int]$Width=1024,[int]$Height=768,[switch]$RealLayout,[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-history-ui-01',[string]$Language="ZHS",[int]$Width=1024,[int]$Height=768,[switch]$RealLayout,[switch]$ReviewLayout,[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -12,14 +12,19 @@ Copy-Item "$workshop\1605060445\ModTheSpire.jar" $instance
 Copy-Item "$workshop\1605833019\BaseMod.jar" "$instance\mods"
 Copy-Item "$workshop\1609158507\StSLib.jar" "$instance\mods"
 Copy-Item "$PSScriptRoot\build\SpireLedger.jar" "$instance\mods"
+$probe=if($ReviewLayout){'NativeRunReviewProbe'}else{'NativeStatsUIProbe'}
 $cp="$instance\desktop-1.0.jar;$instance\ModTheSpire.jar;$instance\mods\*"
-& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp $cp -d "$instance\probe-classes" "$PSScriptRoot\test\NativeStatsUIProbe.java"
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp $cp -d "$instance\probe-classes" "$PSScriptRoot\test\$probe.java"
 if($LASTEXITCODE -ne 0){throw 'NativeStatsUIProbe compile failed'}
 [IO.File]::WriteAllText("$instance\probe-classes\ModTheSpire.json",'{"modid":"spire-ledger-stats-ui-probe","name":"Isolated Native State Probe","version":"0.1.0","dependencies":["spire-ledger"]}',$utf8)
 & jar cf "$instance\mods\NativeStatsUIProbe.jar" -C "$instance\probe-classes" .
 if($LASTEXITCODE -ne 0){throw 'NativeStatsUIProbe package failed'}
 $latestClasses=(Get-ChildItem "$PSScriptRoot\build" -Directory -Filter 'classes-*' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
-if($RealLayout){
+if($ReviewLayout){
+ $id='70b4245f-a0f9-4dd5-9a9a-842629f65886'
+ New-Item -ItemType Directory -Force "$instance/home/.spire-ledger/runs/$id" | Out-Null
+ Copy-Item "$env:USERPROFILE/.spire-ledger/runs/$id/run.json" "$instance/home/.spire-ledger/runs/$id/run.json"
+}elseif($RealLayout){
  foreach($id in @('4de578be-7284-4ec2-91a7-f74560884b40','9461ba2f-6745-4a92-96eb-64df4d940359','bce8e324-e786-41c4-b1db-a79b63e9f83b')){
   New-Item -ItemType Directory -Force "$instance/home/.spire-ledger/runs/$id" | Out-Null
   Copy-Item (Join-Path (Resolve-RunPath "state-notes-player-review-20261009") "$id/run.json") "$instance/home/.spire-ledger/runs/$id/run.json"
@@ -37,7 +42,7 @@ if($PrepareOnly){Write-Output "Prepared isolated instance: $instance";return}
 $oldApp=$env:APPDATA;$oldLocal=$env:LOCALAPPDATA;$oldTemp=$env:TEMP;$oldTmp=$env:TMP
 try {
  $env:APPDATA="$instance\home";$env:LOCALAPPDATA="$instance\home";$env:TEMP="$instance\temp";$env:TMP="$instance\temp"
- $args=@(('-Dspireledger.realLayout='+$RealLayout.ToString().ToLowerInvariant()),('-Dspireledger.uiLanguage='+$Language),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true')
+ $args=@(('-Dspireledger.realLayout='+($RealLayout -or $ReviewLayout).ToString().ToLowerInvariant()),('-Dspireledger.uiLanguage='+$Language),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true')
  $proc=Start-Probe $Game $instance $args 'basemod,stslib,spire-ledger,spire-ledger-stats-ui-probe' -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\ui-probe-result.json"

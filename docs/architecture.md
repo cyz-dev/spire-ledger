@@ -20,7 +20,8 @@ Product spec: [product.md](product.md)
 - 只有 `record` 写局内事实；派生数字不落盘（导出文件除外）。每局摘要是记录事实的投影，不含任何计算出的指标；它带指向源记录的有效性标记，过期或缺失时从源记录重建，不被信任为真值。
 - 打开统计或复盘不改变局内状态、不推进 RNG。
 - 读取方不能阻断写入：Windows 上读句柄会让原子替换失败，写入必须对此有界重试，失败不得停掉整局记录。
-- 已审核的同装 Mod：BaseMod、StSLib、求解器 `sts1solver`。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器加载时 `replay` 关闭。其他 Mod 一律记 `unknown`。
+- 已审核的同装 Mod：BaseMod、StSLib、SuperFastMode 1.0.8、求解器 `sts1solver`。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器 0.9.6 同装时支持重打，回退前清空旧结果并停止自动操作。其他未审核 Mod 一律记 `unknown`。
+- SuperFastMode 1.0.8 为可选的已审核加速 Mod。记录与回合附件读取均接受它；练习子进程复制已加载的 jar 及 `SuperFastModeConfig.properties`。快照不保存插值或速度设置，沿用现有动作队列稳定边界。人工操作仍须经过原生 UI 提交路径。
 
 ### 构建档
 
@@ -78,3 +79,15 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 - 已决定（2026-10-25）：State Notes 旧记录留在 `~/.sts1-state-notes/` 原地只读，新 Mod 同时读旧 schema `sts1-state-v1`；跨项目一侧，SlaySpire1RL `tools/state_runs/import_run.py` 同时接受两个 schema 名（SlaySpire1RL 3d1002a）。每局摘要是统计索引的内部机制，见 M1。
 - 是否保留 State Notes 的 Git 历史迁入（历史中含内部证据路径与记录，影响日后公开）。blocks: M0。
+
+### 楼层悬停复盘与求解器同装（2026-10-26）
+
+`HistoryScreen` 继续负责异步读取、分支选择和重打入口。`RunReviewModel` 只把所选路径的 JSON 投影成楼层与牌组，不读取游戏对象；`RunReview` 负责路线、悬停和固定详情，其状态在切换对局时重置。界面只读取卡牌和遗物库已有纹理，不构造或升级卡牌，不调用游戏随机数。
+
+`ReplayEnvironment` 统一录制与附件读取的依赖版本边界。`SolverReplay` 在复盘打开时暂停求解器更新并隐藏其面板；当前战斗回退前通过求解器自身取消入口使旧回复失效、清空旧路线并停止自动操作。恢复或回滚后同步求解器的玩家引用，防止换成恢复后的玩家对象时重新开启自动执行。独立练习仍使用基础依赖和可选 SuperFastMode，正式局的求解器不被带进练习。
+
+### 默认最近一局与抓率图（2026-10-26）
+
+导航状态由 `HistoryScreen` 统一管理。首次索引完成后，只在当前存档位选择最近记录，优先当前局；用户主动切到历史或统计后，异步索引不得把页面拉回去。三个顶部入口随时可达，关闭直接回到游戏。统计保留筛选，详细诊断的返回只收起诊断。
+
+`stats.PickTiers` 只对现有 `Metrics` 的 `pick:<act>:<card>` 指标分档，不重复计算抓率。`PickRateChart` 使用同一份指标条目渲染预览和离屏 PNG；只读游戏已有卡图，不构造卡牌或调用 RNG。导出由玩家点击触发，输出到 `~/.spire-ledger/exports/` 的新目录，包含 PNG 和 `metadata.json`。每页最多 18 行，失败清理本次新建产物并恢复渲染状态。既有导出不覆盖，源记录不变。

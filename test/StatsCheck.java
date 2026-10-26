@@ -41,6 +41,7 @@ public final class StatsCheck {
  static String dump(Stats.Index index,Stats.Filter f){Stats.Selection s=Stats.select(index,f,100000);return new Gson().toJson(new TreeMap<>(Metrics.compute(s,f)))+ids(s)+s.excluded;}
 
  public static void main(String[] args)throws Exception{
+  liveEndings();
   Path root=Paths.get(args[0]),src=Paths.get(args[1]);
   oldAssertions(root);gapsAndCombinations();export();boundary(src);
   System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, save slot sources, TinyCat export, Gson-only stats package");
@@ -178,6 +179,13 @@ public final class StatsCheck {
  }
 
  /** architecture.md: stats reads only the record schema; the build also compiles it alone against Gson. */
+ static void liveEndings(){
+  for(String outcome:Arrays.asList("victory","death","abandon")){
+   JsonObject d=doc(Recorder.SCHEMA,"live-"+outcome,null);JsonObject end=ending(outcome,2,20,false,false);end.addProperty("outcome_basis","death_screen_cause");add(records(d),end,"a",1);
+   Stats.Filter f=new Stats.Filter();f.includeAbandon=true;Stats.Index index=Stats.build(Collections.emptyList(),Arrays.asList(new Ledger(d,true,false)));check(!index.runs.get(0).current&&Stats.select(index,f,100000).runs.size()==1,"live "+outcome+" counts immediately");
+   JsonObject load=Recorder.object("load");add(records(d),load,"b",2);Stats.Index resumed=Stats.build(Collections.emptyList(),Arrays.asList(new Ledger(d,true,false)));check(resumed.runs.get(0).current&&Stats.select(resumed,f,100000).runs.isEmpty(),"new live branch after "+outcome+" still excluded");
+  }
+ }
  static JsonObject row(JsonObject doc,String metric,String scope,String dims){for(JsonElement e:doc.getAsJsonArray("rows")){JsonObject r=e.getAsJsonObject();if(r.get("metric").getAsString().equals(metric)&&r.get("scope").getAsString().equals(scope)&&r.get("dims").toString().equals(dims))return r;}throw new AssertionError("no row "+metric+" "+scope+" "+dims);}
  static boolean nul(JsonObject r,String k){return r.get(k)==null||r.get(k).isJsonNull();}
  /** TinyCat parity export (tools/tinycat-compare README 2): exact filters, slot by directory, per-act counts, missing as null. */
