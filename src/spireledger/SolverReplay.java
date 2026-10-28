@@ -4,8 +4,17 @@ import com.evacipated.cardcrawl.modthespire.Loader;
 import com.evacipated.cardcrawl.modthespire.lib.*;
 import java.lang.reflect.Method;
 
-/** Solver 0.9.6 owns its queues; invalidate its old plan before changing a battle. */
+/** The solver (0.9.6 on) owns its queues; invalidate its old plan before changing a battle. Replay contract v1: architecture.md. */
 public final class SolverReplay {
+    static Boolean contract;
+    /** Every solver member this class drives or patches; a release that renames one is not a supported replay environment. */
+    static synchronized boolean contract(){
+        if(contract==null)try{Class<?> type=Class.forName("sts1solver.SolverMod");
+            type.getField("instance");type.getDeclaredMethod("cancel",boolean.class);type.getDeclaredMethod("stopAll");type.getDeclaredField("runAutoPlayer");
+            type.getDeclaredMethod("receivePostUpdate");type.getDeclaredMethod("receivePostRender",com.badlogic.gdx.graphics.g2d.SpriteBatch.class);contract=true;
+        }catch(ReflectiveOperationException|LinkageError ex){System.err.println("[Spire Ledger] Solver replay contract missing: "+ex);contract=false;}
+        return contract;
+    }
     static void beforeRestore() throws Exception {
         if(!Loader.isModLoaded("sts1solver"))return;
         Class<?> type=Class.forName("sts1solver.SolverMod");Object solver=type.getField("instance").get(null);
