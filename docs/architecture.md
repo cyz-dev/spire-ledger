@@ -91,3 +91,11 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 导航状态由 `HistoryScreen` 统一管理。首次索引完成后，只在当前存档位选择最近记录，优先当前局；用户主动切到历史或统计后，异步索引不得把页面拉回去。三个顶部入口随时可达，关闭直接回到游戏。统计保留筛选，详细诊断的返回只收起诊断。
 
 `stats.PickTiers` 只对现有 `Metrics` 的 `pick:<act>:<card>` 指标分档，不重复计算抓率。`PickRateChart` 使用同一份指标条目渲染预览和离屏 PNG；只读游戏已有卡图，不构造卡牌或调用 RNG。导出由玩家点击触发，输出到 `~/.spire-ledger/exports/` 的新目录，包含 PNG 和 `metadata.json`。每页最多 18 行，失败清理本次新建产物并恢复渲染状态。既有导出不覆盖，源记录不变。
+
+### 标准化率与四类长图（2026-10-29）
+
+`stats.Standardized` 负责卡牌、涅奥和 Boss 遗物的 Plackett-Luce 点估计（`standardized-v1`）：选择集、先验和 MM 迭代与 TinyCat 对齐，`SKIP` 只作对手。`stats.Campfire` 从原版 `.run` 逐层重放牌组，恢复每次火堆的候选池与遗物可用性，输出 `Run.Campfire`；`Metrics.campfires()` 按幕聚合成行动次数、候选池、睡觉和 `campfire_pref` 标准化倍（`campfire-v1`）。`Metrics` 另新增 `score` 与三类删牌均值，`Metric` 保存平方和用于区间。
+
+`StatsScreen` 用 `chartKind`、`rateMenu`、`chartCampfireRate` 三个下拉切换四类内容和两种口径；总览的 `interval()` 对胜率用 Wilson、对五个均值用 ±1.96 SE。`PickRateChart` 的导出按内容写长图：卡牌 `act-N[-standardized].png`，其余 `<kind>[-standardized].png`；`writeTiled` 把超过 GPU 纹理上限的图按 4096px 高的带渲染到同一 `Pixmap`，再写单个 PNG，避免火堆标准率（约 16500px）被截断。导出目录、`metadata.json` 和失败清理沿用旧路径，不覆盖既有导出。
+
+`Stats.readNative` 先严格 UTF-8、再 GBK、最后系统默认解码原版 `.run`，并去掉 BOM；与 TinyCat 在中文 Windows 上的读取方式一致。

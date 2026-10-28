@@ -14,6 +14,10 @@ final class ReplayEnvironment {
         mods.put("coloredmap","2.4.1");
         mods.put("coloredpowertips","2.3.0");
         mods.put("HighlightPath","0.0.3");
+        mods.put("RunHistoryPlus","1.8.3");
+        mods.put("HideInfo","0.0.1");
+        mods.put("justclick","0.1.1");
+        mods.put("lolifontmod","0.2");
         OPTIONAL=Collections.unmodifiableMap(mods);
     }
     static boolean accepts(JsonArray mods) {

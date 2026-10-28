@@ -17,14 +17,27 @@ public final class Run implements Cloneable {
     /** One boss relic screen; SKIP is a candidate like any relic (metrics.md 6.3). */
     public static final class BossOffer {
         public final Set<String> offered;public final String picked;
-        BossOffer(Set<String> offered,String picked){this.offered=offered;this.picked=picked;}
+        public BossOffer(Set<String> offered,String picked){this.offered=offered;this.picked=picked;}
+    }
+    /** One rest site: the chosen action, every unupgraded card kind that was on the smith screen, and the competitor pool the multiple divides by. */
+    public static final class Campfire {
+        public final int act,floor,pool,available;public final String key,target;public final boolean rest,smith,recall,purge,lift,dig,smithUsable,forcedRecall;
+        /** Card kinds with an unupgraded copy when the site opened; empty when Fusion Hammer or no upgradable card disabled smith. */
+        public final List<String> candidates;
+        public Campfire(int act,int floor,String key,String target,List<String> candidates,int pool,boolean rest,boolean smith,boolean recall,boolean purge,boolean lift,boolean dig,boolean smithUsable,boolean forcedRecall){
+            this.act=act;this.floor=floor;this.key=key;this.target=target;this.candidates=candidates;this.pool=pool;this.rest=rest;this.smith=smith;this.recall=recall;this.purge=purge;this.lift=lift;this.dig=dig;
+            this.smithUsable=smithUsable;this.forcedRecall=forcedRecall;
+            available=(rest?1:0)+(smith?1:0)+(recall?1:0)+(purge?1:0)+(lift?1:0)+(dig?1:0);}
+        public boolean had(String option){switch(option){case "REST":return rest;case "SMITH":return smith;case "RECALL":return recall;case "PURGE":return purge;case "LIFT":return lift;case "DIG":return dig;default:return false;}}
     }
 
     public String id="",playId="",runId="",conflictReason="",nativeFile="";public boolean fixture,practice,current,conflict,sl,unresolvedPath;
     public final Set<String> sources=new TreeSet<>();
     public Fact<String> character=Fact.missing(""),seed=Fact.missing(""),outcome=Fact.missing(""),killedBy=Fact.missing(""),neow=Fact.missing(""),actor=Fact.missing("");
     public Fact<Integer> ascension=Fact.missing(""),slot=Fact.missing(""),floorReached=Fact.missing(""),maxAct=Fact.missing(""),neowHp=Fact.missing(""),deckSize=Fact.missing("");
-    public Fact<Long> time=Fact.missing("");public Fact<Double> playtime=Fact.missing(""),gold=Fact.missing("");
+    public Fact<Long> time=Fact.missing("");public Fact<Double> playtime=Fact.missing(""),gold=Fact.missing("");public Fact<Integer> score=Fact.missing("");
+    /** Cards removed per source (shop, event, neow, campfire, empty_cage) plus their total; TinyCat's purge families. */
+    public Fact<Map<String,Integer>> purges=Fact.missing("");
     public Fact<Boolean> act3=Fact.missing(""),heart=Fact.missing(""),daily=Fact.missing(""),endless=Fact.missing(""),trial=Fact.missing(""),seeded=Fact.missing("");
     public Fact<Set<String>> deck=Fact.missing("");
     public Fact<List<Combat>> combats=Fact.missing("");public Fact<List<Integer>> hpPerFloor=Fact.missing("");public Fact<Map<Integer,Integer>> floorEnter=Fact.missing(""),potionsByFloor=Fact.missing("");
@@ -32,6 +45,9 @@ public final class Run implements Cloneable {
     public Fact<Map<Integer,Double>> eventDamage=Fact.missing("");
     public Fact<List<Screen>> screens=Fact.missing("");final Set<Integer> ledgerRewardFloors=new HashSet<>();
     public Fact<List<BossOffer>> boss=Fact.missing("");
+    /** The whole Neow choice set (picked included); absent when the source kept only the picked option. */
+    public Fact<List<String>> neowOffers=Fact.missing("");
+    public Fact<List<Campfire>> campfires=Fact.missing("");
     /** Count families (events, purchases, purges, campfire, potions, observed): metric key to occurrences. */
     public final Map<String,Fact<Map<String,Integer>>> counts=new TreeMap<>();
 
@@ -59,10 +75,11 @@ public final class Run implements Cloneable {
         r.character=Fact.agree(n.character,l.character);r.ascension=Fact.agree(n.ascension,l.ascension);r.seed=Fact.agree(n.seed,l.seed);
         for(Fact<?> f:Arrays.asList(r.character,r.ascension,r.seed))if(f.status==Fact.Status.CONFLICT){r.conflict=true;r.conflictReason="identity";}
         r.time=Fact.prefer(n.time,l.time);r.playtime=Fact.prefer(n.playtime,l.playtime);r.outcome=Fact.prefer(n.outcome,l.outcome);r.killedBy=Fact.prefer(n.killedBy,l.killedBy);
+        r.score=Fact.prefer(n.score,l.score);r.purges=n.purges;
         r.act3=Fact.agree(l.act3,n.act3);r.heart=Fact.prefer(n.heart,l.heart);r.neow=Fact.agree(n.neow,l.neow);r.gold=Fact.prefer(l.gold,n.gold);
         r.deck=Fact.prefer(n.deck,l.deck);r.deckSize=Fact.prefer(n.deckSize,l.deckSize);r.maxAct=Fact.prefer(l.maxAct,n.maxAct);r.floorReached=Fact.prefer(n.floorReached,l.floorReached);
         r.daily=Fact.prefer(n.daily,l.daily);r.endless=Fact.prefer(n.endless,l.endless);r.trial=Fact.prefer(n.trial,l.trial);r.seeded=Fact.prefer(n.seeded,l.seeded);r.slot=Fact.prefer(l.slot,n.slot);
-        r.combats=n.combats;r.eventDamage=n.eventDamage;r.hpPerFloor=n.hpPerFloor;r.potionsByFloor=n.potionsByFloor;r.boss=n.boss;r.floorEnter=l.floorEnter;r.neowHp=l.neowHp;r.actor=Fact.prefer(l.actor,n.actor);
+        r.combats=n.combats;r.eventDamage=n.eventDamage;r.hpPerFloor=n.hpPerFloor;r.potionsByFloor=n.potionsByFloor;r.boss=n.boss;r.neowOffers=Fact.prefer(n.neowOffers,l.neowOffers);r.campfires=Fact.prefer(n.campfires,l.campfires);r.floorEnter=l.floorEnter;r.neowHp=l.neowHp;r.actor=Fact.prefer(l.actor,n.actor);
         // proposed (metrics.md 6.2): a floor the Ledger recorded is taken from the Ledger only; .run fills the floors it lacks.
         if(l.screens.known()&&n.screens.known()){List<Screen> all=new ArrayList<>(l.screens.value);for(Screen s:n.screens.value)if(!l.ledgerRewardFloors.contains(s.floor))all.add(s);r.screens=Fact.of(all,Fact.NATIVE+"+"+Fact.LEDGER);}
         else r.screens=Fact.prefer(l.screens,n.screens);

@@ -9,6 +9,7 @@ import spireledger.stats.*;
 public final class StatsCheck {
  static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
  static JsonObject parse(String json){return new JsonParser().parse(json).getAsJsonObject();}
+ static JsonElement arrjson(String json){return new JsonParser().parse(json);}
  static final String SEED="same-seed";
 
  // --- native .run fixtures ---
@@ -43,7 +44,7 @@ public final class StatsCheck {
  public static void main(String[] args)throws Exception{
   liveEndings();
   Path root=Paths.get(args[0]),src=Paths.get(args[1]);
-  oldAssertions(root);gapsAndCombinations();export();boundary(src);
+  oldAssertions(root);gapsAndCombinations();neowBossCampfire();export();boundary(src);
   System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, save slot sources, TinyCat export, Gson-only stats package");
  }
 
@@ -188,6 +189,56 @@ public final class StatsCheck {
  }
  static JsonObject row(JsonObject doc,String metric,String scope,String dims){for(JsonElement e:doc.getAsJsonArray("rows")){JsonObject r=e.getAsJsonObject();if(r.get("metric").getAsString().equals(metric)&&r.get("scope").getAsString().equals(scope)&&r.get("dims").toString().equals(dims))return r;}throw new AssertionError("no row "+metric+" "+scope+" "+dims);}
  static boolean nul(JsonObject r,String k){return r.get(k)==null||r.get(k).isJsonNull();}
+ /** Neow and boss relic screens, and the rest-site replay behind campfire shares and multiples. */
+ static void neowBossCampfire(){
+  JsonObject a=nativeRun("NB-a",0,56,false,"Hexaghost",act123());
+  a.addProperty("neow_bonus","HUNDRED_GOLD");a.addProperty("neow_cost","NONE");
+  a.add("neow_bonuses_skipped_log",arrjson("[\"REMOVE_CARD\",\"TEN_PERCENT_HP_BONUS\",\"BOSS_RELIC\"]"));
+  a.add("neow_costs_skipped_log",arrjson("[\"NONE\",\"NONE\",\"NONE\"]"));
+  a.add("boss_relics",arrjson("[{\"picked\":\"Runic Pyramid\",\"not_picked\":[\"Sozu\",\"Astrolabe\"]},{\"picked\":\"Coffee Dripper\",\"not_picked\":[\"Snecko Eye\",\"Empty Cage\"]}]"));
+  a.add("campfire_choices",arrjson("[{\"floor\":6,\"key\":\"SMITH\",\"data\":\"Bash\"},{\"floor\":11,\"key\":\"REST\"}]"));
+  a.add("master_deck",arrjson("[\"Strike_R\",\"Strike_R\",\"Strike_R\",\"Strike_R\",\"Strike_R\",\"Defend_R\",\"Defend_R\",\"Defend_R\",\"Defend_R\",\"Bash+1\"]"));
+  JsonObject b=nativeRun("NB-b",0,56,false,"Hexaghost",act123());
+  b.addProperty("neow_bonus","REMOVE_CARD");b.addProperty("neow_cost","NONE");
+  b.add("neow_bonuses_skipped_log",arrjson("[\"HUNDRED_GOLD\",\"BOSS_RELIC\",\"TRANSFORM_CARD\"]"));
+  b.add("neow_costs_skipped_log",arrjson("[\"NONE\",\"NONE\",\"NONE\"]"));
+  b.add("boss_relics",arrjson("[{\"picked\":\"Sozu\",\"not_picked\":[\"Runic Pyramid\",\"Astrolabe\"]},{\"picked\":\"Empty Cage\",\"not_picked\":[\"Coffee Dripper\",\"Snecko Eye\"]}]"));
+  JsonObject c=nativeRun("NB-c",0,56,false,"Hexaghost",act123());
+  c.addProperty("neow_bonus","THREE_RARE_CARDS");c.addProperty("neow_cost","PERCENT_DAMAGE");
+  c.add("neow_bonuses_skipped_log",arrjson("[\"REMOVE_TWO\",\"HUNDRED_GOLD\",\"BOSS_RELIC\"]"));
+  c.add("neow_costs_skipped_log",arrjson("[\"TEN_PERCENT_HP_LOSS\",\"NONE\",\"NONE\"]"));
+  c.add("boss_relics",arrjson("[{\"picked\":\"Astrolabe\",\"not_picked\":[\"Runic Pyramid\",\"Sozu\"]},{\"picked\":\"Coffee Dripper\",\"not_picked\":[\"Empty Cage\",\"Snecko Eye\"]}]"));
+  Stats.Index index=Stats.build(Arrays.asList(nf(a,"IRONCLAD","a.run"),nf(b,"IRONCLAD","b.run"),nf(c,"IRONCLAD","c.run")),Collections.emptyList());
+  Run ra=run(index,"NB-a");
+  check(ra.neowOffers.known()&&ra.neowOffers.value.equals(Arrays.asList("HUNDRED_GOLD / NONE","REMOVE_CARD / NONE","TEN_PERCENT_HP_BONUS / NONE","BOSS_RELIC / NONE")),"Neow offers are the picked option plus the skipped log: "+ra.neowOffers.value);
+  check(ra.campfires.known()&&ra.campfires.value.size()==2,"one campfire unit per rest site");
+  Run.Campfire first=ra.campfires.value.get(0),second=ra.campfires.value.get(1);
+  check(first.floor==6&&first.pool==4&&first.candidates.equals(Arrays.asList("Strike_R","Defend_R","Bash"))&&first.target.equals("Bash")&&first.smithUsable&&!first.forcedRecall,"smith screen lists every unupgraded card kind; pool = cards + recall: "+first.candidates);
+  check(second.pool==3&&second.candidates.equals(Arrays.asList("Strike_R","Defend_R")),"an upgraded Bash leaves two card kinds: "+second.candidates);
+  Stats.Filter f=new Stats.Filter();Map<String,Metric> m=metrics(index,f);
+  check(is(m(m,"neow:HUNDRED_GOLD / NONE"),1,3)&&is(m(m,"neow:BOSS_RELIC / NONE"),0,3),"Neow rate is picked / offered, not a raw count");
+  check(is(m(m,"boss:1:Runic Pyramid"),1,3)&&is(m(m,"boss:1:SKIP"),0,3),"boss relic rate per act, Skip as one of the choices");
+  check(m(m,"campfire_visits:1").numerator==2&&m(m,"campfire_count:1:Bash").numerator==1&&m(m,"campfire_count:1:REST").numerator==1,"action counts per act, smith under the card: "+m.keySet());
+  check(is(m(m,"campfire_sleep:1"),1,2),"sleep = chosen / visits with rest on screen");
+  check(m(m,"campfire_pref:1:Bash").numerator==1&&m(m,"campfire_pref:1:Bash").denominator==1&&Math.abs(m(m,"campfire_pref:1:Bash").baseline-100.0/3.5)<1e-9,"card row: smithed / times in the pool, shared baseline");
+  check(m(m,"campfire_pref:1:Strike_R").numerator==0&&m(m,"campfire_pref:1:Strike_R").denominator==1&&!m.containsKey("campfire_pref:1:SMITH"),"every unupgraded card is its own row; smith itself is not a row");
+  check(m(m,"campfire_pref:1:RECALL").numerator==0&&m(m,"campfire_pref:1:RECALL").denominator==2,"an optional recall stays in the pool");
+  JsonObject e=nativeRun("NB-e",0,56,false,"The Heart","1:M:Jaw Worm:10","16:B:Hexaghost:20","33:B:Champ:15","50:B:Time Eater:10","56:B:The Heart:12");
+  e.add("campfire_choices",arrjson("[{\"floor\":6,\"key\":\"SMITH\",\"data\":\"Bash\"},{\"floor\":44,\"key\":\"SMITH\",\"data\":\"Strike_R\"},{\"floor\":49,\"key\":\"RECALL\"}]"));
+  Run re=Stats.build(Arrays.asList(nf(e,"IRONCLAD","e.run")),Collections.emptyList()).runs.get(0);
+  check(re.campfires.known()&&re.campfires.value.get(2).forcedRecall&&re.campfires.value.get(2).key.equals("RECALL"),"act-3 recall in an act-4 run is the forced red key");
+  Map<String,Metric> me=metrics(Stats.build(Arrays.asList(nf(e,"IRONCLAD","e.run")),Collections.emptyList()),new Stats.Filter());  check(me.get("campfire_pref:3:RECALL").numerator==0&&me.get("campfire_pref:3:RECALL").denominator==1,"the forced recall leaves its own row and the pool");
+  check(Math.abs(me.get("campfire_pool:3").value()-2.5)<1e-9,"pool per act 3 visit excludes the forced recall: "+me.get("campfire_pool:3").value());
+  Standardized.Act neow=Standardized.computeNeow(Stats.select(index,f,100000).runs);
+  check(neow.available&&neow.share.size()==7&&Math.abs(neow.share.values().stream().mapToDouble(Double::doubleValue).sum()-100)<1e-6,"Neow standardized shares sum to 100 over the seven options");
+  check(neow.share.get("HUNDRED_GOLD / NONE")>neow.share.get("BOSS_RELIC / NONE"),"a picked option outranks one nobody picked");
+  Map<Integer,Standardized.Act> boss=Standardized.computeBoss(Stats.select(index,f,100000).runs);
+  check(boss.containsKey(1)&&boss.containsKey(2)&&boss.get(1).available&&!boss.get(1).share.containsKey(Standardized.SKIP),"boss fits per act; Skip stays an opponent");
+  check(Math.abs(boss.get(1).share.values().stream().mapToDouble(Double::doubleValue).sum()-100)<1e-6,"boss shares sum to 100");
+  JsonObject noSkip=nativeRun("NB-d",0,5,false,"Jaw Worm");noSkip.add("neow_bonus",JsonNull.INSTANCE);
+  Run rd=Stats.build(Arrays.asList(nf(noSkip,"IRONCLAD","d.run")),Collections.emptyList()).runs.get(0);
+  check(!rd.neowOffers.known(),"a run without a skipped log carries no offer set");
+ }
  /** TinyCat parity export (tools/tinycat-compare README 2): exact filters, slot by directory, per-act counts, missing as null. */
  static void export(){
   JsonObject a=nativeRun("E1",20,20,true,null,"3:M:Jaw Worm:7","16:B:Hexaghost:20","18:M:Cultist:4");a.add("path_per_floor",new JsonParser().parse("[\"M\",\"$\",\"M\",\"R\",\"$\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"?\",\"B\",null,\"M\",\"$\",\"R\"]"));

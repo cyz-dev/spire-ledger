@@ -113,7 +113,7 @@ final class RunReview {
         }
         if(rows.size()>limit)text(sb,tr("滚轮查看 ","Scroll ")+(scroll+1)+"–"+Math.min(rows.size(),scroll+limit)+" / "+rows.size(),.69f,.32f,MUTED);
         if(pinned){
-            String status=!host.availableTurns.isEmpty()?tr("已保存 ","Saved ")+host.availableTurns.size()+tr(" 个回合。重打前会停止求解器。"," turns. Replay stops the solver first."):tr("本层未保存可重打快照。旧记录无法补录。","No saved turn here. Past turns cannot be reconstructed.");
+            String status=!host.availableTurns.isEmpty()?tr("已保存 ","Saved ")+host.availableTurns.size()+tr(" 个回合。重打前会停止求解器。"," turns. Replay stops the solver first."):host.turnUnavailableText(floor.number);
             text(sb,host.fit(status,w(.65f)),.20f,.115f,MUTED);
         }
     }

@@ -2,7 +2,8 @@ package spireledger.stats;
 
 import com.google.gson.*;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.nio.*;
+import java.nio.charset.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
@@ -46,11 +47,16 @@ public final class Stats {
         index.runs.sort(Comparator.comparingLong((Run r)->-r.time.or(0L)).thenComparing(r->r.id));Collections.sort(index.errors);return index;
     }
     static JsonObject read(Path file)throws IOException{if(Files.isSymbolicLink(file)||Files.size(file)>MAX_BYTES)throw new IOException("file bounds");try(Reader reader=Files.newBufferedReader(file,StandardCharsets.UTF_8)){return new JsonParser().parse(reader).getAsJsonObject();}}
+    /** Vanilla .run files use the JVM default charset, which is GBK on a Chinese Windows; TinyCat decodes them the same way. */
+    static JsonObject readNative(Path file)throws IOException{if(Files.isSymbolicLink(file)||Files.size(file)>MAX_BYTES)throw new IOException("file bounds");return new JsonParser().parse(nativeText(Files.readAllBytes(file))).getAsJsonObject();}
+    /** Strict UTF-8 first, then GBK, then the JVM default; the BOM is dropped so the first key is not lost. */
+    static String nativeText(byte[] bytes){String text=decode(bytes,StandardCharsets.UTF_8);if(text==null)text=decode(bytes,Charset.forName("GBK"));if(text==null)text=new String(bytes,Charset.defaultCharset());return !text.isEmpty()&&text.charAt(0)=='\uFEFF'?text.substring(1):text;}
+    static String decode(byte[] bytes,Charset charset){try{return charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}catch(CharacterCodingException e){return null;}}
     /** Native history is runs/&lt;dir&gt;/*.run; unreadable or unrecognized files are reported, not counted. */
     public static Index scan(Path nativeRoot,Collection<Ledger> ledgers,List<String> ledgerErrors)throws IOException{
         List<NativeFile> natives=new ArrayList<>();List<String> errors=new ArrayList<>(ledgerErrors);
         if(Files.isDirectory(nativeRoot)&&!Files.isSymbolicLink(nativeRoot))try(DirectoryStream<Path> dirs=Files.newDirectoryStream(nativeRoot)){for(Path dir:dirs)if(Files.isDirectory(dir)&&!Files.isSymbolicLink(dir))try(DirectoryStream<Path> files=Files.newDirectoryStream(dir,"*.run")){
-            for(Path file:files)try{JsonObject data=read(file);if(Json.str(data,"character_chosen").isEmpty())throw new IOException("Unrecognized native history format");natives.add(new NativeFile(data,dir.getFileName().toString(),file.getFileName().toString()));}catch(Exception e){errors.add(file.getFileName()+": "+e.getClass().getSimpleName());}}}
+            for(Path file:files)try{JsonObject data=readNative(file);if(Json.str(data,"character_chosen").isEmpty())throw new IOException("Unrecognized native history format");natives.add(new NativeFile(data,dir.getFileName().toString(),file.getFileName().toString()));}catch(Exception e){errors.add(file.getFileName()+": "+e.getClass().getSimpleName());}}}
         Index index=build(natives,ledgers);index.errors.addAll(errors);Collections.sort(index.errors);return index;
     }
 

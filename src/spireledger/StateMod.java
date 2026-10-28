@@ -35,7 +35,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static ModLabeledButton historyEntry,reportEntry;
     static HistoryTopPanelItem historyTopPanel;
     static boolean enabled=true,failed=false;
-    static String status="Ready — local recording",automation=null;
+    static String status="",automation=null;
     static JsonObject loading,last,mutationBefore;
     static String mutationReason;
     static final Map<Object,Recorder> metricsOwners=Collections.synchronizedMap(new IdentityHashMap<Object,Recorder>());
@@ -49,7 +49,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     public static void initialize(){EmbeddedSaveState.initialize();BaseMod.subscribe(INSTANCE);BaseMod.addSaveField("spire-ledger:checkpoint",INSTANCE);}
     static Object field(Object object,String name){try{Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}catch(Exception ex){throw new IllegalStateException("Missing game field: "+name,ex);}}
     interface Action {void run()throws Exception;}
-    static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status="Recording stopped: "+ex.getClass().getSimpleName()+" (see log)";System.err.println("[Spire Ledger] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[Spire Ledger] Last export failed; recover events.jsonl");}recorder=null;}}
+    static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status=HistoryScreen.tr("记录已停止：","Recording stopped: ")+ex.getClass().getSimpleName()+HistoryScreen.tr("（见日志）"," (see log)");System.err.println("[Spire Ledger] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[Spire Ledger] Last export failed; recover events.jsonl");}recorder=null;}}
     static boolean ready(){return enabled&&!failed&&!ReplaySafety.quarantined&&!CardCrawlGame.loadingSave&&CardCrawlGame.mode==CardCrawlGame.GameMode.GAMEPLAY&&AbstractDungeon.player!=null&&AbstractDungeon.player.masterDeck!=null&&AbstractDungeon.getCurrMapNode()!=null&&AbstractDungeon.getCurrMapNode().getRoom()!=null;}
     static final String SPEED_MOD="superfastmode",SPEED_VERSION="1.0.8";
     static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id)||SPEED_MOD.equals(id)&&SPEED_VERSION.equals(version);}
@@ -133,7 +133,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     // Metrics objects can generate a different UUID later and are deliberately ignored.
     static void metricsStarted(Object metrics){if(!enabled||failed)return;safely(()->{if(ready())ensure();if(recorder!=null)metricsOwners.put(metrics,recorder);});}
     static void metricsFinished(Object metrics,boolean death,boolean heart){Recorder target=metricsOwners.remove(metrics);if(target==null)return;safely(()->{Object params=field(metrics,"params");Object value=((Map<?,?>)params).get("play_id");if(!(value instanceof String)||!((String)value).matches("[a-fA-F0-9-]{36}"))throw new IOException("Missing native metrics play_id");JsonObject e=Recorder.object("game_play_id");e.addProperty("play_id",(String)value);e.addProperty("source","original_metrics_disk_save");e.addProperty("victory",!death);e.addProperty("heart_kill",!death&&heart);target.append(e);target.export();});}
-    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);e.addProperty("outcome_basis","death_screen_cause");act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status="Archived "+outcome;});}
+    static void end(String outcome){if(!ready())return;safely(()->{ensure();if(Snapshot.settled()&&recorder.hasPending())recorder.settle(Snapshot.capture());JsonObject e=Recorder.object("ending");e.addProperty("outcome",outcome);e.addProperty("outcome_basis","death_screen_cause");act3Facts(e,AbstractDungeon.actNum,act3Floor,heartExit||AbstractDungeon.getCurrRoom() instanceof TrueVictoryRoom);e.addProperty("effects_settled",Snapshot.settled());e.add("state",Snapshot.capture());recorder.append(e);recorder.interrupt("run_ended_before_settlement");recorder.export();status=HistoryScreen.tr("已归档：","Archived ")+outcomeLabel(outcome);});}
+    static String outcomeLabel(String outcome){return "victory".equals(outcome)?HistoryScreen.tr("胜利","victory"):"death".equals(outcome)?HistoryScreen.tr("死亡","death"):"abandon".equals(outcome)?HistoryScreen.tr("放弃","abandon"):outcome;}
     /** Main-menu abandon uses only the checkpoint already read by vanilla, never a seed or most-recent guess. */
     static boolean abandonSaved(Path root,JsonObject ref,int slot)throws IOException {
         String id=HistoryIndex.str(ref,"run_id"),point=HistoryIndex.str(ref,"checkpoint_id"),branch=HistoryIndex.str(ref,"branch_id");
@@ -156,7 +157,7 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
             JsonElement value=fields==null?null:fields.get("spire-ledger:checkpoint");if(value==null||!value.isJsonObject())return;
             JsonObject ref=value.getAsJsonObject();
             if(recorder!=null&&recorder.runId.equals(Recorder.string(ref,"run_id"))){recorder.close();recorder=null;}
-            if(abandonSaved(ROOT,ref,CardCrawlGame.saveSlot))status="Archived abandon";
+            if(abandonSaved(ROOT,ref,CardCrawlGame.saveSlot))status=HistoryScreen.tr("已归档：放弃","Archived abandon");
         });
     }
     @Override public void receiveStartGame(){startRequested=true;loadingExpected=loadingExpected||CardCrawlGame.loadingSave;}
@@ -181,22 +182,24 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
             last=now;
         });
     }
-    static void toggle(boolean value){if(value==enabled)return;if(failed&&value)failed=false;safely(()->{if(recorder!=null){JsonObject e=Recorder.object("coverage");e.addProperty("status",value?"enabled":"disabled");recorder.append(e);recorder.interrupt("recording_disabled");recorder.export();}enabled=value;if(value){last=null;mutationBefore=null;}status=value?"Ready — recording enabled":"Recording disabled";savePreference();});}
+    static void toggle(boolean value){if(value==enabled)return;if(failed&&value)failed=false;safely(()->{if(recorder!=null){JsonObject e=Recorder.object("coverage");e.addProperty("status",value?"enabled":"disabled");recorder.append(e);recorder.interrupt("recording_disabled");recorder.export();}enabled=value;if(value){last=null;mutationBefore=null;}status=value?HistoryScreen.tr("就绪 · 记录已开启","Ready — recording enabled"):HistoryScreen.tr("记录已关闭","Recording disabled");savePreference();});}
     static void savePreference()throws IOException{Path p=ROOT.getParent().resolve("enabled.txt");Files.createDirectories(p.getParent());Files.write(p,String.valueOf(enabled).getBytes(StandardCharsets.UTF_8));}
     @Override public void receivePostInitialize(){
-        try{Path p=ROOT.getParent().resolve("enabled.txt");if(Files.exists(p))enabled=Boolean.parseBoolean(new String(Files.readAllBytes(p),StandardCharsets.UTF_8).trim());}catch(IOException ex){status="Preference read failed; recording disabled";enabled=false;}
+        boolean preferenceFailed=false;
+        try{Path p=ROOT.getParent().resolve("enabled.txt");if(Files.exists(p))enabled=Boolean.parseBoolean(new String(Files.readAllBytes(p),StandardCharsets.UTF_8).trim());}catch(IOException ex){preferenceFailed=true;enabled=false;}
+        status=preferenceFailed?HistoryScreen.tr("偏好读取失败，记录已关闭","Preference read failed; recording disabled"):enabled?HistoryScreen.tr("就绪 · 本地记录已开启","Ready — local recording"):HistoryScreen.tr("记录已关闭","Recording disabled");
         historyTopPanel=new HistoryTopPanelItem();BaseMod.addTopPanelItem(historyTopPanel);
         ModPanel panel=new ModPanel();
-        panel.addUIElement(new ModLabeledToggleButton("Local Spire Ledger recording",350,700,Color.WHITE,FontHelper.charDescFont,enabled,panel,l->{},b->toggle(b.enabled)));
-        panel.addUIElement(new ModLabeledToggleButton("Turn checkpoint recording (practice/replay)",350,650,Color.WHITE,FontHelper.charDescFont,TurnRecorder.enabled,panel,l->{},b->TurnRecorder.toggle(b.enabled)));
+        panel.addUIElement(new ModLabeledToggleButton(HistoryScreen.tr("本地尖塔账本记录","Local Spire Ledger recording"),350,700,Color.WHITE,FontHelper.charDescFont,enabled,panel,l->{},b->toggle(b.enabled)));
+        panel.addUIElement(new ModLabeledToggleButton(HistoryScreen.tr("回合快照记录（练习/重打）","Turn checkpoint recording (practice/replay)"),350,650,Color.WHITE,FontHelper.charDescFont,TurnRecorder.enabled,panel,l->{},b->TurnRecorder.toggle(b.enabled)));
         panel.addUIElement(new ModLabel(status,350,600,Color.WHITE,panel,l->l.text=status));
-        panel.addUIElement(new ModLabeledButton("Export current run ZIP",350,540,panel,b->safely(()->{if(recorder!=null){recorder.export();status="Exported current run.zip";}})));
-        panel.addUIElement(new ModLabeledButton("Open records folder",350,470,panel,b->safely(()->{Files.createDirectories(ROOT);if(Desktop.isDesktopSupported())Desktop.getDesktop().open(ROOT.toFile());else status="Folder: ~/.spire-ledger/runs";})));
+        panel.addUIElement(new ModLabeledButton(HistoryScreen.tr("导出当前局 ZIP","Export current run ZIP"),350,540,panel,b->safely(()->{if(recorder!=null){recorder.export();status=HistoryScreen.tr("已导出当前局 run.zip","Exported current run.zip");}})));
+        panel.addUIElement(new ModLabeledButton(HistoryScreen.tr("打开记录文件夹","Open records folder"),350,470,panel,b->safely(()->{Files.createDirectories(ROOT);if(Desktop.isDesktopSupported())Desktop.getDesktop().open(ROOT.toFile());else status=HistoryScreen.tr("文件夹：","Folder: ")+"~/.spire-ledger/runs";})));
         historyEntry=new ModLabeledButton(HistoryScreen.tr("尖塔账本 / 当前局统计","Spire Ledger / current run"),350,400,panel,b->HistoryScreen.open());panel.addUIElement(historyEntry);
         reportEntry=new ModLabeledButton(HistoryScreen.tr("导出错误报告 · Ctrl+Shift+R","Error report · Ctrl+Shift+R"),350,330,panel,b->DiagnosticReport.request());panel.addUIElement(reportEntry);
         panel.addUIElement(new ModLabeledButton(HistoryScreen.tr("打开错误报告目录","Open error report folder"),350,230,panel,b->DiagnosticReport.openFolder()));
         panel.addUIElement(new ModLabel("",350,285,Color.WHITE,panel,l->l.text=DiagnosticReport.status));
-        BaseMod.registerModBadge(ImageMaster.loadImage("images/relics/blueCandle.png"),"Spire Ledger","CYZ","Local build recording and offline review",panel);
+        BaseMod.registerModBadge(ImageMaster.loadImage("images/relics/blueCandle.png"),"Spire Ledger","CYZ",HistoryScreen.tr("本地记录与离线复盘","Local build recording and offline review"),panel);
         Runtime.getRuntime().addShutdownHook(new Thread(()->{if(recorder!=null)try{recorder.close();}catch(IOException ex){System.err.println("[Spire Ledger] Recover events.jsonl after shutdown IO failure");}},"spire-ledger-flush"));
     }
 }

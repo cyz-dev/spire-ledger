@@ -1,6 +1,9 @@
 package spireledger;
 
 import com.google.gson.Gson;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.util.*;
 import spireledger.stats.*;
 
@@ -8,7 +11,7 @@ import spireledger.stats.*;
 public final class StatsDisplayCheck {
  static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
  static Metric rate(String key,double n,double d,int samples,String status){Metric m=new Gson().fromJson("{\"key\":\""+key+"\",\"kind\":\"rate\",\"status\":\""+status+"\"}",Metric.class);m.numerator=n;m.denominator=d;m.samples=samples;return m;}
- public static void main(String[] args){
+ public static void main(String[] args)throws Exception{
   Map<String,Metric> metrics=new LinkedHashMap<>();
   for(Metric m:Arrays.asList(rate("pick:1:Low",1,100,100,"ok"),rate("pick:1:High",8,10,10,"ok"),rate("pick:2:NextAct",10,10,10,"ok"),rate("pick:1:Missing",100,100,100,"missing"),rate("pick:1:MoreSamples",16,20,20,"ok"),rate("pick:1:Zero",0,10,10,"zero"),rate("pick:1:A",8,10,10,"ok")))metrics.put(m.key,m);
   List<String> keys=new ArrayList<>(metrics.keySet());keys.sort(StatsScreen.metricOrder(metrics));
@@ -24,6 +27,23 @@ public final class StatsDisplayCheck {
   check(PickTiers.tier(0,0)==8&&PickTiers.tier(101,100)==8&&PickTiers.tier(Double.NaN,1)==8,"invalid denominator or numerator is not a zero rate");
   metrics.put("pick:1:Small",rate("pick:1:Small",1,1,1,"below_min_sample"));
   List<PickTiers.Entry> tiers=PickTiers.entries(metrics,1);check(tiers.size()==6&&tiers.get(tiers.size()-1).tier==8&&tiers.stream().noneMatch(e->e.card.equals("Missing")||e.card.equals("NextAct")),"act scope, missing exclusion and low-sample separation");
+  Standardized.Act fit=Standardized.fit(Arrays.asList(new String[]{"A","B","C",Standardized.SKIP},new String[]{"A","B",Standardized.SKIP},new String[]{"B","A",Standardized.SKIP}));
+  double total=0;for(double share:fit.share.values())total+=share;
+  check(fit.available&&fit.share.size()==3&&Math.abs(total-100)<1e-6,"standardized shares sum to 100: "+total);
+  check(!fit.share.containsKey(Standardized.SKIP)&&fit.share.get("A")>fit.share.get("B"),"SKIP stays an opponent; more wins rank higher: "+fit.share);
+  check(!Standardized.fit(Arrays.<String[]>asList(new String[]{"A","B","C",Standardized.SKIP})).available,"one choice screen cannot separate cards");
+  check(!Standardized.fit(Arrays.<String[]>asList(new String[]{"A",Standardized.SKIP},new String[]{"SKIP","A"})).available,"one card is not a ranking");
+  int[] breaks=PickTiers.standardTiers(new ArrayList<>(Arrays.asList(30.0,20.0,8.0,2.0,0.5,0.1)));
+  check(breaks[0]<=breaks[1]&&breaks[1]<=breaks[2]&&breaks[2]<=breaks[3]&&breaks[3]<=4,"top shares fill the Jenks tiers: "+Arrays.toString(breaks));
+  check(breaks[4]>=5&&breaks[5]==6,"below 1% splits into R0 and R00 in log order: "+Arrays.toString(breaks));
+  int[] equal=PickTiers.standardTiers(new ArrayList<>(Arrays.asList(10.0,10.0,4.0)));check(equal[0]==equal[1]&&equal[0]<equal[2],"equal shares never split tiers: "+Arrays.toString(equal));
+  Path root=Files.createTempDirectory("sl-native-charset");Path dir=Files.createDirectory(root.resolve("1_IRONCLAD"));
+  String gbk="{\"character_chosen\":\"IRONCLAD\",\"play_id\":\"gbk-run\",\"timestamp\":1.0,\"floor_reached\":2,\"victory\":false,\"killed_by\":\"Jaw Worm\",\"score_breakdown\":[\"爬塔的楼层 (2): 10\"]}";
+  Files.write(dir.resolve("1.run"),gbk.getBytes(Charset.forName("GBK")));
+  String bom="\uFEFF{\"character_chosen\":\"IRONCLAD\",\"play_id\":\"bom-run\",\"timestamp\":2.0,\"floor_reached\":2,\"victory\":false,\"killed_by\":\"Jaw Worm\"}";
+  Files.write(dir.resolve("2.run"),bom.getBytes(StandardCharsets.UTF_8));
+  Stats.Index nativeIndex=Stats.scan(root,new ArrayList<Ledger>(),new ArrayList<String>());
+  check(nativeIndex.nativeFiles==2&&nativeIndex.errors.isEmpty()&&nativeIndex.runs.size()==2,"GBK and UTF-8 BOM native runs parse: "+nativeIndex.errors);
   HistoryIndex.Summary first=new HistoryIndex.Summary();first.id="first";first.saveSlot=2;first.time=10;first.outcome="victory";
   HistoryIndex.Summary other=new HistoryIndex.Summary();other.id="other-slot";other.saveSlot=1;other.time=50;
   HistoryIndex.Summary next=new HistoryIndex.Summary();next.id="next";next.saveSlot=2;next.time=20;next.outcome="death";

@@ -323,18 +323,19 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             turnMenu.setSelectedIndex(turnSelection);
             boolean canCurrent=ReplayLauncher.canReplayCurrent(availableTurns.get(turnSelection));
             add(tr("回合重打：已就绪（","Turn practice: ready (")+availableTurns.size()+tr(" 个回合点）· "," snapshots) · ")+(canCurrent?tr("当前战斗可直接重打","in-combat restart"):tr("退出局可启动独立练习","launch isolated practice")),Tone.GOOD);
-        }else if(manifest!=null){
-            if(!restoreAllowed){
-                add(tr("这局当时未保存回合快照，无法补录。更新后新战斗可在已验证的求解器与外观 Mod 组合中录制。","No turn snapshot was saved for this run; past turns cannot be reconstructed. Record a new battle with the reviewed solver and cosmetic mods."),Tone.WARN);
-            }else{
-                add(tr("回合重打：本层无可恢复的回合快照。","Turn practice: no recoverable turn snapshot on this floor."),Tone.MUTED);
-            }
-            turnMenu=null;
         }else{
-            add(tr("回合重打：此局没有快照附件。开启回合快照后，在支持的环境中进入新的玩家回合，再从此处选择回合点。","Turn practice: this run has no snapshots. Enable turn recording, enter a new player turn in a supported environment, then select a checkpoint here."),Tone.MUTED);
+            add(turnUnavailableText(selectedFloor),manifest==null||restoreAllowed?Tone.MUTED:Tone.WARN);
             turnMenu=null;
         }
         if(raw){add(tr("高级诊断 · 原始事件","Advanced diagnostics · original events"),Tone.HEADER);for(JsonObject e:events)if(floor(e)==selectedFloor)add(e.toString(),Tone.MUTED);}
+    }
+    String turnUnavailableText(int floor){
+        if(manifest==null)return tr("回合重打：此局没有快照附件。开启回合快照后，在支持的环境中进入新的玩家回合，再从此处选择回合点。","Turn practice: this run has no snapshots. Enable turn recording, enter a new player turn in a supported environment, then select a checkpoint here.");
+        boolean unsupported=false,missing=false;
+        if(manifest.has("snapshots"))for(JsonElement item:manifest.getAsJsonArray("snapshots")){JsonObject pt=item.getAsJsonObject();if(HistoryIndex.num(pt,"floor",0)!=floor)continue;String availability=Recorder.string(pt,"availability");unsupported|="unsupported".equals(availability);missing|="missing".equals(availability);}
+        if(unsupported)return tr("本局录制时的 Mod 组合未被当时的版本支持：回合点只记录了位置，没有保存可重打快照，旧记录无法补录。","The mod combination used when this run was recorded was not supported then: turn points were logged without a replay snapshot, and past turns cannot be reconstructed.");
+        if(missing)return tr("本层的回合快照是在已经出牌或弃牌后才观察到的，没有保存可重打快照。","Turn checkpoints on this floor were observed after cards were played or discarded, so no replay snapshot was saved.");
+        return tr("本层没有保存的回合快照。","No turn snapshot was saved on this floor.");
     }
     void compactChanges(JsonObject before,JsonObject after){HistoryLayout.Delta delta=HistoryLayout.delta(before,after);if(!delta.identitiesComplete){add(tr("逐张变化身份未记录；完整前后牌组仍可查看。","Per-card identity unavailable; full observed decks remain available."),Tone.MUTED);return;}for(HistoryLayout.Change c:delta.cards)if(c.kind.equals("added"))add(tr("＋ 新增  ","＋ Added  ")+card(c.after),Tone.GOOD);else if(c.kind.equals("removed"))add(tr("－ 移除  ","－ Removed  ")+card(c.before),Tone.REMOVED);else add(tr("↔ 观察变化  ","↔ Observed change  ")+card(c.before)+" → "+card(c.after),Tone.CHANGED);for(String key:Arrays.asList("hp","max_hp","gold"))if(before.has(key)&&after.has(key)&&!Objects.equals(before.get(key),after.get(key)))add((key.equals("gold")?tr("金币 ","Gold "):key.equals("hp")?tr("生命 ","HP "):tr("生命上限 ","Max HP "))+resourceDelta(before,after,key),Tone.CHANGED);}
     @Override public String getCurrentText(){return query;}

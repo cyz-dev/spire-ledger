@@ -62,7 +62,9 @@ public final class Ledger {
             if(source.equals("COMBAT_REWARD")&&Arrays.asList("card","skip","bowl").contains(kind))screens.add(new Run.Screen(num(before,"act",0),num(before,"floor",-1),offered,kind,kind.equals("card")?str(obj(chosen,"card"),"id"):"",str(d,"action_source"),L,bowl));
             if(source.equals("NEOW_OPTION")){Integer hp=integer(obj(res,"after"),"hp");if(hp!=null)r.neowHp=Fact.of(hp,L);
                 // Variant blessings are not rows of the standard Neow table (metrics.md 6.3).
-                r.neow="blessing".equals(str(d,"variant"))?Fact.of(str(chosen,"reward_type")+" / "+str(chosen,"drawback"),L):Fact.notApplicable();}
+                r.neow="blessing".equals(str(d,"variant"))?Fact.of(str(chosen,"reward_type")+" / "+str(chosen,"drawback"),L):Fact.notApplicable();
+                if("blessing".equals(str(d,"variant"))){List<String> offers=new ArrayList<>();for(JsonElement x:arr(d,"candidates"))if(x.isJsonObject()){JsonObject c=x.getAsJsonObject();String reward=str(c,"reward_type");if(reward.isEmpty())continue;
+                    String key=reward+" / "+str(c,"drawback");if(!offers.contains(key))offers.add(key);}if(offers.size()>=2)r.neowOffers=Fact.of(offers,L);}}
         }
         r.screens=Fact.of(screens,L);if(!actors.isEmpty())r.actor=Fact.of(actors.size()==1?actors.iterator().next():"mixed",L);
 

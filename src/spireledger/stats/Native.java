@@ -57,8 +57,22 @@ final class Native {
 
         if(isArray(o,"current_hp_per_floor")){List<Integer> hp=new ArrayList<>();for(JsonElement e:arr(o,"current_hp_per_floor"))hp.add(integer(e));r.hpPerFloor=Fact.of(hp,N);}
         if(isArray(o,"master_deck")){Set<String> deck=new LinkedHashSet<>();JsonArray cards=arr(o,"master_deck");for(JsonElement e:cards)if(e.isJsonPrimitive())deck.add(cardId(e.getAsString()));r.deck=Fact.of(deck,N);r.deckSize=Fact.amount(cards.size(),N);}
-        if(!str(o,"neow_bonus").isEmpty())r.neow=Fact.of(str(o,"neow_bonus")+" / "+str(o,"neow_cost"),N);
-        r.gold=goldEstimate(o);
+        if(!str(o,"neow_bonus").isEmpty()){String picked=str(o,"neow_bonus")+" / "+str(o,"neow_cost");r.neow=Fact.of(picked,N);
+            // Every option on the Neow screen: the picked one plus the skipped log (TinyCat's choice block).
+            List<String> bonuses=strings(arr(o,"neow_bonuses_skipped_log")),costs=strings(arr(o,"neow_costs_skipped_log"));
+            if(!bonuses.isEmpty()){List<String> offers=new ArrayList<>();offers.add(picked);Set<String> seen=new HashSet<>();seen.add(picked);
+                for(int i=0;i<bonuses.size();i++){String key=bonuses.get(i)+" / "+(i<costs.size()?costs.get(i):"NONE");if(seen.add(key))offers.add(key);}
+                r.neowOffers=Fact.of(offers,N);}}
+        r.gold=goldEstimate(o);r.score=Fact.of(integer(o,"score"),N);
+        // TinyCat's purge families; a field the file does not carry stays out, so an all-absent record is missing, not zero.
+        if(isArray(o,"items_purged")||isArray(o,"event_choices")||isArray(o,"campfire_choices")||isArray(o,"relics")||o.get("neow_bonus_log")!=null){
+            int shop=arr(o,"items_purged").size(),event=0,neow=0,campfire=0,cage=strings(arr(o,"relics")).contains("Empty Cage")?2:0;
+            for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject())event+=strings(arr(e.getAsJsonObject(),"cards_removed")).size();
+            if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject())neow=strings(arr(obj(o,"neow_bonus_log"),"cards_removed")).size();
+            for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();if("PURGE".equals(str(c,"key"))&&!str(c,"data").isEmpty())campfire++;}
+            Map<String,Integer> purges=new LinkedHashMap<>();purges.put("shop",shop);purges.put("event",event);purges.put("neow",neow);purges.put("campfire",campfire);purges.put("empty_cage",cage);purges.put("total",shop+event+neow+campfire+cage);
+            r.purges=Fact.of(purges,N);
+        }
 
         // Card rewards: only floors with a fight are post-combat screens; Neow and event card choices share the field.
         if(isArray(o,"card_choices")&&hasFights){Set<Integer> fightFloors=new HashSet<>();for(Run.Combat c:combats)fightFloors.add(c.floor);List<Run.Screen> screens=new ArrayList<>();
@@ -80,7 +94,7 @@ final class Native {
         if(isArray(o,"items_purged")){Map<String,Integer> m=new LinkedHashMap<>();m.put("purges",arr(o,"items_purged").size());for(String id:strings(arr(o,"items_purged")))m.merge("remove:shop:"+cardId(id),1,Integer::sum);r.counts.put("purges",Fact.of(m,N));}
         if(isArray(o,"campfire_choices")){Map<String,Integer> m=new LinkedHashMap<>();for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();String key=str(c,"key"),id=cardId(str(c,"data"));m.merge("campfire:"+key,1,Integer::sum);
                 if(key.equals("SMITH")&&!id.isEmpty())m.merge("upgrade:campfire:"+id,1,Integer::sum);if(key.equals("PURGE")&&!id.isEmpty())m.merge("remove:campfire:"+id,1,Integer::sum);}
-            r.counts.put("campfire",Fact.of(m,N));}
+            r.counts.put("campfire",Fact.of(m,N));r.campfires=Campfire.build(o,r.character.or(""),b,r.maxAct.known()&&r.maxAct.value>=4);}
         // Explicit use records only, never inferred from slot changes; each entry of potions_floor_usage is one use on that floor.
         if(isArray(o,"potions_floor_usage")){Map<String,Integer> m=new LinkedHashMap<>();Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potions_floor_usage");m.put("potions",uses.size());for(JsonElement e:uses){Integer floor=integer(e);if(floor!=null)byFloor.merge(floor,1,Integer::sum);}
             r.counts.put("potions",Fact.of(m,N));r.potionsByFloor=Fact.of(byFloor,N);}

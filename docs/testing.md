@@ -1,24 +1,49 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-10-27（v0.5.0-beta.2）
+Last updated: 2026-10-29（`main` 分支，beta.2 之后）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
-维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。本轮已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
+维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
 
 新版复盘用真实记录副本检查 1024×768 和 1920×1080 的悬停、固定、牌组和返回操作，并核对源 JSON 和 13 个游戏 RNG 不变。8 Mod 组合下已验证回合录制、原生重打按钮、求解器旧结果清空和相同行动结果。
 
-结果不符合预期时，记下职业、楼层并截图，按 Ctrl+Shift+R 生成错误报告，位置是 `~/.spire-ledger/bug-reports/`。
+结果不符合预期时，记下职业、楼层并截图，按 Ctrl+Shift+R 生成错误报告，位置是 `~/.spire-ledger/bug-reports/`。测试结果可以直接开 issue，格式参考[已关闭问题](https://github.com/Yongzhaooo/spire-ledger/issues?q=is%3Aissue+state%3Aclosed)：版本、Mod 列表、复现步骤、期望与实际、截图。
 
-## 新入口与抓率图
+### 给接手协作者
 
-1. 从主菜单打开账本，应直接显示当前存档位的最近一局。局中打开时应显示正在玩的局。
-2. 在顶部切换“历史对局、个人统计、最近一局”。无需先返回上一级；从普通页面点“关闭账本”应直接回到游戏。
-3. 在个人统计选择“抓率图”，选职业、进阶和幕，点“导出本幕 PNG”，再点“打开文件夹”。核对图片上的卡牌、百分比和抓取/出现次数与预览相同。图片保存在 `~/.spire-ledger/exports/`。
-4. 打开“更多筛选”，提高最少样本量。低样本卡应进入“样本不足”，不会被当成 0% 放在最低档。切换统计页签后筛选保持。
+- 构建与运行：见 [README](../README.md)“从源码构建”；离线断言用 `build.ps1 -Check`，原生界面探针用 `integration-stats-options.ps1`（统计/导出）和 `integration-replay.ps1`（回合重打）。
+- 代码入口：统计聚合 [stats/Metrics.java](../src/spireledger/stats/Metrics.java)，标准率 [stats/Standardized.java](../src/spireledger/stats/Standardized.java)，火堆重放 [stats/Campfire.java](../src/spireledger/stats/Campfire.java)，导出渲染 [PickRateChart.java](../src/spireledger/PickRateChart.java)，统计界面 [StatsScreen.java](../src/spireledger/StatsScreen.java)。
+- 独立校验：`test/check_overview.py`、`test/check_boss_standardized.py`；离线断言 `StatsCheck`、`StatsDisplayCheck`。
+- 边界：不要改 beta.2 的既有页面文案和指标口径；新增结论前先对照 [metrics.md](metrics.md)。
 
-## v0.5.0-beta.2 快速测试
+## main 分支新增改动（未发布，先测这一节）
 
-先看新版复盘，再测回合重打。第 4 项的死亡、胜利和放弃使用不同的新局，不需要为检查统计专门打通关。
+这一批改动在 beta.2 之后，尚未发布新版本，`ModTheSpire.json` 仍是 `0.5.0-beta.2`。维护者已通过 10 项离线断言、真实游戏内原生探针（真实 66 局，存档位 0）和两份 Python 独立重算；下面检查手玩体验和边界。
+
+| # | 怎么玩 | 看什么 |
+|---|---|---|
+| N1 | 打开个人统计“总览”，分别在中文/英文、1024×768 和 1920×1080 下查看；切换职业、进阶和结果筛选 | 新增“平均得分、商店平均删牌、事件平均删牌、平均每局删牌”四行；连同卡组大小，每个均值第二行显示 `95%区间 下限–上限`，胜率显示 Wilson 区间。区间不拆字、不溢出，筛选后数字和区间一起变化；仅胜/仅败时胜率类显示“—”。 |
+| N2 | 进入“导出图 → 卡牌抓率”，选第一幕，“口径：一般率”，点“导出本幕 PNG”；再切“口径：标准率”导出。对第二至四幕重复 | 每次生成 `act-N.png` 和 `act-N-standardized.png` 各一张（标准率不可拟合时不生成）。一般率保留 T0–T6、跳过和歌唱碗；标准率显示 S、A、B、C、D、R0、R00，合计约 100%，不含跳过/歌唱碗。长图 1600px 宽、内容不截断、分块拼接处无接缝；`metadata.json` 的 `views`、`entries`、`standardized_entries`、`skip_bowl_observed` 与图片一致。 |
+| N3 | 切“火堆行动”，分别导出“行动次数”和“标准化倍” | 生成 `campfire.png` 与 `campfire-standardized.png`。行动次数按幕列出休息/锻造/抽烟/举重/挖掘/回忆，锻造按被升级的牌逐张计数；标准化倍显示 `占比 倍数`，候选池为每张可升级牌加可用遗物行动，不含睡觉、不把锻造整体算一项。第三幕为进第四幕拿的回忆不进入候选池和回忆行；行与行不重叠，四幕合计与分幕都在。 |
+| N4 | 切“涅奥选项”，先看一般率再导出标准率 | 文案为“删除1张牌”“变一张牌”“稀有牌三选一 / 代价”“删两张牌”“变两张牌”等；无代价的选项不再重复“/ 无”。一般率显示被选/出现；标准率为合计 100% 的强度份额，只使用有完整选项记录的局，缺少未选记录的旧局显示“—”。选项使用空白卡图占位，名称可读。 |
+| N5 | 切“Boss 遗物”，逐幕导出一般率与标准率 | 生成 `boss.png` 与 `boss-standardized.png`，按幕分节；一般率含“跳过”，标准率把跳过当同屏对手但不报告。遗物使用游戏内图片，跳过热图留白，稀有度/估算标记可读。 |
+| N6 | 在导出图页反复切换内容、幕和口径；在无数据筛选下点导出；导出后点“打开文件夹” | 只有“卡牌抓率”显示幕选择；非卡牌导出按钮为“导出长图 PNG”；无数据时提示“当前筛选没有可导出的记录”，不创建空目录；导出成功提示以“图片已保存：”开头，“打开文件夹”定位到本次目录。 |
+| N7 | 施加最少样本、结果、胜负口径、存档位和来源筛选，再核对总览与导出 | 低样本进入“样本不足”，不当作 0%；排除已知自动化、保留来源未知的规则不变；筛选条件、样本数和排除原因写进图片抬头与 `metadata.json`；切换筛选后区间随样本重算。 |
+| N8 | 在已验证环境上逐个加入 RunHistoryPlus 1.8.3、HideInfo 0.0.1、justclick 0.1.1、lolifontmod 0.2，打一场战斗并尝试回合重打 | 新白名单组合应照常录制并可恢复；若某个组合仍不支持，历史页应显示“本局录制时的 Mod 组合未被当时的版本支持”，而不是笼统的“没有快照”。四个 Mod 同时启用也测一次。 |
+| N9 | 用中文 Windows 的原版 `.run`（GBK 编码）和带 BOM 的 UTF-8 `.run` 各放一局到 `runs/`，打开统计；顺路看事件名 | 两种编码都能读取，中文事件名/卡名不乱码；统计计数正确，错误列表不新增“Unrecognized native history format”。 |
+| N10 | 中文界面打开 Mod 设置页、触发一次记录关闭/恢复、正常结束或放弃一局；再切英文 | 设置页两个开关、当前状态、导出按钮、归档提示均为对应语言；中文不溢出，英文回退正常；状态行显示“就绪 · 本地记录已开启”“记录已关闭”“已归档：胜利/死亡/放弃”等。 |
+
+已知边界，按预期记录即可，不算失败：
+
+- 标准率没有置信区间：1000 次自助法会跑在渲染线程上，TinyCat 的区间没有移植；一般率仍显示分子/分母。
+- 标准率是个人选择行为的描述，不是卡牌强度，也不是和一般率相减的“净收益”。
+- 涅奥标准率只覆盖有未选记录的局（原版 `neow_bonuses_skipped_log`/`neow_costs_skipped_log`，或账本 `NEOW_OPTION` 的候选）；旧局缺失属预期。
+- 火堆候选池由 `.run` 逐层重放牌组恢复；改卡 Mod、未覆盖的遗物或异常移除可能让重建覆盖率下降，界面会显示重建覆盖，样本不足的条目单列。
+- 长图可能很高（本机火堆标准率约 16500px），部分图片查看器会缩放；以文件本身为准。
+
+## v0.5.0-beta.2 快速测试（回归）
+
+以下清单保留作 beta.2 功能回归；新改动先测上一节。第 4 项的死亡、胜利和放弃使用不同的新局，不需要为检查统计专门打通关。
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -29,11 +54,13 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 | 4 | 正常死亡或胜利后，直接打开账本看历史与个人统计。另开新局试局内放弃；再另开新局保存退出后，从主菜单放弃 | 结束后立即计入，且只计一局。历史结局正确；放弃默认排除，切到“包含放弃”后才计入，并算败局，不算死于最后遭遇 |
 | 5 | 在历史页切换“当前存档位”与“旧记录：存档未知”。有多个存档位时，在主菜单切换存档位后再看统计 | 当前槽不混入其他槽。缺存档位的旧记录只能在“存档未知”下看到，个人统计随当前槽变化 |
 | 6 | 在个人统计试起止月份，再看“构筑→候选出现与选取”等列表；顺路翻历史详情 | 月份显示 `YYYY-MM`，起止选同月包含整月。选取率按幕分组，同组有效数值从高到低。历史候选、选择、HP 和金币与实际一致；原版 `.run` 没有操作来源，显示 unknown 属于预期 |
+| 7 | 从主菜单打开账本；局中再打开一次 | 直接显示当前存档位的最近一局；局中打开时显示正在玩的局 |
+| 8 | 顶部切换“历史对局、个人统计、最近一局”，再从普通页面点“关闭账本” | 无需先返回上一级；关闭后直接回到游戏 |
 
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 从 [v0.5.0-beta.2](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.2) 下载 `SpireLedger.jar`，退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 `main` 新改动时使用维护者从当前分支构建的 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
@@ -44,7 +71,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 | # | 测什么 | 怎么做 | 预期 |
 |---|---|---|---|
-| A1 | 安装与加载 | 按上面的环境启动游戏 | 正常进入主菜单，顶栏有尖塔账本图标，设置页有两个开关：“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)” |
+| A1 | 安装与加载 | 按上面的环境启动游戏 | 正常进入主菜单，顶栏有尖塔账本图标，设置页有两个开关：中文为“本地尖塔账本记录”“回合快照记录（练习/重打）”，英文为“Local Spire Ledger recording”“Turn checkpoint recording (practice/replay)” |
 | A2 | 结局：正常死亡 | 打一局，死在任意战斗 | 历史页这一局显示“死亡”，统计页的死亡数加一 |
 | A3 | 结局：菜单放弃 | 一局在局中设置里放弃；另开一局保存退出，再从主菜单放弃 | 两局均显示“放弃”，不显示“死亡”。统计页默认不计放弃局，打开放弃开关后才计入，并算作败局 |
 | A4 | 结局：无钥匙通过第三幕 | 不拿三把钥匙打完第三幕 Boss | 显示“胜利”。胜利口径为“击杀心脏”时不算胜，切到“通过第三幕”后算胜 |
@@ -89,4 +116,7 @@ java -cp "build\gson;build\stats-classes" spireledger.stats.GoldCheck <游戏目
 ## 暂时不能测
 
 - 与求解器 Mod 同装时，求解器动作自动标为“已知自动化”。这需要求解器一侧先接入，计划在 M3。
-- 遗物效果量（读 Relic Stats 的数据）、标准化抓率、其他 Tierlist 和 CSV 导出，计划在 M3。实际抓率 PNG 已可测试。
+- 遗物效果量（读 Relic Stats 的数据）、其他 Tierlist、CSV 导出和可配置分档阈值，计划在后续版本。
+- 标准化率的置信区间与自然断点参数复测：当前只移植 TinyCat 的点估计和 Jenks 分档，没有移植自助法区间；份额为描述性结果，不作为强度结论验收。
+
+标准化抓率、涅奥/Boss 标准率和火堆标准化倍已经可以测试，见上文 N2–N5；卡牌实际抓率 PNG 仍可回归。
