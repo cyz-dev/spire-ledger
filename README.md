@@ -2,11 +2,11 @@
 
 《杀戮尖塔 1》的本地记录与复盘 Mod。打开账本就能看当前局或当前存档位的最近一局，悬停楼层查看选择和资源变化，也可以查看个人统计与标准化率、导出统计长图，或重打已保存的回合。数据保存在本机，不上传。
 
-当前发布版：**[v0.5.0-beta.3](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.3)**（内测版，2026-10-29）。`main` 与 beta.3 内容一致，新增的标准化率、四类导出长图和总览区间仍在等待手动回归；测试项已登记为 [issue](https://github.com/Yongzhaooo/spire-ledger/issues)。
+当前发布版：**[v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3)**（内测版，2026-10-29）。`main` 与 beta.3 内容一致，新增的标准化率、四类导出长图和总览区间仍在等待手动回归；测试项已登记为 [issue](https://github.com/cyz-dev/spire-ledger/issues)。
 
 ## 安装与升级
 
-1. 从 [Releases](https://github.com/Yongzhaooo/spire-ledger/releases) 下载 `SpireLedger.jar`。
+1. 从 [Releases](https://github.com/cyz-dev/spire-ledger/releases) 下载 `SpireLedger.jar`。
 2. 退出游戏和 ModTheSpire，把文件放到游戏目录的 `mods/`，替换旧版同名文件。已有账本记录会保留。
 3. 在 ModTheSpire 勾选 BaseMod、StSLib 和 Spire Ledger，再启动游戏。
 4. 在 Mod 设置中确认“本地尖塔账本记录”（English: `Local Spire Ledger recording`）已开启。需要重打时，再开启“回合快照记录（练习/重打）”（English: `Turn checkpoint recording (practice/replay)`），进入新战斗生成快照。
@@ -88,7 +88,7 @@ beta.3 已发布，相对 beta.2 的改动：
 
 原生探针由程序驱动，尚未完成整局手玩回归和实体手柄验证。标准化数字是个人选择行为的描述，不是卡牌强弱结论。
 
-遇到问题时，按 `Ctrl+Shift+R` 生成诊断报告，文件位于 `~/.spire-ledger/bug-reports/`。提交 issue 时附上版本、Mod 列表、复现步骤和截图；也可以先看[已关闭问题](https://github.com/Yongzhaooo/spire-ledger/issues?q=is%3Aissue+state%3Aclosed)。
+遇到问题时，按 `Ctrl+Shift+R` 生成诊断报告，文件位于 `~/.spire-ledger/bug-reports/`。提交 issue 时附上版本、Mod 列表、复现步骤和截图；也可以先看[已关闭问题](https://github.com/cyz-dev/spire-ledger/issues?q=is%3Aissue+state%3Aclosed)。
 
 - [手动测试清单](docs/testing.md)
 - [产品定义](docs/product.md)

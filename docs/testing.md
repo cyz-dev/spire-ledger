@@ -7,7 +7,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 新版复盘用真实记录副本检查 1024×768 和 1920×1080 的悬停、固定、牌组和返回操作，并核对源 JSON 和 13 个游戏 RNG 不变。8 Mod 组合下已验证回合录制、原生重打按钮、求解器旧结果清空和相同行动结果。
 
-结果不符合预期时，记下职业、楼层并截图，按 Ctrl+Shift+R 生成错误报告，位置是 `~/.spire-ledger/bug-reports/`。测试结果可以直接开 issue，格式参考[已关闭问题](https://github.com/Yongzhaooo/spire-ledger/issues?q=is%3Aissue+state%3Aclosed)：版本、Mod 列表、复现步骤、期望与实际、截图。
+结果不符合预期时，记下职业、楼层并截图，按 Ctrl+Shift+R 生成错误报告，位置是 `~/.spire-ledger/bug-reports/`。测试结果可以直接开 issue，格式参考[已关闭问题](https://github.com/cyz-dev/spire-ledger/issues?q=is%3Aissue+state%3Aclosed)：版本、Mod 列表、复现步骤、期望与实际、截图。
 
 ### 给接手协作者
 
@@ -61,7 +61,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 beta.3 新改动时从 [v0.5.0-beta.3](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 beta.3 新改动时从 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
