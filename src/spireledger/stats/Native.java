@@ -68,7 +68,7 @@ final class Native {
         if(isArray(o,"items_purged")||isArray(o,"event_choices")||isArray(o,"campfire_choices")||isArray(o,"relics")||o.get("neow_bonus_log")!=null){
             int shop=arr(o,"items_purged").size(),event=0,neow=0,campfire=0,cage=strings(arr(o,"relics")).contains("Empty Cage")?2:0;
             for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject())event+=strings(arr(e.getAsJsonObject(),"cards_removed")).size();
-            if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject())neow=strings(arr(obj(o,"neow_bonus_log"),"cards_removed")).size();
+            if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject())neow=strings(arr(obj(o,"neow_bonus_log"),"cardsRemoved")).size();
             for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();if("PURGE".equals(str(c,"key"))&&!str(c,"data").isEmpty())campfire++;}
             Map<String,Integer> purges=new LinkedHashMap<>();purges.put("shop",shop);purges.put("event",event);purges.put("neow",neow);purges.put("campfire",campfire);purges.put("empty_cage",cage);purges.put("total",shop+event+neow+campfire+cage);
             r.purges=Fact.of(purges,N);
@@ -112,7 +112,7 @@ final class Native {
         List<String> bought=strings(arr(o,"items_purchased"));JsonArray boughtAt=arr(o,"item_purchase_floors");for(int i=0;i<bought.size();i++)at(m,b,i<boughtAt.size()?integer(boughtAt.get(i)):null,"purchase:"+item(bought.get(i)),1);
         int purged=arr(o,"items_purged").size();JsonArray purgedAt=arr(o,"items_purged_floors");for(int i=0;i<purged;i++)at(m,b,i<purgedAt.size()?integer(purgedAt.get(i)):null,"purge:SHOP",1);
         // RunHistoryPlus only; vanilla has no Neow removal record (metrics.md 6.5).
-        if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject()){JsonObject neow=obj(o,"neow_bonus_log");m.put("has|neow_bonus_log",1);at(m,b,null,"purge:NEOW",strings(arr(neow,"cards_removed")).size());}
+        if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject()){JsonObject neow=obj(o,"neow_bonus_log");m.put("has|neow_bonus_log",1);at(m,b,null,"purge:NEOW",strings(arr(neow,"cardsRemoved")).size());}
         // Empty Cage removes two cards that .run never lists: +2, estimated, in the act whose boss relic it was.
         if(strings(arr(o,"relics")).contains("Empty Cage")){int act=0;JsonArray boss=arr(o,"boss_relics");for(int i=0;i<boss.size();i++)if(boss.get(i).isJsonObject()&&"Empty Cage".equals(str(boss.get(i).getAsJsonObject(),"picked")))act=i+1;m.merge(act+"|purge:EMPTY_CAGE",2,Integer::sum);}
         JsonArray path=arr(o,"path_per_floor");for(int i=0;i<path.size();i++)if(path.get(i).isJsonPrimitive()&&"$".equals(path.get(i).getAsString()))at(m,b,i+1,"shop_visit",1);

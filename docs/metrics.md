@@ -203,7 +203,7 @@ product.md 把以下三项记录口径交给本文。
 | 最长连胜 | 胜负未知的局中断连胜还是跳过：建议跳过（proposed） | 局 | 无 | `.run` | TinyCat 全角色模式用轮换连胜；本项目候选，未定 |
 | 平均终局卡组大小 | 无终局牌组为缺失 | 局 | 无 | `.run` `master_deck` > Ledger `ending.state.deck` | 一致 |
 | 平均得分 | 无 `score` 为缺失 | 局 | 无 | `.run` `score` > Ledger | 一致；显示 95% 区间 |
-| 平均删牌 | 相应字段缺失为缺失；有字段但无删牌为已知为零 | 局 | 空鸟笼在 `.run` 局按 +2 估算 | 商店：`.run` `items_purged`；事件：`event_choices[].cards_removed`；尼奥：`.run` `neow_bonus_log.cards_removed` > Ledger 牌组差；火堆：`campfire_choices` 的 `PURGE`；空鸟笼：`.run` `relics` | TinyCat 五类来源一致；TinyCat 尼奥删牌读 RunHistoryPlus，本机历史局为空。显示 95% 区间 |
+| 平均删牌 | 相应字段缺失为缺失；有字段但无删牌为已知为零 | 局 | 空鸟笼在 `.run` 局按 +2 估算 | 商店：`.run` `items_purged`；事件：`event_choices[].cards_removed`；尼奥：`.run` `neow_bonus_log.cardsRemoved`（RunHistoryPlus 写驼峰，与 TinyCat `ClassStat` 相同；2026-10-28 前误读 `cards_removed`，恒为 0） > Ledger 牌组差；火堆：`campfire_choices` 的 `PURGE`；空鸟笼：`.run` `relics` | TinyCat 五类来源一致；TinyCat 尼奥删牌读 RunHistoryPlus，本机历史局为空。显示 95% 区间 |
 | 平均楼层、最高分 | 字段缺失为缺失 | 局 | 无 | `.run` | 一致 |
 | 击杀 Boss 数 | 无 `damage_taken` 为缺失 | 局 | 无 | `.run` 推导 | TinyCat 读 `score_breakdown`（本机 0/762）；本项目用 `damage_taken` 推导，历史局可得 |
 | 击杀敌人数 | 无计数器为缺失（本机历史局全部缺失） | 局 | 无 | Ledger > RunHistoryPlus `score_breakdown` | TinyCat 读 `score_breakdown` |
@@ -325,7 +325,7 @@ product.md 把以下三项记录口径交给本文。
 | 商店购买率 | 无 `shop_offer` 的商店为“未记录”（本机历史局全部缺失）；买不起的商品仍算被展示，可买状态另行记录 | 选择集（有记录的商店 / 进店次数） | 无 | Ledger > RunHistoryPlus（仅名称无价格） | TinyCat 没有购买率 |
 | 删牌、升级来源 | 某来源的字段缺失时，该来源为缺失，其他来源照常；空鸟笼删牌在 `.run` 局按 +2 估算 | 局（按来源） | 空鸟笼 `.run` 局 +2，标 `estimated` | 商店、事件、火堆：`.run`；尼奥：Ledger 前后快照 > RunHistoryPlus；空鸟笼：Ledger 牌组差 > 估算 | 一致（五类来源）。TinyCat 尼奥删牌读 `neow_bonus_log`，本机 0/762 |
 | 火堆行动 | 无 `campfire_choices` 为缺失 | 局 | 无 | `.run` | TinyCat 页面曾把“出现次数”当胜率显示，已改为次数占比；本项目同样只给次数占比，胜率另列 |
-| 火堆偏好、选项权重 | 重建不出锻造时的牌组或候选为缺失，单列 `campfire_rebuild` 覆盖；样本不足单列 | 选择次数（可定位的锻造 / 全部锻造） | `.run` 按楼层逐张重放初始牌组、抓牌、商店、事件、尼奥、删牌与升级；潘多拉/星盘等按终局牌组补差，标 `estimated` | Ledger `mutation_pending.before` > `.run` 重放；遗物可用性按首次获得楼层重建 | TinyCat 的 W 口径、选项可选条件（咖啡杯、战锤、回忆强制）原样采用；Ledger 局免重建。`.run` 重放的候选池与 TinyCat 一致（每张可升级牌一项），但改卡 Mod 或异常移除可能降低覆盖 |
+| 火堆偏好、选项权重 | 重建不出锻造时的牌组或候选为缺失，单列 `campfire_rebuild` 覆盖；样本不足单列 | 选择次数（可定位的锻造 / 全部锻造） | `.run` 按楼层逐张重放初始牌组、抓牌、商店、事件、尼奥、删牌与升级；潘多拉/星盘/空鸟笼等在其 Boss 楼层按终局牌组补差，标 `estimated` | Ledger `mutation_pending.before` > `.run` 重放；遗物可用性按首次获得楼层重建 | TinyCat 的 W 口径、选项可选条件（咖啡杯、战锤、回忆强制）原样采用；Ledger 局免重建。`.run` 重放的候选池与 TinyCat 一致（每张可升级牌一项），但改卡 Mod 或异常移除可能降低覆盖。**与 TinyCat 的差异**：TinyCat 不扣空鸟笼删掉的 2 张，本项目在 Boss 楼层扣除，避免已删光的牌种仍留在锻造候选里。回忆按“前三幕且本局未用过”判定可选，`.run` 不记录第四幕是否已解锁，未解锁的玩家基线偏低 |
 
 ### 6.6 金币
 
@@ -483,6 +483,6 @@ CSV 格式（proposed）：UTF-8 带 BOM，逗号分隔，按 RFC 4180 加引号
 
 | 脚本 | 内容 |
 |---|---|
-| `test/check_overview.py` | 直接读原版 `.run`，按当前存档位/筛选重算卡组大小、得分、三类删牌及 95% 区间，与 Java 导出的 `build/overview.tsv` 比对；本机 66 局差值 0 |
-| `test/check_boss_standardized.py` | 自己重建每幕 Boss 奖励屏并重跑 Plackett-Luce，与 `build/boss-shares.tsv` 比对份额；本机 66 局逐位一致 |
+| `test/check_overview.py` | 直接读原版 `.run`，按当前存档位/筛选重算卡组大小、得分、三类删牌及 95% 区间，与 `test/StatsDump.java` 导出的 `overview.tsv` 比对；Java 侧区间取自内核 `Metric.interval()`，即界面显示的同一份数字。2026-10-28 维护者机器 0 号位 654 局、2 号位 65 局差值 0 |
+| `test/check_boss_standardized.py` | 自己重建每幕 Boss 奖励屏并重跑 Plackett-Luce，与 `StatsDump` 导出的 `boss-shares.tsv` 比对份额；它与 Java 是同一算法的两种语言实现，能发现移植与选屏差异，不能证明模型本身。2026-10-28 两个存档位最大差 4e-15 |
 | `test/StatsOptionsProbe.java` + `integration-stats-options.ps1` | 隔离实例内驱动真实游戏界面，检查四类导出、一般率/标准率、长图尺寸、`metadata.json` 与总览区间；本机通过 |

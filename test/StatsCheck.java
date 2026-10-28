@@ -238,6 +238,23 @@ public final class StatsCheck {
   JsonObject noSkip=nativeRun("NB-d",0,5,false,"Jaw Worm");noSkip.add("neow_bonus",JsonNull.INSTANCE);
   Run rd=Stats.build(Arrays.asList(nf(noSkip,"IRONCLAD","d.run")),Collections.emptyList()).runs.get(0);
   check(!rd.neowOffers.known(),"a run without a skipped log carries no offer set");
+  // Neow coverage is the rate rows' denominator: a run that kept only its pick is not covered (metrics.md 6.3).
+  JsonObject pickOnly=nativeRun("NB-f",0,56,false,"Hexaghost",act123());pickOnly.addProperty("neow_bonus","HUNDRED_GOLD");pickOnly.addProperty("neow_cost","NONE");
+  Map<String,Metric> mc=metrics(Stats.build(Arrays.asList(nf(a,"IRONCLAD","a.run"),nf(pickOnly,"IRONCLAD","f.run")),Collections.emptyList()),f);
+  check(is(m(mc,"coverage:neow"),1,2),"Neow coverage counts full option sets only: "+m(mc,"coverage:neow").numerator+"/"+m(mc,"coverage:neow").denominator);
+  // RunHistoryPlus writes neow_bonus_log in camelCase; Empty Cage's two unnamed removals leave the smith screen at its boss floor.
+  JsonObject cage=nativeRun("NB-g",0,56,false,"Hexaghost",act123());
+  cage.add("neow_bonus_log",arrjson("{\"cardsRemoved\":[\"Strike_R\"]}"));cage.add("items_purged",arrjson("[\"Strike_R\",\"Strike_R\",\"Strike_R\"]"));
+  cage.add("relics",arrjson("[\"Burning Blood\",\"Empty Cage\"]"));cage.add("boss_relics",arrjson("[{\"picked\":\"Empty Cage\",\"not_picked\":[\"Sozu\",\"Astrolabe\"]}]"));
+  cage.add("campfire_choices",arrjson("[{\"floor\":20,\"key\":\"SMITH\",\"data\":\"Bash\"}]"));cage.add("master_deck",arrjson("[\"Defend_R\",\"Defend_R\",\"Defend_R\",\"Bash+1\"]"));
+  Stats.Index ci=Stats.build(Arrays.asList(nf(cage,"IRONCLAD","g.run")),Collections.emptyList());Map<String,Metric> mg=metrics(ci,f);
+  check(is(m(mg,"purge_total"),6,1)&&is(m(mg,"purge_shop"),3,1),"removals: shop 3 + Neow cardsRemoved 1 + Empty Cage 2: "+m(mg,"purge_total").numerator);
+  Run.Campfire smith=run(ci,"NB-g").campfires.value.get(0);
+  check(smith.candidates.equals(Arrays.asList("Defend_R","Bash"))&&smith.pool==3,"Empty Cage removed the last Strike before the act-2 smith: "+smith.candidates);
+  // 95% intervals come from the kernel: Wilson for 0 of 3 wins, none for a single-run mean.
+  double[] wilson=m(metrics(index,f),"win").interval();
+  check(wilson!=null&&wilson[0]==0&&Math.abs(wilson[1]-0.5615)<1e-3,"Wilson interval for 0/3: "+Arrays.toString(wilson));
+  check(m(mg,"purge_total").interval()==null,"one sample has no interval");
  }
  /** TinyCat parity export (tools/tinycat-compare README 2): exact filters, slot by directory, per-act counts, missing as null. */
  static void export(){

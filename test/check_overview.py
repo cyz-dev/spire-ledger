@@ -4,9 +4,9 @@
 Reads the native .run files directly, rebuilds the same slot/selection rules as
 Stats.select, recomputes TinyCat's deck size, score and removal families, and
 compares the means plus their intervals with build/overview.tsv written by
-build/probe/spireledger/stats/OverviewDump.java.
+test/StatsDump.java (see its header for the commands).
 
-Usage: python test/check_overview.py --runs <runs dir> --slot 0 --java build/overview.tsv --ids build/overview-ids.tsv
+Usage: python test/check_overview.py --runs <runs dir> --slot 0 --java build/dump-out/overview.tsv --ids build/dump-out/overview-ids.tsv
 """
 
 import argparse
@@ -82,7 +82,8 @@ def purges(run):
     shop = len(run.get("items_purged") or [])
     event = sum(len(choice.get("cards_removed") or []) for choice in run.get("event_choices") or [] if isinstance(choice, dict))
     neow_log = run.get("neow_bonus_log")
-    neow = len(neow_log.get("cards_removed") or []) if isinstance(neow_log, dict) else 0
+    # RunHistoryPlus writes neow_bonus_log in camelCase (TinyCat ClassStat reads cardsRemoved).
+    neow = len(neow_log.get("cardsRemoved") or []) if isinstance(neow_log, dict) else 0
     campfire = sum(1 for choice in run.get("campfire_choices") or []
                    if isinstance(choice, dict) and choice.get("key") == "PURGE" and choice.get("data"))
     cage = 2 if "Empty Cage" in (run.get("relics") or []) else 0

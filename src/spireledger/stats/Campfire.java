@@ -22,7 +22,8 @@ final class Campfire {
     static final String[] KEYS={"REST","SMITH","RECALL","PURGE","LIFT","DIG"};
     static final Set<String> IMMUNE=new HashSet<>(Arrays.asList("AscendersBane","Ascender's Bane","Clumsy","CurseOfTheBell","Curse of the Bell","Decay","Doubt","Injury","Necronomicurse","Normality","Pain","Parasite","Pride","Regret","Shame","Void","Writhe","Burn","Dazed","Slimed","Wound"));
     static final Set<String> RELICS=new HashSet<>(Arrays.asList("Coffee Dripper","Fusion Hammer","Peace Pipe","Girya","Shovel"));
-    static final Set<String> SUPPLEMENT=new HashSet<>(Arrays.asList("Pandora's Box","Astrolabe","Tiny House","Orrery","Calling Bell"));
+    // Empty Cage removes two cards .run never names; the surplus step takes them out at its boss floor (TinyCat leaves them in).
+    static final Set<String> SUPPLEMENT=new HashSet<>(Arrays.asList("Pandora's Box","Astrolabe","Tiny House","Orrery","Calling Bell","Empty Cage"));
     static final int ADD=0,REMOVE=1,UPGRADE=2,PANDORA=3,DEFICIT=4,SURPLUS=5,CAMP=6;
     static final int DECK=0,SITE=1,SUPPLEMENT_ORDER=2,SURPLUS_ORDER=3;
 

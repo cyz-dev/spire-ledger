@@ -96,6 +96,6 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 `stats.Standardized` 负责卡牌、涅奥和 Boss 遗物的 Plackett-Luce 点估计（`standardized-v1`）：选择集、先验和 MM 迭代与 TinyCat 对齐，`SKIP` 只作对手。`stats.Campfire` 从原版 `.run` 逐层重放牌组，恢复每次火堆的候选池与遗物可用性，输出 `Run.Campfire`；`Metrics.campfires()` 按幕聚合成行动次数、候选池、睡觉和 `campfire_pref` 标准化倍（`campfire-v1`）。`Metrics` 另新增 `score` 与三类删牌均值，`Metric` 保存平方和用于区间。
 
-`StatsScreen` 用 `chartKind`、`rateMenu`、`chartCampfireRate` 三个下拉切换四类内容和两种口径；总览的 `interval()` 对胜率用 Wilson、对五个均值用 ±1.96 SE。`PickRateChart` 的导出按内容写长图：卡牌 `act-N[-standardized].png`，其余 `<kind>[-standardized].png`；`writeTiled` 把超过 GPU 纹理上限的图按 4096px 高的带渲染到同一 `Pixmap`，再写单个 PNG，避免火堆标准率（约 16500px）被截断。导出目录、`metadata.json` 和失败清理沿用旧路径，不覆盖既有导出。
+`StatsScreen` 用 `chartKind`、`rateMenu`、`chartCampfireRate` 三个下拉切换四类内容和两种口径；总览区间由内核 `Metric.interval()` 计算（胜率 Wilson，均值 ±1.96 SE），界面只决定哪些行显示、被结果筛选隐藏或样本不足的行不显示区间；离线 `test/StatsDump.java` 读同一个方法。`Standardized` 与 `PickTiers` 的 Jenks 按公式在本仓库重写，参数取自 TinyCat 文档，不沿用其代码（2026-10-28）。`PickRateChart` 的导出按内容写长图：卡牌 `act-N[-standardized].png`，其余 `<kind>[-standardized].png`；`writeTiled` 把超过 GPU 纹理上限的图按 4096px 高的带渲染到同一 `Pixmap`，再写单个 PNG，避免火堆标准率（约 16500px）被截断。导出目录、`metadata.json` 和失败清理沿用旧路径，不覆盖既有导出。
 
 `Stats.readNative` 先严格 UTF-8、再 GBK、最后系统默认解码原版 `.run`，并去掉 BOM；与 TinyCat 在中文 Windows 上的读取方式一致。

@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.*;
 import com.badlogic.gdx.graphics.g2d.*;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.google.gson.*;
 import com.megacrit.cardcrawl.cards.AbstractCard;
@@ -217,7 +218,7 @@ final class PickRateChart {
             text.add(tr("口径：","Rate: ")+(view==1?tr("标准率 · Plackett-Luce 强度份额（a=1, b=0.01；合计 100%，不含置信区间）","standardized · Plackett-Luce strength share (a=1, b=0.01; sums to 100%, no confidence interval)"):tr("一般率 · 被选次数 / 出现次数","observed · picked / offered")));
             text.add("metrics-v1 · "+PickTiers.VERSION+(view==1?" · "+Standardized.VERSION:"")+" · "+new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));return text;
         }
-        if(kind==1)text.add(view==1?tr("口径：标准化倍 = 占比 ÷ 随机基线；候选池 = 每张可升级牌 + 可用抽烟/举重/挖掘/回忆，不含睡觉，锻造不作为一个选项","Multiple = share ÷ random baseline; pool = every ungraded card plus available Toke/Lift/Dig/Recall, never sleep and never smith as one slot"):tr("口径：行动次数 · 锻造按被升级的牌逐张计数","Rate: action counts · each smith counted under the card it upgraded"));
+        if(kind==1)text.add(view==1?tr("口径：标准化倍 = 占比 ÷ 随机基线；候选池 = 每张可升级牌 + 可用抽烟/举重/挖掘/回忆，不含睡觉，锻造不作为一个选项","Multiple = share ÷ random baseline; pool = every unupgraded card plus available Toke/Lift/Dig/Recall, never sleep and never smith as one slot"):tr("口径：行动次数 · 锻造按被升级的牌逐张计数","Rate: action counts · each smith counted under the card it upgraded"));
         else if(kind==2)text.add(view==1?tr("口径：涅奥标准率 · 同屏（所选与未选）对齐后的强度份额，合计 100%","Rate: Neow standardized · opponent-adjusted strength over the whole screen, sums to 100%"):tr("口径：涅奥选项 · 被选次数 / 出现次数","Rate: Neow options · picked / offered"));
         else text.add(view==1?tr("口径：Boss 遗物标准率 · 同屏（所选与未选）对齐后的强度份额；跳过不报告","Rate: boss relic standardized · opponent-adjusted strength over the whole screen; Skip not reported"):tr("口径：Boss 遗物 · 被选次数 / 出现次数","Rate: boss relics · picked / offered"));
         text.add((kind==1?"campfire-v1":PickTiers.VERSION)+(view==1&&kind!=1?" · "+Standardized.VERSION:"")+" · "+new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));return text;
@@ -268,9 +269,13 @@ final class PickRateChart {
         }});
     }
     interface Scene{void draw(SpriteBatch batch);}
+    /** Band height the driver can attach: 4096 at most, lower when the driver's texture or renderbuffer limit is. */
+    static int band(){java.nio.IntBuffer limit=BufferUtils.newIntBuffer(16);int band=4096;
+        for(int name:new int[]{GL20.GL_MAX_TEXTURE_SIZE,GL20.GL_MAX_RENDERBUFFER_SIZE}){limit.clear();Gdx.gl.glGetIntegerv(name,limit);if(limit.get(0)>0)band=Math.min(band,limit.get(0));}
+        return band;}
     /** Tall categories exceed one GPU framebuffer, so bands are rendered bottom-up into one full-size pixmap and written as a single PNG. */
     void writeTiled(SpriteBatch sb,int width,int height,Path file,Matrix4 projection,Matrix4 transform,Scene scene)throws Exception{
-        int band=4096;Pixmap full=new Pixmap(width,height,Pixmap.Format.RGBA8888);sb.end();
+        int band=band();Pixmap full=new Pixmap(width,height,Pixmap.Format.RGBA8888);sb.end();
         try{
             for(int bottom=0;bottom<height;bottom+=band){
                 int slice=Math.min(band,height-bottom);FrameBuffer buffer=new FrameBuffer(Pixmap.Format.RGBA8888,width,slice,false);Pixmap part=null;

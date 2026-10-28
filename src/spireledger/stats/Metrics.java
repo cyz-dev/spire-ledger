@@ -42,7 +42,8 @@ public final class Metrics {
             if(r.score.known()){score.add(r.score.value,1);cover("score","run",1,1);}else cover("score","run",0,1);
             if(r.purges.known()){Map<String,Integer> p=r.purges.value;purgeTotal.add(p.getOrDefault("total",0),1);purgeShop.add(p.getOrDefault("shop",0),1);purgeEvent.add(p.getOrDefault("event",0),1);cover("purges","run",1,1);}else cover("purges","run",0,1);
             if(r.deck.known())for(String id:r.deck.value){Metric m=get("holding:"+id,RATE,"run","","deck",true);if(w==null)m.excluded++;else m.add(w?1:0,1);}
-            if(r.neow.known())related("neow:"+r.neow.value,w);if(r.neow.status!=Fact.Status.NOT_APPLICABLE)cover("neow","run",r.neow.known()?1:0,1);
+            if(r.neow.known())related("neow:"+r.neow.value,w);// Coverage is the rate rows' denominator (metrics.md 6.3): runs with the whole option set, not just the pick.
+            if(r.neow.status!=Fact.Status.NOT_APPLICABLE)cover("neow","run",r.neowOffers.known()?1:0,1);
             if(r.boss.known())for(int i=0;i<r.boss.value.size();i++){Run.BossOffer b=r.boss.value.get(i);cover("boss_relics","run_act",b==null?0:1,1);if(b==null)continue;
                 for(String id:b.offered)rate("boss:"+(i+1)+":"+id,"choice","boss_relics").add(id.equals(b.picked)?1:0,1);related("boss:"+(i+1)+":"+b.picked,w);}
             else if(r.boss.status==Fact.Status.MISSING&&r.maxAct.or(0)>=2)cover("boss_relics","run_act",0,Math.min(2,r.maxAct.value-1));

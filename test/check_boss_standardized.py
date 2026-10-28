@@ -4,9 +4,9 @@
 Parses the native .run files itself, rebuilds every boss relic screen as
 [picked, other offers..., SKIP] in act order, reruns the same Plackett-Luce
 MM fit, and compares the strength shares with build/boss-shares.tsv written by
-build/probe/spireledger/stats/BossDump.java.
+test/StatsDump.java (see its header for the commands).
 
-Usage: python test/check_boss_standardized.py --runs <runs dir> --slot 0 --java build/boss-shares.tsv
+Usage: python test/check_boss_standardized.py --runs <runs dir> --slot 0 --java build/dump-out/boss-shares.tsv
 """
 
 import argparse

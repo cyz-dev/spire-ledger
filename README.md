@@ -106,8 +106,10 @@ beta.3 已发布，相对 beta.2 的改动：
 输出为 `build/SpireLedger.jar`。原生游戏测试入口见 `integration-stats-ui.ps1`、`integration-stats-options.ps1` 和 `integration-replay.ps1`；真实对局布局测试依赖维护者本地记录。总览与 Boss 标准率另有独立 Python 校验：
 
 ```powershell
-python test/check_overview.py --runs "<游戏目录>\runs" --slot 0 --java build/overview.tsv --ids build/overview-ids.tsv
-python test/check_boss_standardized.py --runs "<游戏目录>\runs" --slot 0 --java build/boss-shares.tsv
+javac -encoding UTF-8 --release 8 -cp "build\gson;build\stats-classes" -d build\dump test\StatsDump.java
+java -cp "build\gson;build\stats-classes;build\dump" spireledger.stats.StatsDump "<游戏目录>\runs" 0 build\dump-out
+python test/check_overview.py --runs "<游戏目录>\runs" --slot 0 --java build/dump-out/overview.tsv --ids build/dump-out/overview-ids.tsv
+python test/check_boss_standardized.py --runs "<游戏目录>\runs" --slot 0 --java build/dump-out/boss-shares.tsv
 ```
 
 仓库不附带游戏本体、SaveStateMod 或构建好的 jar；协作者测试时使用维护者提供的构建，或按上面的命令自行构建。
