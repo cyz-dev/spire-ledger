@@ -53,7 +53,8 @@ public final class HistoryIndexCheck {
         check(HistoryIndex.filter(slots,"",-1,"",0,"",false,now,null,100,200).equals(Collections.singletonList(unknownSlot)),"null slot shows only unknown records");
         check(HistoryIndex.filter(slots,"",-1,"",0,"",false,now,2,101,200).isEmpty(),"time before start excluded");
         check(HistoryIndex.filter(slots,"",-1,"",0,"",false,now,2,0,0).equals(Arrays.asList(atStart,atEnd)),"unbounded dates keep the current slot");
-        Path savedRoot=root.resolve("saved-abandon");JsonObject metadata=new JsonObject();metadata.addProperty("save_slot",2);JsonObject ref;String savedId;
+        // Kept beside the scanned root: integration-history.ps1 reuses this root as the game's runs folder, where a nested root reads as an unreadable run.
+        Path savedRoot=root.resolveSibling(root.getFileName()+"-saved-abandon");JsonObject metadata=new JsonObject();metadata.addProperty("save_slot",2);JsonObject ref;String savedId;
         try(Recorder saved=new Recorder(savedRoot,metadata,null)){JsonObject state=new JsonObject();state.addProperty("class","IRONCLAD");ref=saved.checkpoint(state);savedId=saved.runId;}
         Path savedLog=savedRoot.resolve(savedId).resolve("events.jsonl");byte[] original=Files.readAllBytes(savedLog);
         check(!StateMod.abandonSaved(savedRoot,ref,1)&&Arrays.equals(original,Files.readAllBytes(savedLog)),"other slot never changed");

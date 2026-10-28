@@ -71,7 +71,7 @@ import java.nio.charset.StandardCharsets;
       case 5:
         if(!captured)return;hover(h.home);h.update();check(h.review.focused()==node(h,47),"pinned detail persists");clicked(h.review.deckTab);h.update();check(h.review.showDeck,"recorded deck tab");capture("review-floor-deck-zh");stage++;break;
       case 6:
-        if(!captured)return;clicked(h.next);h.update();check(h.floorOrder.get(h.floorIndex)==48,"next floor control");clicked(h.review.overview);h.update();check(!h.review.pinned,"return to overview");
+        if(!captured)return;h.message="probe launch notice";clicked(h.next);h.update();check(h.floorOrder.get(h.floorIndex)==48,"next floor control");check(h.message.isEmpty(),"moving to another floor clears the launch notice so the floor status is not overdrawn");clicked(h.review.overview);h.update();check(!h.review.pinned,"return to overview");
         check(h.detail.equals(recorded)&&TurnAdapter.rng().equals(initialRng),"hover pin deck navigation and renders preserve record and all 13 RNGs");
         clicked(h.diagnostics);h.update();check(h.raw&&h.branchMenu!=null,"raw details available");clicked(h.diagnostics);h.update();check(!h.raw,"return from details");
         clicked(h.historyTab);h.update();check(h.selected==null&&h.historyMode,"global history navigation");clicked(h.latestTab);h.update();stage=7;break;
@@ -91,8 +91,8 @@ import java.nio.charset.StandardCharsets;
       case 10:
         if(h.stats.chart.exportRequested)return;check(h.stats.chart.lastExport!=null,"PNG export completed");
         Path output=h.stats.chart.lastExport;check(output.getParent().equals(StateMod.ROOT.getParent().resolve("exports")),"exports outside run data");JsonObject meta=TurnFiles.read(output.resolve("metadata.json"));check(meta.get("act").getAsInt()==1&&meta.getAsJsonArray("entries").size()==h.stats.chart.entries.size(),"export scope and entry count match preview");
-        for(JsonElement item:meta.getAsJsonArray("entries")){JsonObject e=item.getAsJsonObject();spireledger.stats.Metric metric=h.stats.metrics.get("pick:1:"+e.get("card").getAsString());check(metric!=null&&metric.numerator==e.get("picked").getAsDouble()&&metric.denominator==e.get("offered").getAsDouble(),"export counts match screen kernel");}
-        Pixmap png=new Pixmap(new FileHandle(output.resolve("act-1-1.png").toFile()));check(png.getWidth()==1600&&png.getHeight()>365,"readable PNG dimensions");png.dispose();
+        for(JsonElement item:meta.getAsJsonArray("entries")){JsonObject e=item.getAsJsonObject();String card=e.get("card").getAsString();spireledger.stats.Metric metric=h.stats.metrics.get(card.equals(PickRateChart.SKIP)?"skip:1":card.equals(PickRateChart.BOWL)?"bowl:1":"pick:1:"+card);check(metric!=null&&metric.numerator==e.get("picked").getAsDouble()&&metric.denominator==e.get("offered").getAsDouble(),"export counts match screen kernel: "+card);}
+        Pixmap png=new Pixmap(new FileHandle(output.resolve("act-1.png").toFile()));check(png.getWidth()==1600&&png.getHeight()>365,"readable PNG dimensions");png.dispose();
         report.addProperty("export_directory",output.toString());report.addProperty("native_latest_navigation_and_png_export",true);
         dropdown(h.stats.chartAct,1);check(h.stats.chart.act==2,"chart act selection");dropdown(h.stats.chartAct,0);check(h.stats.chart.act==1,"chart act return");
         check(TurnAdapter.rng().equals(initialRng),"stats and image export preserve all RNGs");clicked(h.stats.advancedButton);h.update();stage=12;break;

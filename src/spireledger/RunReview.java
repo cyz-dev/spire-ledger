@@ -44,7 +44,8 @@ final class RunReview {
     static float w(float x){return Settings.WIDTH*x;}static float h(float y){return Settings.HEIGHT*y;}
     int focused(){return pinned?indexForFloor():hover;}
     int indexForFloor(){if(host.floorOrder.isEmpty())return -1;int floor=host.floorOrder.get(host.floorIndex);for(int i=0;i<model.floors.size();i++)if(model.floors.get(i).number==floor)return i;return -1;}
-    void choose(int i){int number=model.floors.get(i).number;int position=host.floorOrder.indexOf(number);if(position>=0){host.floorIndex=position;host.focusFloor();host.makeLines();}scroll=0;}
+    // A launch or replay notice belongs to the floor it came from; choosing another floor brings its status line back.
+    void choose(int i){host.message="";int number=model.floors.get(i).number;int position=host.floorOrder.indexOf(number);if(position>=0){host.floorIndex=position;host.focusFloor();host.makeLines();}scroll=0;}
     void update(){
         sync();if(model==null)return;
         if(pinned&&host.turnMenu!=null){host.turnMenu.update();if(host.turnMenu.isOpen)return;}
@@ -112,7 +113,7 @@ final class RunReview {
             text(sb,host.fit(row.label,w(.84f)),row.card==null?.06f:.10f,y,row.color);
         }
         if(rows.size()>limit)text(sb,tr("滚轮查看 ","Scroll ")+(scroll+1)+"–"+Math.min(rows.size(),scroll+limit)+" / "+rows.size(),.69f,.32f,MUTED);
-        if(pinned){
+        if(pinned&&host.message.isEmpty()){
             String status=!host.availableTurns.isEmpty()?tr("已保存 ","Saved ")+host.availableTurns.size()+tr(" 个回合。重打前会停止求解器。"," turns. Replay stops the solver first."):host.turnUnavailableText(floor.number);
             text(sb,host.fit(status,w(.65f)),.20f,.115f,MUTED);
         }
