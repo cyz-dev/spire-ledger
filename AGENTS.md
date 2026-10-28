@@ -24,7 +24,13 @@
 3. **显示必须遵守口径规则。** 新增的显示路径（新行、区间、导出图、metadata）要复用 `Metric.shown()`、最少样本和结果筛选。例如“仅胜”筛选下胜率显示“—”，它的区间也不能显示，否则等于把隐藏的数字泄露出来。
 4. **字段名以真实数据为准。** 读原版 `.run` 或 RunHistoryPlus 字段前，先在真实 `.run` 或 `samples/` 里搜出这个键的确切写法，再写代码和夹具。RunHistoryPlus 的键多为驼峰，例如 `neow_bonus_log` 里的 `cardsRemoved`，而不是 `cards_removed`。`.run` 文件按 UTF-8（带或不带 BOM）解码，失败再用 GBK 解码，沿用 `Stats.nativeText`，不要另写一套解码。
 5. **记录 schema 只增不改。** 已有字段不改名、不改含义、不删除；新字段要让旧记录缺省时能读，缺失和 0 分开处理（metrics.md 1.2）。
-6. **同装 Mod 白名单先测后加。** `ReplayEnvironment.OPTIONAL` 里每加一个 Mod，都要先在原生探针里跑通该组合的回合录制和重打，把命令和结果写进 testing.md，再加入白名单。没测过的 Mod 不进白名单。
+6. **新增 Mod 支持必须附带完整测试，缺一项就关闭 PR。** 往 `ReplayEnvironment.OPTIONAL` 加 Mod 或改版本时，同一个 PR 里必须同时有：
+   - 白名单里的 modid 和版本，原样取自该 Mod jar 内的 `ModTheSpire.json`，不凭记忆或工坊页面填写。
+   - 三次原生探针，全部 PASS：只加这个 Mod 跑一次；和白名单里已有的可选 Mod 全部同装再跑一次；再加 `-SolverCombination` 跑一次。基础命令是 `integration-replay.ps1 -Mode save -ReplayCurrent -SuperFastMode -ExperimentalTurns -WaitForExit -ExtraMods <jar>,...`，结果文件 `replay-probe-result.json` 的 `extra_mods` 要显示正确版本。
+   - PR 描述里写明每次的完整命令、最后一行输出、jar 来源（工坊 ID）。
+   - docs/testing.md 新增一行手测（打一场战斗、重打一个回合），docs/architecture.md 的“已审核的同装 Mod”同步加上这个 Mod。
+
+   协作者只说“顺便把某某 Mod 加进白名单”时，代理要回复上面这张清单，不能先把 Mod 加进去、把测试留到以后。
 7. **求解器回合重打合同 v1 不能静默改动。** `ReplayEnvironment` 的版本判断和 `SolverReplay.contract()` 检查的成员列表是和求解器仓库约定的合同（architecture.md “求解器回合重打合同 v1”）。要改就先告诉维护者，由维护者通知求解器一侧并给合同版本号加一。
 8. **版本号和发布只由维护者决定。** 不改 `ModTheSpire.json` 的 `version`，不打 tag，不跑 `gh release`，不上传工坊。功能提交和发布提交分开。
 9. **不加依赖。** 不新增 Maven、Gradle 或第三方 jar。JDK、Gson 和游戏自带的 libGDX 够用。
@@ -68,7 +74,7 @@
 
 ## 6. 提交与交付
 
-- 在功能分支上工作，推送后开 PR，由维护者审阅合并；不要直接推 `main`。
+- 在自己的 fork 或功能分支上工作，推送后开 PR，由维护者审阅合并。不要直接推 `main`，也不要合并自己的 PR。
 - 只 `git add` 自己改的路径，不用 `git commit -a` 或 `git add .`。`build/`、`sendToDevs/`、游戏 jar、SaveStateMod jar 和真实记录都不进 Git。
 - 提交信息用英文，写成一句说明做了什么的祈使句，和现有历史一致，例如 `Fix beta.3 stats defects and commit the dump behind the Python checks`。一个提交只做一件事；重写、修复和新功能尽量分开提交。
 
