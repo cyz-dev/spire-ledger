@@ -8,6 +8,13 @@ public final class RunReviewCheck {
     static void check(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     static JsonObject mod(String id,String version){JsonObject m=new JsonObject();m.addProperty("id",id);m.addProperty("version",version);return m;}
     public static void main(String[] args){
+        JsonObject unsupportedRun=json("{snapshots:[{floor:6,availability:'unsupported'},{floor:10,availability:'unsupported'}]}");
+        check(HistoryScreen.turnUnavailableReason(unsupportedRun,6).equals("unsupported"),"floor with an unsupported point explains the mod combination");
+        check(HistoryScreen.turnUnavailableReason(unsupportedRun,56).equals("unsupported"),"floor without points in an unsupported run still explains the mod combination");
+        JsonObject mixed=json("{snapshots:[{floor:6,availability:'recorded'},{floor:10,availability:'missing'}]}");
+        check(HistoryScreen.turnUnavailableReason(mixed,10).equals("missing"),"late observation stays a per-floor reason");
+        check(HistoryScreen.turnUnavailableReason(mixed,56).equals("none"),"supported run without points on a floor stays generic");
+        check(HistoryScreen.turnUnavailableReason(json("{}"),56).equals("none"),"manifest without snapshots stays generic");
         List<JsonObject> records=new ArrayList<>();
         records.add(json("{type:'floor',state:{floor:1,act:1,room:'MonsterRoom',hp:70,gold:99}}"));
         JsonObject choice=json("{type:'decision',decision_id:'one',floor:1,candidate_id:'a',before:{floor:1,act:1,hp:68,gold:99},candidates:[{candidate_id:'a',card:{id:'Bash',upgrades:0}}]}");
