@@ -36,7 +36,7 @@ import java.util.*;
  public static void initialize(){BaseMod.subscribe(new NativeReplayProbe());}
  final Map<Path,byte[]> sourceFiles=new LinkedHashMap<>();
  static boolean faultArmed;static int loadCalls;
- String replayBranch;boolean superFastChecked,solverChecked;String shot;Object solver;long oldSolverId;
+ String replayBranch;boolean superFastChecked,solverChecked,extraChecked;String shot;Object solver;long oldSolverId;
  public void receivePostRender(SpriteBatch sb){if(shot==null)return;try{sb.flush();Pixmap image=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());PixmapIO.PNG png=new PixmapIO.PNG();png.setFlipY(true);png.write(new FileHandle(shot),image);png.dispose();image.dispose();shot=null;}catch(Throwable e){finish(e);stage=99;}}
  void verifySuperFastMode()throws Exception{
   verifySolverCombination();
@@ -51,7 +51,15 @@ import java.util.*;
   report.addProperty("superfastmode_version",found.ModVersion.toString());report.addProperty("superfastmode_multiplier",multiplier);report.addProperty("superfastmode_live_delta_ratio",scaled/raw);superFastChecked=true;
  }
  static void set(Object target,String field,Object value)throws Exception{java.lang.reflect.Field f=target.getClass().getDeclaredField(field);f.setAccessible(true);f.set(target,value);}
+ void verifyExtraMods()throws Exception{
+  String wanted=System.getProperty("spireledger.extraModsProbe","");if(extraChecked||wanted.isEmpty())return;
+  JsonObject loaded=new JsonObject();
+  for(String id:wanted.split(",")){String version=null;for(ModInfo info:com.evacipated.cardcrawl.modthespire.Loader.MODINFOS)if(id.equals(info.ID))version=String.valueOf(info.ModVersion);check(version!=null,id+" actually loaded");loaded.addProperty(id,version);}
+  check(ReplayEnvironment.loaded(),"optional mods "+loaded+" accepted by the replay whitelist");
+  report.add("extra_mods",loaded);extraChecked=true;
+ }
  void verifySolverCombination()throws Exception{
+  verifyExtraMods();
   if(solverChecked||!Boolean.getBoolean("spireledger.solverCombinationProbe"))return;
   check(SolverReplay.contract()&&ReplayEnvironment.loaded(),"solver contract present; solver and three visual mods accepted");
   solver=Class.forName("sts1solver.SolverMod").getField("instance").get(null);

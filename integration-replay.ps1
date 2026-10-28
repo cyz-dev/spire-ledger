@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless,[switch]$SuperFastMode,[switch]$SolverCombination,[string]$SolverJar="")
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless,[switch]$SuperFastMode,[switch]$SolverCombination,[string]$SolverJar="",[string[]]$ExtraMods=@())
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -28,6 +28,15 @@ if($SolverCombination){
  if(-not(Test-Path "$instance/mods/sts1-solver-runtime")){Copy-Item "$workshop/3814773843/sts1-solver-runtime" "$instance/mods/sts1-solver-runtime" -Recurse}
  $mods+=',sts1solver,coloredmap,coloredpowertips,HighlightPath'
 }
+# -ExtraMods regression-tests whitelisted optional mods: each jar is loaded under the modid its ModTheSpire.json declares.
+$extraIds=@()
+if($ExtraMods){Add-Type -AssemblyName System.IO.Compression.FileSystem}
+foreach($jar in $ExtraMods){
+ $zip=[IO.Compression.ZipFile]::OpenRead((Resolve-Path $jar).Path)
+ try{$entry=$zip.GetEntry('ModTheSpire.json');if(-not $entry){throw "$jar has no ModTheSpire.json"};$reader=[IO.StreamReader]::new($entry.Open());try{$extraIds+=($reader.ReadToEnd()|ConvertFrom-Json).modid}finally{$reader.Dispose()}}finally{$zip.Dispose()}
+ Copy-Item $jar "$instance\mods" -Force
+}
+if($extraIds){$mods+=','+($extraIds -join ',')}
 if($Mode -eq "restore"){
     if(-not $Source){throw "Restore source required"}
     $Source=(Resolve-Path (Resolve-RunPath $Source)).Path
@@ -49,6 +58,7 @@ try {
  $args=@(("-Dspireledger.diagnosticProbe="+$Diagnostic.ToString().ToLowerInvariant()),("-Dspireledger.replayCurrentProbe="+$ReplayCurrent.ToString().ToLowerInvariant()),("-Dspireledger.replayFailure="+$Failure),("-Dspireledger.launchPracticeProbe="+$LaunchPractice.ToString().ToLowerInvariant()),("-Dspireledger.productionRestore="+$ProductionRestore.ToString().ToLowerInvariant()),("-Dspireledger.productionPractice="+$ProductionPractice.ToString().ToLowerInvariant()),("-Dspireledger.practiceMode="+$ProductionPractice.ToString().ToLowerInvariant()),("-Dspireledger.practiceRunId="+$PracticeRunId),("-Dspireledger.practiceSnapshotId="+$PracticeSnapshotId),("-Dspireledger.experimentalTurns="+$ExperimentalTurns.ToString().ToLowerInvariant()),("-Dspireledger.replayNoCapture="+$NoCapture.ToString().ToLowerInvariant()),("-Dspireledger.replayCharacter="+$Character),("-Dspireledger.replayScenario="+$Scenario),('-Dspireledger.replayRepair='+$Repair.ToString().ToLowerInvariant()),('-Dspireledger.replayMode='+$Mode),('"-Dspireledger.replaySource='+$Source+'"'),'-Dfile.encoding=UTF-8','-Dspireledger.fixture=true')
  $args+=('-Dspireledger.superFastModeProbe='+$SuperFastMode.ToString().ToLowerInvariant())
  $args+=('-Dspireledger.solverCombinationProbe='+$SolverCombination.ToString().ToLowerInvariant())
+ $args+=('-Dspireledger.extraModsProbe='+($extraIds -join ','))
  $proc=Start-Probe $Game $instance $args $mods -Headless:$Headless
  [IO.File]::WriteAllText("$instance\pid.txt",[string]$proc.Id,$utf8)
  Write-Output "Isolated Spire Ledger native probe PID $($proc.Id); result: $instance\replay-probe-result.json"
