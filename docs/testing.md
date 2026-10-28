@@ -12,6 +12,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ### 给接手协作者
 
 - 构建与运行：见 [README](../README.md)“从源码构建”；离线断言用 `build.ps1 -Check`，原生界面探针用 `integration-stats-options.ps1`（统计/导出）和 `integration-replay.ps1`（回合重打）。
+- 求解器同装探针（Windows 隐藏窗口、静音；求解器原生运行时只支持 Windows x64，`-Headless` 的 WSL 实例里日志报 “This runtime requires Windows x64”，求解器算不出路线）：`integration-replay.ps1 -Instance <实例> -Mode save -ReplayCurrent -SuperFastMode -SolverCombination -ExperimentalTurns -WaitForExit`。缺 `-ExperimentalTurns` 时不录回合快照，会停在“native history displays captured turns”。未发布的求解器用 `-SolverJar <jar>` 替换工坊版。2026-10-28 求解器 0.9.6（工坊）与 0.9.7（`release/v0.9.7` 构建）均通过。
 - 代码入口：统计聚合 [stats/Metrics.java](../src/spireledger/stats/Metrics.java)，标准率 [stats/Standardized.java](../src/spireledger/stats/Standardized.java)，火堆重放 [stats/Campfire.java](../src/spireledger/stats/Campfire.java)，导出渲染 [PickRateChart.java](../src/spireledger/PickRateChart.java)，统计界面 [StatsScreen.java](../src/spireledger/StatsScreen.java)。
 - 独立校验：`test/check_overview.py`、`test/check_boss_standardized.py`；离线断言 `StatsCheck`、`StatsDisplayCheck`。
 - 边界：不要改 beta.2 的既有页面文案和指标口径；新增结论前先对照 [metrics.md](metrics.md)。
@@ -61,7 +62,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
 - 测 beta.3 新改动时从 [v0.5.0-beta.3](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/Yongzhaooo/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
-- 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
+- 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
 

@@ -31,9 +31,13 @@ public final class RunReviewCheck {
         check(deck.size()==3&&deck.get(0).count==2,"combine equal cards while retaining upgrades and permanent values");
         JsonArray mods=new JsonArray();mods.add(mod("basemod","5.56.0"));mods.add(mod("stslib","2.12.0"));mods.add(mod("spire-ledger","0.5.0-beta.1"));
         check(ReplayEnvironment.accepts(mods),"base supported");
-        for(Map.Entry<String,String> e:ReplayEnvironment.OPTIONAL.entrySet())mods.add(mod(e.getKey(),e.getValue()));
+        for(Map.Entry<String,String> e:ReplayEnvironment.OPTIONAL.entrySet())mods.add(mod(e.getKey(),e.getValue().replace("+","")));
         check(ReplayEnvironment.accepts(mods),"player eight-mod combination supported");
         mods.add(mod("sts1solver","0.9.6"));check(!ReplayEnvironment.accepts(mods),"duplicate rejected");mods.remove(mods.size()-1);
+        JsonObject solver=mods.get(4).getAsJsonObject();check("sts1solver".equals(Recorder.string(solver,"id")),"fixture order: solver at 4");
+        for(String v:new String[]{"0.9.6","0.9.7","0.10.0","1.0"}){solver.addProperty("version",v);check(ReplayEnvironment.accepts(mods),"solver "+v+" accepted as 0.9.6 or later");}
+        for(String v:new String[]{"0.9.5","0.9.4-test","0.9.7-rc1",""}){solver.addProperty("version",v);check(!ReplayEnvironment.accepts(mods),"solver "+v+" rejected");}
+        solver.addProperty("version","0.9.6");
         mods.get(4).getAsJsonObject().addProperty("version","unknown");check(!ReplayEnvironment.accepts(mods),"unverified version rejected");
         check(!ReplayEnvironment.accepts(new JsonArray()),"missing requirements rejected");
         System.out.println("RunReviewCheck PASS: read-only floor projection, choice conflicts, deck grouping and version boundary");

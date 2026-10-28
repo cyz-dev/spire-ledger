@@ -53,10 +53,11 @@ import java.util.*;
  static void set(Object target,String field,Object value)throws Exception{java.lang.reflect.Field f=target.getClass().getDeclaredField(field);f.setAccessible(true);f.set(target,value);}
  void verifySolverCombination()throws Exception{
   if(solverChecked||!Boolean.getBoolean("spireledger.solverCombinationProbe"))return;
-  check(ReplayEnvironment.loaded(),"exact solver and three visual mods accepted");
+  check(SolverReplay.contract()&&ReplayEnvironment.loaded(),"solver contract present; solver and three visual mods accepted");
   solver=Class.forName("sts1solver.SolverMod").getField("instance").get(null);
   check(solver!=null,"real solver initialized");set(solver,"runAutoEnabled",false);set(solver,"autoPotionRewards",false);
-  report.addProperty("solver_version","0.9.6");report.addProperty("player_eight_mod_combination",true);solverChecked=true;
+  String version="";for(com.evacipated.cardcrawl.modthespire.ModInfo info:com.evacipated.cardcrawl.modthespire.Loader.MODINFOS)if("sts1solver".equals(info.ID))version=String.valueOf(info.ModVersion);
+  report.addProperty("solver_version",version);report.addProperty("player_eight_mod_combination",true);solverChecked=true;
  }
  void armStaleSolver()throws Exception{
   if(solver==null)return;

@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless,[switch]$SuperFastMode,[switch]$SolverCombination)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[string]$Instance='spire-ledger-dev/native-replay-save',[ValidateSet("save","restore")][string]$Mode="save",[string]$Source="",[switch]$Repair,[switch]$ProductionRestore,[switch]$ProductionPractice,[string]$PracticeRunId="",[string]$PracticeSnapshotId="",[switch]$ReplayCurrent,[switch]$Diagnostic,[string]$Failure="",[switch]$LaunchPractice,[switch]$NoCapture,[switch]$ExperimentalTurns,[string]$Character="IRONCLAD",[string]$Scenario="ordinary",[switch]$PrepareOnly,[switch]$WaitForExit,[switch]$Headless,[switch]$SuperFastMode,[switch]$SolverCombination,[string]$SolverJar="")
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $utf8=[Text.UTF8Encoding]::new($false)
@@ -22,7 +22,9 @@ if($SuperFastMode){
  }
 }
 if($SolverCombination){
+ # -SolverJar probes an unreleased solver build in place of the Workshop copy; its runtime folder still comes from the Workshop.
  foreach($relative in @('3814773843/STS1CombatSolver.jar','1611666859/ColoredMap.jar','1748973286/coloredPowertips.jar','1611047977/HighlightPath.jar')){Copy-Item (Join-Path $workshop $relative) "$instance/mods"}
+ if($SolverJar){Copy-Item $SolverJar "$instance/mods/STS1CombatSolver.jar" -Force}
  if(-not(Test-Path "$instance/mods/sts1-solver-runtime")){Copy-Item "$workshop/3814773843/sts1-solver-runtime" "$instance/mods/sts1-solver-runtime" -Recurse}
  $mods+=',sts1solver,coloredmap,coloredpowertips,HighlightPath'
 }
