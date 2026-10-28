@@ -4,7 +4,7 @@ import com.evacipated.cardcrawl.modthespire.Loader;
 import com.evacipated.cardcrawl.modthespire.lib.*;
 import java.lang.reflect.Method;
 
-/** The solver (0.9.6 on) owns its queues; invalidate its old plan before changing a battle. */
+/** The solver (0.9.6 on) owns its queues; invalidate its old plan before changing a battle. Replay contract v1: architecture.md. */
 public final class SolverReplay {
     static Boolean contract;
     /** Every solver member this class drives or patches; a release that renames one is not a supported replay environment. */

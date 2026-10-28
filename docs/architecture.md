@@ -86,6 +86,16 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 `ReplayEnvironment` 统一录制与附件读取的依赖版本边界。`SolverReplay` 在复盘打开时暂停求解器更新并隐藏其面板；当前战斗回退前通过求解器自身取消入口使旧回复失效、清空旧路线并停止自动操作。恢复或回滚后同步求解器的玩家引用，防止换成恢复后的玩家对象时重新开启自动执行。独立练习仍使用基础依赖和可选 SuperFastMode，正式局的求解器不被带进练习。
 
+### 求解器回合重打合同 v1（2026-10-28，与求解器会话握手确认）
+
+账本与求解器都是本项目的 Mod，互相认可。验收看合同，不看 jar 哈希或逐版本重验；sha256 只用来记录测的是哪个构建。
+
+- **成员**：`SolverMod.instance`（static）、`runAutoPlayer`、`cancel(boolean)`、`stopAll()`、`receivePostUpdate()`、`receivePostRender(SpriteBatch)`。
+- **行为**：账本重打前依次调用 `cancel(false)` 和 `stopAll()`，之后旧计划清空，`auto` 与 `runAuto` 都关闭，进入暂停，回复代次严格增大，晚到的旧回复作废。恢复后账本把 `runAutoPlayer` 设为新的玩家对象，求解器不会因为换了玩家对象而重新开启整局自动。
+- **账本侧**：`ReplayEnvironment` 对 `sts1solver` 只设下限 0.9.6+，带后缀的测试版不算更新；`SolverReplay.contract()` 在运行时核对成员，缺一个就把录制与重打判为不支持。账本发版前跑原生同装探针（`testing.md`）。
+- **求解器侧**：`overlay/test/RngModsCheck.java`（受信任列表含 `spire-ledger`）和 `overlay/test/ReplayContractCheck.java`（成员与上述行为）在每次 `overlay/build.py` 时运行；落地于 sts1-combat-solver `release/v0.9.7` 的 136ddfa，随 v0.9.7 合入 main。第 5 条行为测的是判定函数 `SolverMod.rearms`，不是整条 update 链。
+- **改动规则**：任何一边要改成员或语义，先在对方仓库提 issue 或通知对方，合同版本号加一；不允许静默改名。
+
 ### 默认最近一局与抓率图（2026-10-26）
 
 导航状态由 `HistoryScreen` 统一管理。首次索引完成后，只在当前存档位选择最近记录，优先当前局；用户主动切到历史或统计后，异步索引不得把页面拉回去。三个顶部入口随时可达，关闭直接回到游戏。统计保留筛选，详细诊断的返回只收起诊断。
