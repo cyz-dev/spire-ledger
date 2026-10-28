@@ -20,7 +20,7 @@ Product spec: [product.md](product.md)
 - 只有 `record` 写局内事实；派生数字不落盘（导出文件除外）。每局摘要是记录事实的投影，不含任何计算出的指标；它带指向源记录的有效性标记，过期或缺失时从源记录重建，不被信任为真值。
 - 打开统计或复盘不改变局内状态、不推进 RNG。
 - 读取方不能阻断写入：Windows 上读句柄会让原子替换失败，写入必须对此有界重试，失败不得停掉整局记录。
-- 已审核的同装 Mod：BaseMod、StSLib、SuperFastMode 1.0.8、求解器 `sts1solver`。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器 0.9.6 及以后同装时支持重打，回退前清空旧结果并停止自动操作。版本只设下限，`SolverReplay.contract()` 在运行时核对账本调用和 patch 的求解器成员（`instance`、`cancel(boolean)`、`stopAll()`、`runAutoPlayer`、`receivePostUpdate`、`receivePostRender`），缺任何一个就按不支持处理；带后缀的测试版不算更新（2026-10-28）。其他未审核 Mod 一律记 `unknown`。
+- 已审核的同装 Mod：BaseMod、StSLib、SuperFastMode 1.0.8、求解器 `sts1solver`；另有 ColoredMap 2.4.1、coloredPowertips 2.3.0、HighlightPath 0.0.3，以及 2026-10-28 经原生探针回归的 RunHistoryPlus 1.8.3、HideInfo 0.0.1、justclick 0.1.1、lolifontmod 0.2（只接受这些精确版本）。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器 0.9.6 及以后同装时支持重打，回退前清空旧结果并停止自动操作。版本只设下限，`SolverReplay.contract()` 在运行时核对账本调用和 patch 的求解器成员（`instance`、`cancel(boolean)`、`stopAll()`、`runAutoPlayer`、`receivePostUpdate`、`receivePostRender`），缺任何一个就按不支持处理；带后缀的测试版不算更新（2026-10-28）。其他未审核 Mod 一律记 `unknown`。
 - SuperFastMode 1.0.8 为可选的已审核加速 Mod。记录与回合附件读取均接受它；练习子进程复制已加载的 jar 及 `SuperFastModeConfig.properties`。快照不保存插值或速度设置，沿用现有动作队列稳定边界。人工操作仍须经过原生 UI 提交路径。
 
 ### 构建档
