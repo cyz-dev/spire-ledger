@@ -15,7 +15,7 @@ import com.megacrit.cardcrawl.helpers.TipTracker;
 import com.megacrit.cardcrawl.map.MapRoomNode;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
 import com.megacrit.cardcrawl.rooms.AbstractRoom;
-import com.megacrit.cardcrawl.rooms.MonsterRoom;
+import com.megacrit.cardcrawl.rooms.EmptyRoom;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -387,10 +387,11 @@ final class ReplayLauncher {
                     }
                 }
                 if (CardCrawlGame.dungeon != null) {
+                    // TheBeyond and TheEnding keep the previous act's node, which a fresh process lacks; setCurrMapNode reads that old node, so build it as the act 1 and 2 constructors do (SaveState cannot encode a MonsterRoom without monsters).
                     if (AbstractDungeon.currMapNode == null) {
-                        MapRoomNode node = new MapRoomNode(0, 0);
-                        node.room = new MonsterRoom();
-                        AbstractDungeon.setCurrMapNode(node);
+                        MapRoomNode node = new MapRoomNode(0, -1);
+                        node.room = new EmptyRoom();
+                        AbstractDungeon.currMapNode = node;
                     }
                     if (StateMod.ready()) {
                         practiceStep = 2;
