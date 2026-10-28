@@ -1,6 +1,6 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-10-28（`v0.5.0-beta.4`）
+Last updated: 2026-10-29（`v0.5.0-beta.5`）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
@@ -16,8 +16,17 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 代码入口：统计聚合 [stats/Metrics.java](../src/spireledger/stats/Metrics.java)，标准率 [stats/Standardized.java](../src/spireledger/stats/Standardized.java)，火堆重放 [stats/Campfire.java](../src/spireledger/stats/Campfire.java)，导出渲染 [PickRateChart.java](../src/spireledger/PickRateChart.java)，统计界面 [StatsScreen.java](../src/spireledger/StatsScreen.java)。
 - 独立校验：`test/check_overview.py`、`test/check_boss_standardized.py`；离线断言 `StatsCheck`、`StatsDisplayCheck`。
 - 边界：不要改 beta.2 的既有页面文案和指标口径；新增结论前先对照 [metrics.md](metrics.md)。
+- 独立练习探针：`integration-replay.ps1 -Mode save -LaunchPractice -SuperFastMode -ExperimentalTurns -Scenario ordinary-act3`（或 `ordinary`、`ordinary-act2`、`ordinary-act4`）会真正启动练习子进程并核对相同行动结果；2026-10-29 四幕均通过。
+- 已知失败、未修的探针（2026-10-29 实测，beta.3 或 beta.4 的 jar 同样失败，不是 beta.5 引入）：`integration-stats-ui.ps1` 默认模式停在“three real native and three unlinked notes runs merged into six logical runs”；`integration-stats-options.ps1` 停在“Neow shares are fitted from the skipped log”。`integration-history.ps1` 与 `integration-stats-ui.ps1 -ReviewLayout` 已在 beta.5 修好并通过。
 
-## beta.4 改动（先测这一节）
+## beta.5 改动（先测这一节）
+
+| # | 怎么玩 | 看什么 |
+|---|---|---|
+| P1 | 从主菜单打开账本，选一局有第三或第四幕快照的记录，固定一个第三、四幕的战斗楼层，点“练习此回合” | 练习窗口进入该战斗并可操作，不出现“Restore failed; gameplay is frozen” |
+| P2 | 点“练习此回合”后看底部状态行，再点“下一层” | “已启动独立练习实例”单独显示，不与“已保存 N 个回合”叠字；换层后显示新楼层的状态 |
+
+## beta.4 改动
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -69,7 +78,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 beta.4 时从 [v0.5.0-beta.4](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.4) 下载 `SpireLedger.jar`；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 beta.5 时从 [v0.5.0-beta.5](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.5) 下载 `SpireLedger.jar`；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
