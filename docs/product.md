@@ -1,6 +1,6 @@
 # Spire Ledger product spec
 
-Last confirmed: 2026-10-29（`main` 分支待内测；公开发布版仍为 v0.5.0-beta.2）
+Last confirmed: 2026-10-29（`v0.5.0-beta.3` 内测，尚待手动回归）
 Architecture: [architecture.md](architecture.md)
 Metrics contract: [metrics.md](metrics.md)（M1 验收前建立，proposed）
 Resolved and moved items: [product-DONE.md](product-DONE.md)
@@ -96,7 +96,7 @@ Spire Ledger（尖塔账本）是《杀戮尖塔 1》的本地记录、统计与
 
 - 由用户发布；仓库 GitHub 私有（2026-10-25），公开时间由用户决定。
 - 先只在 GitHub 上内测，暂不发布到 Steam Workshop；每次发布仍由用户逐次授权。（用户决定，2026-10-25）
-- 2026-10-29 起 `main` 分支承载 beta.2 之后的标准化率、四类导出长图和总览区间，版本号暂不升级；待测试通过并由用户授权后再发下一个 beta。（2026-10-29）
+- 2026-10-29 发布 beta.3（标准化率、四类导出长图和总览区间），手动回归通过后再定下一个 beta。（2026-10-29）
 - 自有代码 GPL-3.0。内嵌的改造 SaveState 仍在主 jar 内，它的上游没有许可证，不在 GPL 授权范围内；NOTICE 写明署名、来源和修改摘要，上游 issue #13 回复后更新。（用户决定，2026-10-25）
 
 ## Non-goals
