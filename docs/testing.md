@@ -1,6 +1,6 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-10-29（`v0.5.0-beta.3`）
+Last updated: 2026-10-28（`v0.5.0-beta.4`）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
@@ -17,9 +17,17 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 独立校验：`test/check_overview.py`、`test/check_boss_standardized.py`；离线断言 `StatsCheck`、`StatsDisplayCheck`。
 - 边界：不要改 beta.2 的既有页面文案和指标口径；新增结论前先对照 [metrics.md](metrics.md)。
 
-## beta.3 新增改动（先测这一节）
+## beta.4 改动（先测这一节）
 
-这一批改动随 beta.3 发布，仍需手动回归；`ModTheSpire.json` 为 `0.5.0-beta.3`。维护者已通过 10 项离线断言、真实游戏内原生探针（真实 66 局，存档位 0）和两份 Python 独立重算；下面检查手玩体验和边界。
+| # | 怎么玩 | 看什么 |
+|---|---|---|
+| R1 | 与求解器 0.9.7（工坊版）同装，打开回合快照，打一场战斗，在历史页选回合点击“重打此回合” | 回合点可选，重打后状态恢复，求解器停下且旧结果清空 |
+| R2 | 打开一局用旧版本录制、组合当时不受支持的记录，点一个没有回合点的战斗楼层 | 显示“本局录制时的 Mod 组合未被当时的版本支持……”，不是“本层没有保存的回合快照” |
+| R3 | 个人统计“总览”看“平均每局删牌”，用仅胜/仅败筛选看胜率行 | 删牌数包含涅奥删牌；胜率显示“—”时第二行区间也不显示 |
+
+## beta.3 新增改动
+
+这一批改动随 beta.3 发布，仍需手动回归。维护者已通过 10 项离线断言、真实游戏内原生探针（真实 66 局，存档位 0）和两份 Python 独立重算；下面检查手玩体验和边界。
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -61,7 +69,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 beta.3 新改动时从 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 beta.4 时从 [v0.5.0-beta.4](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.4) 下载 `SpireLedger.jar`；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
