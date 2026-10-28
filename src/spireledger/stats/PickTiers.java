@@ -7,7 +7,7 @@ public final class PickTiers {
     public static final String VERSION="pick-tiers-v1";
     // Percentage boundaries also used by TinyCat's observed pick-rate table; no model fitting.
     public static final int[] LOWER={90,75,60,45,30,15,0};
-    /** Standardized view: five Jenks breaks on shares at or above 1%, then the <1% tail cut twice on log10 (TinyCat's assignStandardized). */
+    /** Standardized view (metrics.md 6.7): Jenks natural breaks put shares of at least 1% into S..D, and the <1% tail into R0/R00 on log10. */
     public static final int STANDARD_TIERS=7;
     static final String[] STANDARD_NAMES={"S","A","B","C","D","R0","R00"};
     public static final class Entry {
@@ -19,7 +19,8 @@ public final class PickTiers {
         /** True for rows that carry a strength share instead of a picked/offered count. */
         public boolean standardized(){return standard>=0;}
     }
-    public static int tier(double picked,double offered){        if(!Double.isFinite(picked)||!Double.isFinite(offered)||offered<=0||picked<0||picked>offered)return 8;
+    public static int tier(double picked,double offered){
+        if(!Double.isFinite(picked)||!Double.isFinite(offered)||offered<=0||picked<0||picked>offered)return 8;
         if(picked==0)return 7;
         for(int i=0;i<LOWER.length;i++)if(picked*100>=offered*LOWER[i])return i;
         return 8;
@@ -47,59 +48,25 @@ public final class PickTiers {
         for(int i=0;i<shown.size();i++){Metric metric=shown.get(i);out.add(new Entry(metric.key.substring(prefix.length()),act,metric,tiers[i],values.get(i).doubleValue()));}
         return out;
     }
-    /** TinyCat's standardized breaks, as tier indices 0..6 for values already sorted strongest first; -1 input never occurs. */
-    public static int[] standardTiers(List<Double> values){
-        int n=values.size();int[] out=new int[n];Arrays.fill(out,5);
-        List<Double> high=new ArrayList<>(),tail=new ArrayList<>();List<Integer> highAt=new ArrayList<>(),tailAt=new ArrayList<>();
-        for(int i=0;i<n;i++){double value=values.get(i)==null?0:values.get(i).doubleValue();
-            if(value>=1.0D){high.add(Double.valueOf(value));highAt.add(Integer.valueOf(i));}
-            else {tail.add(Double.valueOf(Math.log10(Math.max(value,1.0e-9D))));tailAt.add(Integer.valueOf(i));}}
-        if(!high.isEmpty()){int[] segment=segments(high,5);int count=Math.min(5,distinct(high));
-            for(int i=0;i<high.size();i++)out[highAt.get(i).intValue()]=Math.max(0,Math.min(4,count-1-segment[i]));}
-        if(!tail.isEmpty()){int[] segment=segments(tail,2);int count=Math.min(2,distinct(tail));
-            for(int i=0;i<tail.size();i++)out[tailAt.get(i).intValue()]=count>1&&segment[i]==0?6:5;}
-        return out;
-    }
+    /** Standardized tier per share, in any input order: 0..4 (S..D) for shares of at least 1%, 5..6 (R0, R00) for the tail. */
+    public static int[] standardTiers(List<Double> values){int n=values.size();int[] out=new int[n];double[] v=new double[n];List<Integer> high=new ArrayList<>(),tail=new ArrayList<>();
+        for(int i=0;i<n;i++){double x=values.get(i)==null?0:values.get(i);if(x>=1){v[i]=x;high.add(i);}else{v[i]=Math.log10(Math.max(x,1e-9));tail.add(i);}}
+        Map<Double,Integer> top=jenks(v,high,5),low=jenks(v,tail,2);
+        for(int i:high)out[i]=top.get(v[i]);for(int i:tail)out[i]=5+low.get(v[i]);return out;}
     public static String standardName(int tier){return tier>=0&&tier<STANDARD_NAMES.length?STANDARD_NAMES[tier]:"";}
-
-    /** Fisher-Jenks optimal breaks on distinct values (equal values always share a tier); returns 0 for the lowest segment. */
-    static int[] segments(List<Double> values,int k){
-        int n=values.size();double[] asc=new double[n];
-        for(int i=0;i<n;i++){Double value=values.get(i);asc[i]=value==null?0:value.doubleValue();}
-        Arrays.sort(asc);
-        int m=0;double[] unique=new double[n];int[] weight=new int[n];
-        for(int i=0;i<n;i++){if(m>0&&Double.compare(unique[m-1],asc[i])==0)weight[m-1]++;else{unique[m]=asc[i];weight[m]=1;m++;}}
-        int groups=Math.min(k,m);
-        double[] sw=new double[m+1],s1=new double[m+1],s2=new double[m+1];
-        for(int i=1;i<=m;i++){double v=unique[i-1];sw[i]=sw[i-1]+weight[i-1];s1[i]=s1[i-1]+v*weight[i-1];s2[i]=s2[i-1]+v*v*weight[i-1];}
-        double infinity=Double.MAX_VALUE;
-        double[][] best=new double[groups+1][m+1];int[][] back=new int[groups+1][m+1];
-        for(int j=0;j<=groups;j++)for(int i=0;i<=m;i++)best[j][i]=infinity;
-        best[0][0]=0;
-        for(int j=1;j<=groups;j++)for(int i=j;i<=m;i++)for(int t=j-1;t<i;t++){
-            if(best[j-1][t]>=infinity)continue;
-            double cost=best[j-1][t]+sse(sw,s1,s2,t+1,i);
-            if(cost<best[j][i]){best[j][i]=cost;back[j][i]=t;}
-        }
-        int[] start=new int[groups+1];int cursor=m;
-        for(int j=groups;j>=1;j--){start[j]=back[j][cursor]+1;cursor=back[j][cursor];}
-        int[] out=new int[n];
-        for(int i=0;i<n;i++){
-            Double value=values.get(i);double target=value==null?0:value.doubleValue();int pos=1;
-            for(int t=1;t<=m;t++)if(Double.compare(unique[t-1],target)==0){pos=t;break;}
-            int segment=1;for(int j=1;j<=groups;j++)if(start[j]<=pos)segment=j;
-            out[i]=segment-1;
-        }
-        return out;
-    }
-    static double sse(double[] sw,double[] s1,double[] s2,int a,int b){
-        double count=sw[b]-sw[a-1];if(count<=0)return 0;
-        double sum=s1[b]-s1[a-1];return s2[b]-s2[a-1]-sum*sum/count;
-    }
-    static int distinct(List<Double> values){
-        Set<Double> seen=new HashSet<>();
-        for(Double value:values)seen.add(Double.valueOf(value==null?0:value.doubleValue()));
-        return seen.size();
-    }
+    /**
+     * Fisher-Jenks natural breaks into at most k classes, minimizing the summed within-class squared deviation.
+     * Classes are cut between distinct values, each weighted by its copies, so equal values always share a class.
+     * Returns value to class rank, 0 for the highest class.
+     */
+    static Map<Double,Integer> jenks(double[] v,List<Integer> at,int k){
+        TreeMap<Double,Integer> copies=new TreeMap<>();for(int i:at)copies.merge(v[i],1,Integer::sum);
+        int m=copies.size(),groups=Math.min(k,m),c=0;double[] u=new double[m];int[] w=new int[m];for(Map.Entry<Double,Integer> e:copies.entrySet()){u[c]=e.getKey();w[c++]=e.getValue();}
+        // Prefix sums of weight, weighted value and weighted square give any run's squared deviation in O(1).
+        double[] sw=new double[m+1],sx=new double[m+1],sxx=new double[m+1];for(int i=0;i<m;i++){sw[i+1]=sw[i]+w[i];sx[i+1]=sx[i]+w[i]*u[i];sxx[i+1]=sxx[i]+w[i]*u[i]*u[i];}
+        double[][] best=new double[groups+1][m+1];int[][] cut=new int[groups+1][m+1];for(double[] row:best)Arrays.fill(row,Double.POSITIVE_INFINITY);best[0][0]=0;
+        for(int g=1;g<=groups;g++)for(int i=g;i<=m;i++)for(int t=g-1;t<i;t++){double sum=sx[i]-sx[t],cost=best[g-1][t]+sxx[i]-sxx[t]-sum*sum/(sw[i]-sw[t]);if(cost<best[g][i]){best[g][i]=cost;cut[g][i]=t;}}
+        Map<Double,Integer> out=new HashMap<>();for(int g=groups,end=m;g>=1;end=cut[g][end],g--)for(int i=cut[g][end];i<end;i++)out.put(u[i],groups-g);
+        return out;}
     private PickTiers(){}
 }
