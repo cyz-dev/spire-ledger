@@ -4,19 +4,35 @@ Copyright (C) 2026 CYZ
 Project-owned code is licensed under the GNU General Public License v3.0 (see LICENSE).
 Spire Ledger succeeds State Notes 0.4.0 (same author).
 
-Includes a restricted binary adaptation of STSStateSaver / SaveStateMod 1.3.0
-by Board Engineer: https://github.com/boardengineer/STSStateSaver
-Reviewed upstream main: 00dbbcb7f1e67743797e4d7fb714cb899f7f2eaa
+Includes a modified binary of STSStateSaver / SaveStateMod 1.3.0 (MIT) by
+boardengineer: https://github.com/boardengineer/STSStateSaver
 Source binary SHA256: 5aab52140fb890bc1f71cde73b67958b7f43b5c5ed5c26b71b28ba3d18c6eefa
+Upstream added the MIT license below in a762bc1cae (2026-10-29).
 Changes: disable 126 gameplay/fast/UI patches; retain two internal observation
 counters; initialize only state factories; remove standalone Mod metadata and
 initializer, embed classes under the single Spire Ledger Mod identity.
 
-No LICENSE/COPYING/NOTICE or redistribution license was found in the reviewed
-upstream tree or binary, and no permission is asserted. A request for a license
-or permission is open at https://github.com/boardengineer/STSStateSaver/issues/13.
-The GPL grant above does NOT cover the included upstream implementation; it is
-credited here and is not relicensed.
+MIT License
+
+Copyright (c) 2021-2026 boardengineer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 Metric definitions were informed by TinyCat (MI, MPL-2.0,
 https://github.com/haotiangod/tinycattrack); no TinyCat source files are included.

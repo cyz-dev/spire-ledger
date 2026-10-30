@@ -2,7 +2,7 @@
 
 《杀戮尖塔 1》的本地记录与复盘 Mod。打开账本就能看当前局或当前存档位的最近一局，悬停楼层查看选择和资源变化，也可以查看个人统计与标准化率、导出统计长图，或重打已保存的回合。数据保存在本机，不上传。
 
-当前发布版：**[v0.5.0-beta.5](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.5)**（内测版，2026-10-29）。`main` 与 beta.5 内容一致：第三、四幕的回合可以启动独立练习，beta.4 修正了 beta.3 的统计缺陷并支持求解器 0.9.6 及以后版本；beta.3 的手动回归项仍登记在 [issue](https://github.com/cyz-dev/spire-ledger/issues)。
+当前发布版：**[v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0)**（正式版，2026-10-30）。功能与 beta.5 相同，只更新了内嵌 SaveState 的许可说明：第三、四幕的回合可以启动独立练习，beta.4 修正了 beta.3 的统计缺陷并支持求解器 0.9.6 及以后版本；beta.3 的手动回归项仍登记在 [issue](https://github.com/cyz-dev/spire-ledger/issues)。
 
 ## 安装与升级
 
@@ -131,4 +131,4 @@ python test/check_boss_standardized.py --runs "<游戏目录>\runs" --slot 0 --j
 
 仓库不附带游戏本体、SaveStateMod 或构建好的 jar；协作者测试时使用维护者提供的构建，或按上面的命令自行构建。
 
-许可：自有代码 GPL-3.0（见 [LICENSE](LICENSE)）；内嵌第三方组件见 [NOTICE.txt](NOTICE.txt)。
+许可：自有代码 GPL-3.0（见 [LICENSE](LICENSE)）。内嵌的改造 SaveState 来自 boardengineer 的 STSStateSaver，MIT 许可；它和其他第三方组件的说明见 [NOTICE.txt](NOTICE.txt)。

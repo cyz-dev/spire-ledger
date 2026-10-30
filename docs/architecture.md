@@ -25,7 +25,7 @@ Product spec: [product.md](product.md)
 
 ### 构建档
 
-`full`（默认，含 `replay`）；`no-replay`（剔除 `replay` 与 SaveState，同一 modid），作为上游拒绝授权时的退路，平时不发布。
+`full`（默认，含 `replay`）；`no-replay`（剔除 `replay` 与 SaveState，同一 modid），原为上游拒绝授权时的退路；上游 2026-10-29 已加 MIT，这一退路不再需要，是否删除这一构建档待用户决定。
 
 ### 状态归属
 
@@ -53,7 +53,7 @@ TinyCat 约 1.8 万行中约 37% 是值得重写的领域知识（幕划分、�
 
 ### 许可（用户决定，2026-10-25）
 
-自有代码 GPL-3.0；改造 SaveState 仍内嵌主 jar，NOTICE 写明它不在 GPL 授权范围内。用户已知这一许可冲突并接受，延续 2026-10-14 State Notes 的同类决定。
+自有代码 GPL-3.0；改造 SaveState 仍内嵌主 jar。上游 2026-10-29 加了 MIT 许可证（`a762bc1cae`），与 GPL-3.0 兼容，原先的许可冲突已解除；NOTICE 保留其版权行与 MIT 原文。
 
 ### 测试与 CI
 
