@@ -36,7 +36,7 @@ final class StatsScreen implements DropdownMenuListener {
   hpSplitMenu=menu(new String[]{tr("回复：全部","Healing: all"),tr("有回复","Healed"),tr("无回复","Not healed")});
  }
  void setMonths(){String[] list=new String[months.size()+1];list[0]=tr("不限月份","Any month");for(int i=0;i<months.size();i++)list[i+1]=months.get(i);fromMonth=menu(list);toMonth=menu(list);fromIndex=toIndex=0;}
- void resetCategory(){String[][] cn={{"胜负总览","各幕通过率","常见死亡遭遇","时间、牌组与金币"},{"候选出现与选取","终局持牌胜率","升级与删除","涅奥选择与结果","Boss遗物选择与结果"},{"遭遇平均承伤","遭遇死亡率","药水使用","商店购买与删除","火堆行动","事件选择","实际战损"}};String[][] en={{"Results","Act completion","Death encounters","Time, deck and gold"},{"Offers and picks","Final deck win rate","Upgrades and removals","Neow and results","Boss relics and results"},{"Encounter damage","Encounter deaths","Potion use","Shops","Campfires","Events","Actual HP loss"}};category=menu(HistoryScreen.zh()?cn[Math.min(theme,2)]:en[Math.min(theme,2)]);categoryIndex=0;offset=0;resetAct();}
+ void resetCategory(){String[][] cn={{"胜负总览","各幕通过率","常见死亡遭遇","时间、牌组与金币"},{"候选出现与选取","跳过与歌唱碗","终局持牌胜率","升级与删除","涅奥选择与结果","Boss遗物选择与结果"},{"遭遇平均承伤","遭遇死亡率","药水使用","商店购买与删除","火堆行动","事件选择","实际战损"}};String[][] en={{"Results","Act completion","Death encounters","Time, deck and gold"},{"Offers and picks","Skip and Bowl","Final deck win rate","Upgrades and removals","Neow and results","Boss relics and results"},{"Encounter damage","Encounter deaths","Potion use","Shops","Campfires","Events","Actual HP loss"}};category=menu(HistoryScreen.zh()?cn[Math.min(theme,2)]:en[Math.min(theme,2)]);categoryIndex=0;offset=0;resetAct();}
  void load(){if(task!=null||requested||host.indexTask!=null)return;requested=true;JsonObject live=host.live;task=host.io.submit(()->StatsIndex.scan(Paths.get("runs"),host.index,live));status=tr("正在读取本地战绩…","Reading local run history…");}
  long month(int index,boolean end){return month(months,index,end);}
  static long month(List<String> months,int index,boolean end){if(index<=0||index>months.size())return 0;String[] parts=months.get(index-1).split("-");Calendar c=Calendar.getInstance();c.clear();c.set(Integer.parseInt(parts[0]),Integer.parseInt(parts[1])-1,1);if(end)c.add(Calendar.MONTH,1);return c.getTimeInMillis();}
@@ -59,7 +59,7 @@ final class StatsScreen implements DropdownMenuListener {
   return parts[0];}
  static Comparator<String> metricOrder(Map<String,Metric> metrics){return Comparator.comparing((String key)->metricGroup(key)).thenComparingInt(key->metrics.get(key).shown()?0:1).thenComparingDouble(key->metrics.get(key).shown()?-metrics.get(key).value():0).thenComparingInt(key->-metrics.get(key).samples).thenComparing(key->key);}
  /** The rate mode of the current page: observed, standardized or the selected-run win rate. */
- int mode(){return theme==1&&(categoryIndex==3||categoryIndex==4)?choiceMode:rateMode;}
+ int mode(){return theme==1&&(categoryIndex==4||categoryIndex==5)?choiceMode:theme==1&&categoryIndex==1?0:rateMode;}
  /** The act a row belongs to, for the per-act headings; null when the row is not per act. */
  static String actOf(String key){String[] parts=key.split(":",4);
   if(key.startsWith("pick:")||key.startsWith("skip:")||key.startsWith("bowl:")||key.startsWith("boss:"))return parts[1];
@@ -67,15 +67,17 @@ final class StatsScreen implements DropdownMenuListener {
   if(key.startsWith("damage_act:")||key.startsWith("encounter_potions_act:")||key.startsWith("potions_act:")||key.startsWith("death_act:"))return parts[1];
   if(key.startsWith("related:boss:"))return parts.length>2?parts[2]:null;return null;}
  /** Pages whose rows are grouped under per-act headings get the act menu; the cards page, boss relics, encounter damage, potions, campfires and actual HP loss. */
- boolean actShown(){return theme==1?(categoryIndex==0||categoryIndex==4):theme==2&&(categoryIndex==0||categoryIndex==1||categoryIndex==2||categoryIndex==4||categoryIndex==6);}
+ boolean actShown(){return theme==1?(categoryIndex==0||categoryIndex==5):theme==2&&(categoryIndex==0||categoryIndex==1||categoryIndex==2||categoryIndex==4||categoryIndex==6);}
  /** Boss relics only exist after the act-1 and act-2 bosses, so their menu stops at act 2. */
- DropdownMenu actControl(){return theme==1&&categoryIndex==4?bossActMenu:actMenu;}
+ DropdownMenu actControl(){return theme==1&&categoryIndex==5?bossActMenu:actMenu;}
  void resetAct(){actFilter=0;hpSplit=0;if(actMenu!=null)actMenu.setSelectedIndex(0);if(bossActMenu!=null)bossActMenu.setSelectedIndex(0);if(hpSplitMenu!=null)hpSplitMenu.setSelectedIndex(0);}
  /** The actual-HP-loss page shows one healing view at a time; the act totals stay in every view. */
  boolean hiddenRow(String key){if(theme!=2||categoryIndex!=6)return false;if(key.startsWith("act_hp_loss:"))return false;
   if(hpSplit==0)return key.startsWith("hp_loss_heal:")||key.startsWith("hp_loss_noheal:");
   return !key.startsWith(hpSplit==1?"hp_loss_heal:":"hp_loss_noheal:");}
  static boolean actualRow(String key){return key.startsWith("bowl:");}
+ /** The beta.2 Skip and Bowl page: observed rates, Skip rows then Bowl rows, no act headings. */
+ boolean skipPage(){return theme==1&&categoryIndex==1;}
  /** The HP-loss page ranks each act by mean loss, with the act's per-run total above it; other pages keep their own order. */
  Comparator<String> ordered(){Comparator<String> base=metricOrder(metrics);
   if(theme==2&&categoryIndex==6)return (a,b)->{
@@ -93,6 +95,7 @@ final class StatsScreen implements DropdownMenuListener {
    int byValue=Double.compare(sb?mb.value():0,sa?ma.value():0);if(byValue!=0)return byValue;
    int bySamples=Integer.compare(mb.samples,ma.samples);if(bySamples!=0)return bySamples;
    return a.compareTo(b);};
+  if(skipPage())return Comparator.comparing((String key)->key.split(":",2)[0]).thenComparingInt(key->metrics.get(key).shown()?0:1).thenComparingDouble(key->metrics.get(key).shown()?-metrics.get(key).value():0).thenComparingInt(key->-metrics.get(key).samples).thenComparing(key->key);
   if(mode()!=1)return base;
   return (a,b)->{int byGroup=metricGroup(a).compareTo(metricGroup(b));if(byGroup!=0)return byGroup;
    boolean aa=actualRow(a),ab=actualRow(b);if(aa!=ab)return aa?1:-1;
@@ -118,7 +121,7 @@ final class StatsScreen implements DropdownMenuListener {
   if(key.startsWith("neow:"))return neowShares.get(key.substring(5));
   if(key.startsWith("boss:")){String[] parts=key.split(":",3);if(parts.length<3)return null;Map<String,Double> shares=bossShares.get(Integer.valueOf(Integer.parseInt(parts[1])));return shares==null?null:shares.get(parts[2]);}
   return null;}
- boolean rateShown(){return theme==3||theme==1&&(categoryIndex==0||categoryIndex==3||categoryIndex==4);}
+ boolean rateShown(){return theme==3||theme==1&&(categoryIndex==0||categoryIndex==4||categoryIndex==5);}
  boolean campfireShown(){return theme==2&&categoryIndex==4;}
  String reasonName(String r){switch(r){case "abandon":return tr("放弃","abandoned");case "incomplete":return tr("未完成","incomplete");case "mode":return tr("每日/自定义/无尽","daily/custom/endless");case "conflict":return tr("冲突","conflicts");case "practice":return tr("练习","practice");case "fixture":return tr("夹具","fixtures");case "current":return tr("进行中","in progress");case "result_unknown":return tr("胜负未知","result unknown");case "slot":return tr("存档位","save slot");default:return r;}}
  void rebuild(){filter.character=host.characters[selected[0]];filter.ascension=selected[1]-1;dateRange(filter,selected[2],months,fromIndex,toIndex);filter.heart=selected[3]==0;filter.includeAbandon=selected[4]==1;filter.minSamples=new int[]{1,5,10,20}[selected[5]];
@@ -133,23 +136,23 @@ final class StatsScreen implements DropdownMenuListener {
   if(runs.isEmpty()){display.add(tr("暂无数据。","No data."));layout();return;}
   if(theme==0&&categoryIndex==0){for(String k:Arrays.asList("outcome:victory","outcome:death","outcome:abandon","outcome:unknown","win"))line(metrics.get(k));for(String k:Arrays.asList("deck_size","score","purge_shop","purge_event","purge_total"))line(metrics.get(k));display.add(tr("平均删牌按 TinyCat 口径：商店购买、事件移除、火堆抽烟、涅奥移除与空鸟笼；95% 区间为均值 ±1.96 标准误，胜率为 Wilson 区间。","Removal means follow TinyCat: shop, events, campfire toke, Neow and Empty Cage; 95% intervals are mean ± 1.96 SE, the win rate a Wilson interval."));display.add(tr("胜负未知不算失败；放弃不会归为死于最后遭遇。","Unknown results are excluded; abandonment is not an encounter death."));}
   else if(theme==0&&categoryIndex==3){for(String k:Arrays.asList("time","deck_size","gold_gained","gold_gained:exact","gold_gained:estimated"))line(metrics.get(k));}
-  else {List<String> prefixes=new ArrayList<>();if(theme==0)prefixes.addAll(categoryIndex==1?Arrays.asList("act:"):Arrays.asList("death_count:","death_count_unknown"));else if(theme==1){if(categoryIndex==0)prefixes.addAll(Arrays.asList("pick:","skip:","bowl:","reward_source:","reward_automation"));if(categoryIndex==1)prefixes.add("holding:");if(categoryIndex==2){prefixes.add("upgrade:");prefixes.add("remove:");}if(categoryIndex==3)prefixes.add(mode()==2?"related:neow:":"neow:");if(categoryIndex==4)prefixes.add(mode()==2?"related:boss:":"boss:");}
+  else {List<String> prefixes=new ArrayList<>();if(theme==0)prefixes.addAll(categoryIndex==1?Arrays.asList("act:"):Arrays.asList("death_count:","death_count_unknown"));else if(theme==1){if(categoryIndex==0)prefixes.addAll(Arrays.asList("pick:","skip:","bowl:","reward_source:","reward_automation"));if(categoryIndex==1){prefixes.add("skip:");prefixes.add("bowl:");}if(categoryIndex==2)prefixes.add("holding:");if(categoryIndex==3){prefixes.add("upgrade:");prefixes.add("remove:");}if(categoryIndex==4)prefixes.add(mode()==2?"related:neow:":"neow:");if(categoryIndex==5)prefixes.add(mode()==2?"related:boss:":"boss:");}
    else {if(categoryIndex==0)prefixes.add("damage_act:");if(categoryIndex==1){prefixes.add("death:");prefixes.add("death_act:");}if(categoryIndex==2){prefixes.add("potions");prefixes.add("encounter_potions_act:");}if(categoryIndex==3){prefixes.add("purchase:");prefixes.add("remove:shop:");}if(categoryIndex==5){prefixes.add("event:");prefixes.add("related:event:");}if(categoryIndex==6){prefixes.add("act_hp_loss:");prefixes.add("hp_loss:");prefixes.add("hp_loss_heal:");prefixes.add("hp_loss_noheal:");}}
    int before=display.size();if(theme==2&&categoryIndex==4)campfirePage();else{List<String> keys=new ArrayList<>(metrics.keySet());keys.sort(ordered());String act="";for(String key:keys){boolean match=false;for(String prefix:prefixes)if(key.startsWith(prefix)){match=true;break;}
      if(!match||hiddenRow(key))continue;String next=actOf(key);
      if(actFilter>0&&actShown()&&(next==null||!next.equals(String.valueOf(actFilter))))continue;
-     if(next!=null&&!next.equals(act)){display.add(actHeader(key,next));act=next;}line(metrics.get(key));}if(before==display.size())display.add(tr("该项未记录。","Not recorded."));}
+     if(next!=null&&!next.equals(act)&&!skipPage()){display.add(actHeader(key,next));act=next;}line(metrics.get(key));}if(before==display.size())display.add(tr("该项未记录。","Not recorded."));}
   }
-  if(theme==1&&categoryIndex==1)display.add(tr("这是持牌对局的相关胜率，不是选这张牌带来的收益。","Association among final decks, not the benefit of choosing a card."));
+  if(theme==1&&categoryIndex==2)display.add(tr("这是持牌对局的相关胜率，不是选这张牌带来的收益。","Association among final decks, not the benefit of choosing a card."));
   if(theme==2&&categoryIndex==0)display.add(tr("仅使用原版承伤字段；楼层净血量不会代替承伤。","Explicit damage records only; floor HP deltas are not damage."));
   if(theme==2&&categoryIndex==6)display.add(tr("实际战损 = 入层生命 − 本层结束生命；第一层缺入层记录时为估算。","Actual loss = entry HP − floor end HP; floor 1 is estimated without an entry record."));
-  if(theme==1&&categoryIndex==0)display.add(tr("只计已确认战后奖励；同次同名候选最多出现一次；已知自动化的选择不计入。","Confirmed combat rewards only; duplicate offers count once per choice; known automation is left out."));
+  if(theme==1&&(categoryIndex==0||categoryIndex==1))display.add(tr("只计已确认战后奖励；同次同名候选最多出现一次；已知自动化的选择不计入。","Confirmed combat rewards only; duplicate offers count once per choice; known automation is left out."));
   if(theme==1&&categoryIndex==0&&mode()==1)display.add(tr("标准率是同屏对手对齐后的强度份额，合计 100%（含跳过）；无法拟合的幕显示 —，两份口径不能相减；跳过按拟合份额参与排序，歌唱碗并入跳过的份额，另列的实际占比仅供参考。","Standardized shares are opponent-adjusted strength summing to 100% including Skip; acts that cannot be fitted show —. The two views are not subtractable; Skip is fitted and ranked like any option, Singing Bowl is folded into its share, and the extra observed Bowl row is for reference only."));
   if(theme==1&&categoryIndex==0)display.add(tr("原版战绩不记录真人/自动化操作来源。","Native history does not record human/automated action sources."));
-  if(theme==1&&(categoryIndex==3||categoryIndex==4)&&mode()==1)display.add(categoryIndex==3?tr("涅奥标准率按同屏（所选与未选）对齐后的强度份额，合计 100%；缺少未选记录的局不参与拟合，无法拟合时显示 —。","Neow shares are opponent-adjusted strength over the whole screen, summing to 100%; runs without skipped options are not fitted, and an unfittable screen shows —."):tr("Boss 遗物标准率按同屏（所选与未选）对齐后的强度份额，合计 100%（含跳过）；跳过与遗物一样参与拟合并显示份额。","Boss relic shares are opponent-adjusted strength over the whole screen, summing to 100% including Skip; Skip is fitted and reported like any relic."));
-  if(theme==1&&(categoryIndex==3||categoryIndex==4)&&mode()==2)display.add(tr("胜率口径 = 选了该选项的局里赢了多少（选后相关，不是该选项带来的收益）；每局只计一次，胜负未知的局不计入，仅胜/仅败筛选下显示 —；暂不提供区间。","Win rate = wins among runs that picked this option (selection-conditional, not its causal benefit); once per run, unknown results excluded, and — under Win/Loss only. No interval yet."));
+  if(theme==1&&(categoryIndex==4||categoryIndex==5)&&mode()==1)display.add(categoryIndex==4?tr("涅奥标准率按同屏（所选与未选）对齐后的强度份额，合计 100%；缺少未选记录的局不参与拟合，无法拟合时显示 —。","Neow shares are opponent-adjusted strength over the whole screen, summing to 100%; runs without skipped options are not fitted, and an unfittable screen shows —."):tr("Boss 遗物标准率按同屏（所选与未选）对齐后的强度份额，合计 100%（含跳过）；跳过与遗物一样参与拟合并显示份额。","Boss relic shares are opponent-adjusted strength over the whole screen, summing to 100% including Skip; Skip is fitted and reported like any relic."));
+  if(theme==1&&(categoryIndex==4||categoryIndex==5)&&mode()==2)display.add(tr("胜率口径 = 选了该选项的局里赢了多少（选后相关，不是该选项带来的收益）；每局只计一次，胜负未知的局不计入，仅胜/仅败筛选下显示 —；暂不提供区间。","Win rate = wins among runs that picked this option (selection-conditional, not its causal benefit); once per run, unknown results excluded, and — under Win/Loss only. No interval yet."));
   if(campfireShown())display.add(campfireMode==1?tr("标准化倍 = 该条目被选概率 ÷ 随机基线（100 ÷ 平均候选池）；候选池 = 可升级的每张牌 + 可用的抽烟/举重/挖掘/回忆，不含睡觉，也不把锻造算作一个选项；战锤禁锻造、咖啡杯禁休息时对应选项不参与；为进入第四幕在第三幕拿的回忆是固定成本，不计入。每张牌单独一行。","Multiple = chosen ÷ the random baseline (100 ÷ mean pool); the pool is every unupgraded card plus available Toke/Lift/Dig/Recall, never sleep and never smith as one slot. Fusion Hammer and Coffee Dripper remove their option. The act-3 Recall taken for the red key is a fixed cost and is left out. Each card is its own row."):tr("行动次数按幕统计每次火堆实际做了什么：锻造按被升级的卡牌逐张计数，抽烟/举重/挖掘/回忆/休息按行动类型计数；“火堆总数”是该幕的火堆访问次数。","Action counts per act: every smith is counted under the card it upgraded; Toke/Lift/Dig/Recall/Rest count by action type; the rest-site total is that act's visits."));
-  String coverage=theme==0?new String[]{"result","act","death","gold"}[categoryIndex]:theme==1?new String[]{"reward","deck","observed","neow","boss_relics"}[categoryIndex]:new String[]{"damage","death","potions_by_encounter","purchases","campfire","events","hp_loss"}[categoryIndex];
+  String coverage=theme==0?new String[]{"result","act","death","gold"}[categoryIndex]:theme==1?new String[]{"reward","reward","deck","observed","neow","boss_relics"}[categoryIndex]:new String[]{"damage","death","potions_by_encounter","purchases","campfire","events","hp_loss"}[categoryIndex];
   Metric c=metrics.get("coverage:"+coverage);if(c!=null)display.add(tr("字段覆盖：","Field coverage: ")+quantity(c.numerator)+" / "+quantity(c.denominator)+" "+unitName(c.unit)+tr("（缺失不作为0）"," (missing is not zero)"));
   if(metrics.containsKey("unresolved_path"))display.add(tr("部分SL父点未关联，仅统计最终分支可确认片段。","Some SL parents are unknown; only confirmed final-branch fragments count."));layout();
  }
