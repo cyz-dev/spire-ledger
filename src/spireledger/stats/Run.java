@@ -34,6 +34,8 @@ public final class Run implements Cloneable {
     public String id="",playId="",runId="",conflictReason="",nativeFile="";public boolean fixture,practice,current,conflict,sl,unresolvedPath;
     public final Set<String> sources=new TreeSet<>();
     public Fact<String> character=Fact.missing(""),seed=Fact.missing(""),outcome=Fact.missing(""),killedBy=Fact.missing(""),neow=Fact.missing(""),actor=Fact.missing("");
+    /** A Ledger record with at least one known-automation decision; native .run cannot tell, so it stays missing there. */
+    public Fact<Boolean> automation=Fact.missing("");
     public Fact<Integer> ascension=Fact.missing(""),slot=Fact.missing(""),floorReached=Fact.missing(""),maxAct=Fact.missing(""),neowHp=Fact.missing(""),deckSize=Fact.missing("");
     public Fact<Long> time=Fact.missing("");public Fact<Double> playtime=Fact.missing(""),gold=Fact.missing("");public Fact<Integer> score=Fact.missing("");
     /** Cards removed per source (shop, event, neow, campfire, empty_cage) plus their total; TinyCat's purge families. */
@@ -79,7 +81,7 @@ public final class Run implements Cloneable {
         r.act3=Fact.agree(l.act3,n.act3);r.heart=Fact.prefer(n.heart,l.heart);r.neow=Fact.agree(n.neow,l.neow);r.gold=Fact.prefer(l.gold,n.gold);
         r.deck=Fact.prefer(n.deck,l.deck);r.deckSize=Fact.prefer(n.deckSize,l.deckSize);r.maxAct=Fact.prefer(l.maxAct,n.maxAct);r.floorReached=Fact.prefer(n.floorReached,l.floorReached);
         r.daily=Fact.prefer(n.daily,l.daily);r.endless=Fact.prefer(n.endless,l.endless);r.trial=Fact.prefer(n.trial,l.trial);r.seeded=Fact.prefer(n.seeded,l.seeded);r.slot=Fact.prefer(l.slot,n.slot);
-        r.combats=n.combats;r.eventDamage=n.eventDamage;r.hpPerFloor=n.hpPerFloor;r.potionsByFloor=n.potionsByFloor;r.boss=n.boss;r.neowOffers=Fact.prefer(n.neowOffers,l.neowOffers);r.campfires=Fact.prefer(n.campfires,l.campfires);r.floorEnter=l.floorEnter;r.neowHp=l.neowHp;r.actor=Fact.prefer(l.actor,n.actor);
+        r.combats=n.combats;r.eventDamage=n.eventDamage;r.hpPerFloor=n.hpPerFloor;r.potionsByFloor=n.potionsByFloor;r.boss=n.boss;r.neowOffers=Fact.prefer(n.neowOffers,l.neowOffers);r.campfires=Fact.prefer(n.campfires,l.campfires);r.floorEnter=l.floorEnter;r.neowHp=l.neowHp;r.actor=Fact.prefer(l.actor,n.actor);r.automation=Fact.prefer(l.automation,n.automation);
         // proposed (metrics.md 6.2): a floor the Ledger recorded is taken from the Ledger only; .run fills the floors it lacks.
         if(l.screens.known()&&n.screens.known()){List<Screen> all=new ArrayList<>(l.screens.value);for(Screen s:n.screens.value)if(!l.ledgerRewardFloors.contains(s.floor))all.add(s);r.screens=Fact.of(all,Fact.NATIVE+"+"+Fact.LEDGER);}
         else r.screens=Fact.prefer(l.screens,n.screens);
