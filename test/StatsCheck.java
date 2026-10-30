@@ -42,10 +42,19 @@ public final class StatsCheck {
  static String dump(Stats.Index index,Stats.Filter f){Stats.Selection s=Stats.select(index,f,100000);return new Gson().toJson(new TreeMap<>(Metrics.compute(s,f)))+ids(s)+s.excluded;}
 
  public static void main(String[] args)throws Exception{
-  liveEndings();
+  liveEndings();automation();
   Path root=Paths.get(args[0]),src=Paths.get(args[1]);
   oldAssertions(root);gapsAndCombinations();neowBossCampfire();export();boundary(src);
-  System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, save slot sources, TinyCat export, Gson-only stats package");
+  System.out.println("StatsCheck PASS: StatsIndex assertions migrated, metrics.md section 10 gaps, 3 result filters x abandon x 2 win bases, shuffled read order, save slot sources, TinyCat export, Ledger automation flag, Gson-only stats package");
+ }
+
+ /** The run-level automation flag drives the "solver used" mark on export images; native .run cannot tell. */
+ static void automation(){
+  JsonObject auto=doc(Recorder.SCHEMA,"auto-one","auto-play");JsonArray records=records(auto);decision(records,"d1","",1,1,10,"card");
+  records.get(0).getAsJsonObject().addProperty("action_source","known_automation");add(records,ending("victory",1,10,true,true),"",4);
+  check(Boolean.TRUE.equals(Stats.build(Collections.emptyList(),Arrays.asList(ledger(auto))).runs.get(0).automation.or(null)),"a confirmed known-automation decision marks the run");
+  JsonObject human=doc(Recorder.SCHEMA,"human-one","human-play");JsonArray humanRecords=records(human);decision(humanRecords,"d1","",1,1,10,"card");add(humanRecords,ending("victory",1,10,true,true),"",4);
+  check(Boolean.FALSE.equals(Stats.build(Collections.emptyList(),Arrays.asList(ledger(human))).runs.get(0).automation.or(null)),"a human-only Ledger run is not marked as automation");
  }
 
  /** The StatsIndexCheck assertions that still hold under metrics-v1; changed ones say what changed. */
@@ -53,7 +62,7 @@ public final class StatsCheck {
   Files.createDirectories(root.resolve("IRONCLAD"));JsonObject first=nativeRun("one",0,57,true,null,"56:B:The Heart:12"),second=nativeRun("two",0,57,false,"The Heart","56:B:The Heart:12");byte[] original=first.toString().getBytes(StandardCharsets.UTF_8);
   Files.write(root.resolve("IRONCLAD/first.run"),original);Files.write(root.resolve("IRONCLAD/copy.run"),original);Files.write(root.resolve("IRONCLAD/second.run"),second.toString().getBytes(StandardCharsets.UTF_8));Files.write(root.resolve("IRONCLAD/unrecognized.run"),"{}".getBytes(StandardCharsets.UTF_8));
   Stats.Index index=StatsIndex.scan(root,new HistoryIndex.Index(),null);check(index.errors.size()==1,"unrecognized native format excluded");check(index.runs.size()==2&&index.nativeDuplicates==1,"play ID dedup, same seed separate");
-  Stats.Filter f=new Stats.Filter();Map<String,Metric> m=metrics(index,f);check(is(m(m,"win"),1,2),"heart rate denominator");for(Run r:index.runs)check(!r.actor.known(),"unlinked native runs carry no actor");check(Stats.select(index,f,100000).runs.size()==2,"default filter counts unlinked native runs");
+  Stats.Filter f=new Stats.Filter();Map<String,Metric> m=metrics(index,f);check(is(m(m,"win"),1,2),"heart rate denominator");for(Run r:index.runs){check(!r.actor.known(),"unlinked native runs carry no actor");check(!r.automation.known(),"unlinked native runs carry no automation fact");}check(Stats.select(index,f,100000).runs.size()==2,"default filter counts unlinked native runs");
   // was: an actor filter would hide every native run; the actor filter is gone, the source filter keeps runs by where their facts came from.
   Stats.Filter ledgerOnly=new Stats.Filter();ledgerOnly.source=Fact.LEDGER;check(Stats.select(index,ledgerOnly,100000).runs.isEmpty(),"Ledger source filter hides native-only runs");
   check(m(m,"holding:Bash").denominator==2,"same-name held once per run");check(m(m,"damage:The Heart").value()==12,"explicit damage");check(m(m,"death_count:The Heart").numerator==1,"explicit native death frequency");
@@ -131,6 +140,17 @@ public final class StatsCheck {
   check(is(m(m,"skip:1"),2,4)&&is(m(m,"bowl:1"),0,2),"skip over all screens; bowl only where the bowl was offered");
   check(is(m(m,"boss:1:SKIP"),0,1)&&is(m(m,"boss:2:SKIP"),1,1)&&is(m(m,"boss:1:Runic Cube"),1,1)&&is(m(m,"boss:2:Astrolabe"),0,1),"10.6 boss relic skip is a candidate");
   check(is(m(m,"encounter_potions:Jaw Worm"),2,2)&&m(m,"encounter_potions:Jaw Worm").value()==1,"10.7 per-fight potions from potions_floor_usage");
+  check(is(m(m,"damage_act:1:Jaw Worm"),70,4)&&m(m,"damage_act:1:Jaw Worm").value()==17.5,"10.7 per-act encounter damage counts only that act's fights");
+  check(is(m(m,"encounter_potions_act:1:Jaw Worm"),2,2)&&m(m,"encounter_potions_act:1:Jaw Worm").value()==1,"10.7 per-act encounter potions follow the fight's act");
+  check(m(m,"potions_act:1").numerator==3&&!m.containsKey("potions_act:2"),"potion uses are grouped by the act of their floor");
+  // metrics.md 6.5: RunHistoryPlus logs every drink per floor; vanilla potions_floor_usage often kept only the last floor, so RHP wins.
+  JsonObject rhp=nativeRun("RP",20,3,false,"Jaw Worm","1:M:Cultist:5","3:M:Jaw Worm:40");rhp.add("potion_use_per_floor",new JsonParser().parse("[[\"Fire Potion\"],[],[\"Block Potion\",\"Strength Potion\"]]"));rhp.add("potions_floor_usage",new JsonParser().parse("[3,3]"));
+  Map<String,Metric> pm=metrics(Stats.build(Arrays.asList(nf(rhp,"IRONCLAD","rp.run")),Collections.emptyList()),all);
+  check(pm.get("potions").numerator==3&&pm.get("encounter_potions:Cultist").value()==1&&pm.get("encounter_potions:Jaw Worm").value()==2&&pm.get("potions_act:1").numerator==3,"RunHistoryPlus per-floor potions win over a last-floor-only potions_floor_usage");
+  // metrics.md 6.3: encounter death rate by the fight's act.
+  JsonObject dact=nativeRun("DE",20,18,false,"Looter","1:M:Cultist:5","18:M:Looter:35");
+  Map<String,Metric> dm=metrics(Stats.build(Arrays.asList(nf(dact,"IRONCLAD","de.run")),Collections.emptyList()),all);
+  check(is(dm.get("death_act:1:Cultist"),0,1)&&is(dm.get("death_act:2:Looter"),1,1),"death rate per act follows the fight's act");
   // TinyCat core: hp loss with an exact entry (H via floor_enter) and the floor-1 estimate (V3, D4: 60+10-6; D1 floor 3 loses 0), heal split, gold exact and estimated.
   Metric loss=m(m,"hp_loss:1:Jaw Worm");check(is(loss,18,4)&&loss.estimated==2,"hp loss exact and estimated: "+loss.numerator+"/"+loss.denominator+" est "+loss.estimated);
   check(m(m,"hp_loss_heal:1:Hexaghost").denominator==3&&m(m,"hp_loss_heal:1:Hexaghost").numerator==0&&m(m,"hp_loss_noheal:1:Jaw Worm").denominator==3,"heal split at Burning Blood's 6");
@@ -233,7 +253,7 @@ public final class StatsCheck {
   check(neow.available&&neow.share.size()==7&&Math.abs(neow.share.values().stream().mapToDouble(Double::doubleValue).sum()-100)<1e-6,"Neow standardized shares sum to 100 over the seven options");
   check(neow.share.get("HUNDRED_GOLD / NONE")>neow.share.get("BOSS_RELIC / NONE"),"a picked option outranks one nobody picked");
   Map<Integer,Standardized.Act> boss=Standardized.computeBoss(Stats.select(index,f,100000).runs);
-  check(boss.containsKey(1)&&boss.containsKey(2)&&boss.get(1).available&&!boss.get(1).share.containsKey(Standardized.SKIP),"boss fits per act; Skip stays an opponent");
+  check(boss.containsKey(1)&&boss.containsKey(2)&&boss.get(1).available&&boss.get(1).share.containsKey(Standardized.SKIP)&&boss.get(1).share.get(Standardized.SKIP)>0,"boss fits per act; Skip is reported like a relic");
   check(Math.abs(boss.get(1).share.values().stream().mapToDouble(Double::doubleValue).sum()-100)<1e-6,"boss shares sum to 100");
   JsonObject noSkip=nativeRun("NB-d",0,5,false,"Jaw Worm");noSkip.add("neow_bonus",JsonNull.INSTANCE);
   Run rd=Stats.build(Arrays.asList(nf(noSkip,"IRONCLAD","d.run")),Collections.emptyList()).runs.get(0);
@@ -251,6 +271,22 @@ public final class StatsCheck {
   check(is(m(mg,"purge_total"),6,1)&&is(m(mg,"purge_shop"),3,1),"removals: shop 3 + Neow cardsRemoved 1 + Empty Cage 2: "+m(mg,"purge_total").numerator);
   Run.Campfire smith=run(ci,"NB-g").campfires.value.get(0);
   check(smith.candidates.equals(Arrays.asList("Defend_R","Bash"))&&smith.pool==3,"Empty Cage removed the last Strike before the act-2 smith: "+smith.candidates);
+  // Selected-run win rates: one row per run that picked the option, hidden under a result filter (metrics.md 6.3).
+  JsonObject won=nativeRun("NB-h",0,56,true,null,act123());won.addProperty("neow_bonus","REMOVE_CARD");won.addProperty("neow_cost","NONE");
+  won.add("neow_bonuses_skipped_log",arrjson("[\"HUNDRED_GOLD\",\"BOSS_RELIC\",\"TRANSFORM_CARD\"]"));
+  won.add("neow_costs_skipped_log",arrjson("[\"NONE\",\"NONE\",\"NONE\"]"));
+  won.add("boss_relics",arrjson("[{\"picked\":\"Sozu\",\"not_picked\":[\"Runic Pyramid\",\"Astrolabe\"]}]"));
+  JsonObject lost=nativeRun("NB-l",0,50,false,"Time Eater","1:M:Jaw Worm:10","16:B:Hexaghost:20","33:B:Champ:15","50:B:Time Eater:10");
+  lost.addProperty("neow_bonus","HUNDRED_GOLD");lost.addProperty("neow_cost","NONE");
+  lost.add("neow_bonuses_skipped_log",arrjson("[\"REMOVE_CARD\",\"BOSS_RELIC\",\"TRANSFORM_CARD\"]"));
+  lost.add("neow_costs_skipped_log",arrjson("[\"NONE\",\"NONE\",\"NONE\"]"));
+  lost.add("boss_relics",arrjson("[{\"picked\":\"Sozu\",\"not_picked\":[\"Runic Pyramid\",\"Astrolabe\"]},{\"picked\":\"Empty Cage\",\"not_picked\":[\"Snecko Eye\",\"Coffee Dripper\"]}]"));
+  Stats.Index wi=Stats.build(Arrays.asList(nf(won,"IRONCLAD","h.run"),nf(lost,"IRONCLAD","l.run")),Collections.emptyList());
+  Map<String,Metric> mw=metrics(wi,filter(false,"all",false));
+  check(is(m(mw,"related:neow:REMOVE_CARD / NONE"),1,1)&&is(m(mw,"related:neow:HUNDRED_GOLD / NONE"),0,1),"win rate counts only the runs that picked the option: "+m(mw,"related:neow:REMOVE_CARD / NONE").numerator+"/"+m(mw,"related:neow:REMOVE_CARD / NONE").denominator);
+  check(is(m(mw,"related:boss:1:Sozu"),1,2)&&is(m(mw,"related:boss:2:Empty Cage"),0,1),"boss win rates are per act and once per picked relic");
+  Map<String,Metric> mf=metrics(wi,filter(false,"win",false));
+  check(m(mf,"related:neow:REMOVE_CARD / NONE").status.equals("hidden_by_result_filter"),"selected-run win rates hide under a result filter");
   // 95% intervals come from the kernel: Wilson for 0 of 3 wins, none for a single-run mean.
   double[] wilson=m(metrics(index,f),"win").interval();
   check(wilson!=null&&wilson[0]==0&&Math.abs(wilson[1]-0.5615)<1e-3,"Wilson interval for 0/3: "+Arrays.toString(wilson));

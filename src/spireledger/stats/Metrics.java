@@ -76,9 +76,9 @@ public final class Metrics {
     void combats(){
         for(Run r:runs){Map<Integer,double[]> acts=new HashMap<>();boolean death="death".equals(r.outcome.or(null));int threshold="IRONCLAD".equals(r.character.or(null))?6:0; // Burning Blood, as TinyCat
             if(r.combats.known())for(Run.Combat c:r.combats.value){
-                if(c.damage!=null)get("damage:"+c.encounter,MEAN,"combat","hp","damage").add(c.damage,1);
-                if(!death||r.killedBy.known())rate("death:"+c.encounter,"combat","death").add(died(r,c)?1:0,1);
-                if(r.potionsByFloor.known())get("encounter_potions:"+c.encounter,MEAN,"combat","potions","potions_by_encounter").add(r.potionsByFloor.value.getOrDefault(c.floor,0),1);
+                if(c.damage!=null){get("damage:"+c.encounter,MEAN,"combat","hp","damage").add(c.damage,1);get("damage_act:"+c.act+":"+c.encounter,MEAN,"combat","hp","damage").add(c.damage,1);}
+                if(!death||r.killedBy.known()){rate("death:"+c.encounter,"combat","death").add(died(r,c)?1:0,1);rate("death_act:"+c.act+":"+c.encounter,"combat","death").add(died(r,c)?1:0,1);}
+                if(r.potionsByFloor.known()){int uses=r.potionsByFloor.value.getOrDefault(c.floor,0);get("encounter_potions:"+c.encounter,MEAN,"combat","potions","potions_by_encounter").add(uses,1);get("encounter_potions_act:"+c.act+":"+c.encounter,MEAN,"combat","potions","potions_by_encounter").add(uses,1);}
                 if(!hpEligible(c))continue;Fact<Double> loss=r.hpLoss(c);double[] a=acts.computeIfAbsent(c.act,k->new double[3]);if(!loss.known()){a[1]=1;continue;}
                 boolean estimated=loss.status==Fact.Status.ESTIMATED;a[0]+=loss.value;if(estimated)a[2]=1;
                 // Healed in the fight: damage taken exceeds the HP actually lost by more than the threshold (metrics.md 6.4).
@@ -88,6 +88,9 @@ public final class Metrics {
             // Per run and act: fights plus positive event damage; an act without fights is a known 0, one unknown fight leaves the act missing.
             Integer last=r.maxAct.or(null);if(last!=null)for(int act=1;act<=Math.min(4,last);act++){double[] a=acts.getOrDefault(act,new double[3]);boolean have=r.combats.known()&&a[1]==0&&r.eventDamage.known();cover("act_hp_loss","run_act",have?1:0,1);
                 if(have){Metric m=get("act_hp_loss:"+act,MEAN,"run_act","hp","act_hp_loss");m.add(a[0]+r.eventDamage.value.getOrDefault(act,0.0),1);if(a[2]>0)m.estimated++;}}
+            // Potion uses are per floor; the act comes from that floor's fight, and a use outside a fight stays in the overall count only.
+            if(r.potionsByFloor.known()&&r.combats.known()){Map<Integer,Integer> floorAct=new HashMap<>();for(Run.Combat c:r.combats.value)floorAct.putIfAbsent(c.floor,c.act);
+                for(Map.Entry<Integer,Integer> e:r.potionsByFloor.value.entrySet()){Integer act=floorAct.get(e.getKey());if(act!=null&&act>=1&&act<=4)get("potions_act:"+act,COUNT,"run","",null).count(e.getValue());}}
         }
         combatCover("damage",(r,c)->true,(r,c)->c.damage!=null);combatCover("hp_loss",(r,c)->hpEligible(c),(r,c)->r.hpLoss(c).known());
         combatCover("potions_by_encounter",(r,c)->true,(r,c)->r.potionsByFloor.known());combatCover("death",(r,c)->true,(r,c)->!"death".equals(r.outcome.or(null))||r.killedBy.known());

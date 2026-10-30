@@ -10,14 +10,15 @@ import java.util.*;
  * views exist and must not be subtracted. Strengths follow Hunter's MM update s_i = (W_i + a) / (sum over screens
  * holding i of 1 / sum(S) + b) with a = 1 imaginary win and b = 0.01 imaginary appearance, rescaled to geometric
  * mean 1 each round, until every relative change is under 1e-9 or after 2000 rounds. {@link #SKIP} stands for
- * passing the screen (Skip and Singing Bowl alike); it competes but is never reported. No bootstrap interval:
- * the stats screen refits on the render thread whenever a filter changes.</p>
+ * passing the screen (Skip and Singing Bowl alike); it competes and is reported like any other option, so the
+ * shares sum to 100 including it. No bootstrap interval: the stats screen refits on the render thread whenever a
+ * filter changes.</p>
  */
 public final class Standardized {
     public static final String VERSION="standardized-v1",SKIP="SKIP";
     static final double PRIOR_WINS=1,PRIOR_APPEARANCES=.01,TOLERANCE=1e-9,FLOOR=1e-12;static final int ROUNDS=2000;
 
-    /** One fitted universe: reported id to strength share in percent (sums to 100), with the screens and ids behind it. */
+    /** One fitted universe: every present id (Skip included) to strength share in percent (sums to 100), with the screens and ids behind it. */
     public static final class Act {
         public final boolean available;public final Map<String,Double> share;public final int screens,cards;
         Act(boolean available,Map<String,Double> share,int screens,int cards){this.available=available;this.share=share;this.screens=screens;this.cards=cards;}
@@ -63,9 +64,10 @@ public final class Standardized {
             double scale=Math.exp(logs/active),change=0;
             for(int i=0;i<n;i++)if(present[i]){double v=Math.max(next[i]/scale,FLOOR);change=Math.max(change,Math.abs(v/s[i]-1));s[i]=v;}
             if(change<TOLERANCE)break;}
-        double total=0;for(Map.Entry<String,Integer> e:index.entrySet())if(reported(e,present))total+=s[e.getValue()];
-        Map<String,Double> share=new LinkedHashMap<>();if(total>0)for(Map.Entry<String,Integer> e:index.entrySet())if(reported(e,present))share.put(e.getKey(),100*s[e.getValue()]/total);
-        boolean available=share.size()>=2;return new Act(available,available?Collections.unmodifiableMap(share):Collections.<String,Double>emptyMap(),sets.size(),share.size());}
-    static boolean reported(Map.Entry<String,Integer> e,boolean[] present){return present[e.getValue()]&&!e.getKey().equals(SKIP);}
+        double total=0;int competing=0;
+        for(Map.Entry<String,Integer> e:index.entrySet())if(present[e.getValue()]){total+=s[e.getValue()];if(!e.getKey().equals(SKIP))competing++;}
+        Map<String,Double> share=new LinkedHashMap<>();if(total>0)for(Map.Entry<String,Integer> e:index.entrySet())if(present[e.getValue()])share.put(e.getKey(),100*s[e.getValue()]/total);
+        // Skip is reported like any option, but one real candidate against Skip alone is still not a ranking.
+        boolean available=competing>=2;return new Act(available,available?Collections.unmodifiableMap(share):Collections.<String,Double>emptyMap(),sets.size(),share.size());}
     private Standardized(){}
 }
