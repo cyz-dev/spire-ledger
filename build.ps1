@@ -1,4 +1,4 @@
-param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[switch]$Check,[string]$SaveStateSource=$env:STS1_SAVESTATE_JAR)
+param([string]$Game='D:\SteamLibrary\steamapps\common\SlayTheSpire',[switch]$Check,[switch]$BundleMonsterImages,[string]$MonsterImagesSource=$env:STS1_MONSTER_IMAGES,[string]$SaveStateSource=$env:STS1_SAVESTATE_JAR)
 . "$PSScriptRoot/tools/paths.ps1"
 if(-not $SaveStateSource){$SaveStateSource=Get-CachePath 'SaveStateMod-1.3.0.jar'}
 if(-not (Test-Path $SaveStateSource)){throw "SaveStateMod 1.3.0 not found at $SaveStateSource; pass -SaveStateSource or set STS1_SAVESTATE_JAR"}
@@ -34,6 +34,56 @@ Copy-Item "$PSScriptRoot\ModTheSpire.json" $classes
 Copy-Item "$PSScriptRoot\viewer\review.html" $classes
 & jar cf "$out\SpireLedger.jar" -C $classes .
 if($LASTEXITCODE -ne 0){throw 'jar failed'}
+if($BundleMonsterImages){
+  # Private test builds only: copy the player's local encounter images into the jar. The release build never carries them.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $staging=Join-Path $out 'monster-images-private'
+  if(Test-Path $staging){Remove-Item -Recurse -Force $staging}
+  $images=Join-Path $staging 'monster-images'
+  New-Item -ItemType Directory -Force $images | Out-Null
+  $sources=New-Object System.Collections.Generic.List[string]
+  if($MonsterImagesSource){
+    foreach($entry in $MonsterImagesSource.Split(';')){ $path=$entry.Trim(); if(-not $path){continue}
+      if(-not (Test-Path -LiteralPath $path)){throw "Monster image source not found: $path"}
+      $sources.Add((Resolve-Path -LiteralPath $path).Path) }
+  }else{
+    foreach($candidate in @((Join-Path $Game 'mods\monster-images'),(Join-Path $env:USERPROFILE '.spire-ledger\monster-images'),(Join-Path $Game 'monster-images'))){
+      if(Test-Path -LiteralPath $candidate){$sources.Add((Resolve-Path -LiteralPath $candidate).Path)} }
+    if($sources.Count -eq 0){
+      foreach($jarFile in @(Get-ChildItem (Join-Path $Game 'mods') -Filter *.jar -ErrorAction SilentlyContinue)){
+        $zip=$null;$has=$false
+        try{$zip=[IO.Compression.ZipFile]::OpenRead($jarFile.FullName)
+          $has=@($zip.Entries | Where-Object {$_.FullName -match '^(tinycat/monsters|monster-images)/'}).Count -gt 0
+        }catch{ }finally{if($zip){$zip.Dispose()}}
+        if($has){$sources.Add($jarFile.FullName)} }
+    }
+  }
+  if($sources.Count -eq 0){throw 'No monster image source found; pass -MonsterImagesSource <dir-or-jar>'}
+  $keys=New-Object System.Collections.Generic.HashSet[string]
+  foreach($source in $sources){
+    if((Get-Item -LiteralPath $source).PSIsContainer){
+      foreach($file in @(Get-ChildItem -LiteralPath $source -Recurse -File | Where-Object Extension -eq '.png')){
+        $key=($file.BaseName.ToLowerInvariant() -replace '[^a-z0-9]',''); if(-not $key -or -not $keys.Add($key)){continue}
+        Copy-Item -LiteralPath $file.FullName (Join-Path $images ($key+'.png')) }
+    }else{
+      $zip=$null
+      try{$zip=[IO.Compression.ZipFile]::OpenRead($source)
+        foreach($entry in @($zip.Entries)){
+          if($entry.FullName -notmatch '^(tinycat/monsters|monster-images)/.+\.png$'){continue}
+          $key=([IO.Path]::GetFileNameWithoutExtension($entry.FullName).ToLowerInvariant() -replace '[^a-z0-9]','')
+          if(-not $key -or -not $keys.Add($key)){continue}
+          $input=$entry.Open()
+          try{$output=[IO.File]::Create((Join-Path $images ($key+'.png')));try{$input.CopyTo($output)}finally{$output.Dispose()}}finally{$input.Dispose()} }
+      }finally{if($zip){$zip.Dispose()}}
+    }
+  }
+  if($keys.Count -eq 0){throw "No PNG encounter images found in: $($sources -join ', ')"}
+  $notice=@('SpireLedger private test image bundle','built: '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),'sources: '+($sources -join '; '),'WARNING: private team testing only. Do not distribute this jar or these images.')
+  [IO.File]::WriteAllLines((Join-Path $images 'bundled.txt'),$notice,$utf8)
+  & jar uf "$out\SpireLedger.jar" -C $staging monster-images
+  if($LASTEXITCODE -ne 0){throw 'bundling monster images failed'}
+  Write-Output "Bundled $($keys.Count) monster images from $($sources -join '; ')"
+}
 if($Check){
   $tests=@(Get-ChildItem "$PSScriptRoot\test" -Filter *.java | Where-Object Name -ne "NativeReplayProbe.java")
   [IO.File]::WriteAllLines($list,@($tests | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'}),$utf8)

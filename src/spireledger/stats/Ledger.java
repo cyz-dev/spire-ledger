@@ -51,10 +51,10 @@ public final class Ledger {
         // The last snapshot on the final path holds the run's total (metrics.md 5.2).
         if(gold!=null)r.gold=Fact.amount((double)gold,L);
 
-        Set<String> actors=new TreeSet<>();List<Run.Screen> screens=new ArrayList<>();
+        Set<String> actors=new TreeSet<>();List<Run.Screen> screens=new ArrayList<>();boolean automation=false;
         for(Map.Entry<String,JsonObject> item:decisions.entrySet()){String id=item.getKey();JsonObject d=item.getValue(),res=results.get(id),before=obj(d,"before");String source=str(d,"source");
             if(source.equals("COMBAT_REWARD"))r.ledgerRewardFloors.add(num(before,"floor",-1));
-            if(conflicts.contains(id)||res==null||!"confirmed".equals(str(res,"status")))continue;actors.add(str(d,"action_source"));
+            if(conflicts.contains(id)||res==null||!"confirmed".equals(str(res,"status")))continue;actors.add(str(d,"action_source"));automation|="known_automation".equals(str(d,"action_source"));
             JsonObject chosen=null;boolean legal=true,bowl=false;Set<String> offered=new LinkedHashSet<>();
             for(JsonElement c:arr(d,"candidates"))if(c.isJsonObject()){JsonObject x=c.getAsJsonObject();if(str(x,"candidate_id").equals(str(d,"candidate_id"))){if(chosen!=null)legal=false;chosen=x;}
                 if("card".equals(str(x,"type"))&&!str(obj(x,"card"),"id").isEmpty())offered.add(str(obj(x,"card"),"id"));bowl|="bowl".equals(str(x,"type"));}
@@ -66,7 +66,7 @@ public final class Ledger {
                 if("blessing".equals(str(d,"variant"))){List<String> offers=new ArrayList<>();for(JsonElement x:arr(d,"candidates"))if(x.isJsonObject()){JsonObject c=x.getAsJsonObject();String reward=str(c,"reward_type");if(reward.isEmpty())continue;
                     String key=reward+" / "+str(c,"drawback");if(!offers.contains(key))offers.add(key);}if(offers.size()>=2)r.neowOffers=Fact.of(offers,L);}}
         }
-        r.screens=Fact.of(screens,L);if(!actors.isEmpty())r.actor=Fact.of(actors.size()==1?actors.iterator().next():"mixed",L);
+        r.screens=Fact.of(screens,L);if(!actors.isEmpty()){r.actor=Fact.of(actors.size()==1?actors.iterator().next():"mixed",L);r.automation=Fact.of(automation,L);}
 
         if(ending==null){r.outcome=Fact.of("incomplete",L);return r;}
         r.current=false;
