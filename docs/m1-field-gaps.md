@@ -7,7 +7,7 @@ Architecture: [architecture.md](architecture.md) · Product spec: [product.md](p
 
 ## 1. 结论摘要
 
-1. **本机 762 局没有任何 RunHistoryPlus 字段。** RunHistoryPlus 上游源码写入 16 个 `.run` 字段，本机 0 个出现（见第 3 节）。TinyCat 依赖的 `neow_bonuses_skipped_log`、`neow_costs_skipped_log`、`neow_bonus_log`、`shop_contents`、`potion_use_per_floor`、`score_breakdown`、`improvable_cards` 等在本机历史局上覆盖率都是 0%。M1 补的字段只对新录制的局生效，历史局无法回填；product.md 中“旧 `.run` 里有 RunHistoryPlus 字段时照读”在本机数据上不会触发。
+1. **旧的 762 局样本没有任何 RunHistoryPlus 字段。** RunHistoryPlus 上游源码写入 16 个 `.run` 字段，那批 0 个出现（见第 3 节）。2026-10-31 复核：本机当前存档位 0 的 67 局全部带 `potion_use_per_floor`，已确认可用（见第 4.3 节），实现改为 RHP 优先。TinyCat 依赖的 `neow_bonuses_skipped_log`、`neow_costs_skipped_log`、`neow_bonus_log`、`shop_contents`、`potion_use_per_floor`、`score_breakdown`、`improvable_cards` 等在本机历史局上覆盖率都是 0%。M1 补的字段只对新录制的局生效，历史局无法回填；product.md 中“旧 `.run` 里有 RunHistoryPlus 字段时照读”在本机数据上不会触发。
 2. **RunHistoryPlus 独有字段里，真正必须由 M1 新增的只有两类：尼奥四选项与代价、商店候选。** 其余要么原版已有替代（药水用 `potions_floor_usage`，有效商店数用 `path_per_floor` 的 `$`，击杀 Boss 数用 `damage_taken`），要么 Ledger 现有快照已能还原（`neow_bonus_log` 的效果可由尼奥决策前后的牌组差得到，`improvable_cards` 对应牌实例的 `misc`），要么 TinyCat 之外没有指标需要（吃一堑、炼制药水等 Meta 成长杂项，需用户决定是否做）。
 3. **`gold_gained` 可直接取原版静态字段 `CardCrawlGame.goldGained`**。字节码核验：它只在 `AbstractPlayer.gainGold` 增加（`NEGATIVE MONEY` 与 Ectoplasm 分支提前返回，不计入），新局重置，读档从 `SaveFile.gold_gained` 恢复。原版 `.run` 不写它。
 4. **architecture.md 的“305 局可从分数明细取精确金币”夹具在本机不可复现**：`score_breakdown` 本机 0/762。TinyCat 的 `validate_gold_estimate.py` 也说明只有触发金币成就的局才有该条。M2 的“真值金币夹具”需要 M1 之后新录的 `gold_gained` 局自建，或向 TinyCat 作者取数据（未核实其来源）。
@@ -39,7 +39,7 @@ Architecture: [architecture.md](architecture.md) · Product spec: [product.md](p
 | `neow_bonuses_skipped_log`、`neow_costs_skipped_log` | 是，尼奥选取率与 Plackett-Luce（`Run.java:154-157`、`ClassStat.java:603-607`） | 0/762 | **M1 新增**（尼奥四选项与代价） |
 | `shop_contents`（每店 `floor`、`relics`、`cards`、`potions`，无价格） | 是，有效商店数（`ClassStat.java:1944`） | 0/762 | **M1 新增**（商店候选，含价格） |
 | `neow_bonus_log`（`cardsObtained/Upgraded/Removed/Transformed`、`relicsObtained`、金币与血量变化） | 是，尼奥删牌来源、火堆偏好重建（`ClassStat.java:1009,1408,1476`） | 0/762 | 由尼奥决策的前后快照还原，见第 5 节 |
-| `potion_use_per_floor` | 是，药水使用（`Run.java:164-169`） | 0/762 | 原版 `potions_floor_usage` 可替代（只缺药水名） |
+| `potion_use_per_floor` | 是，药水使用（`Run.java:164-169`） | 0/762（2026-10-31 当前 67 局为 67/67） | 已读：RHP 逐层使用优先，原版 `potions_floor_usage` 兜底（原版常只保留最后使用的楼层） |
 | `score_breakdown` | 是，击杀敌人与 Boss 数（`Run.java:716-735`）；金币真值夹具 | 0/762 | Boss 数用 `damage_taken`；敌人数用 `CardCrawlGame.monstersSlain`（可选）；金币用 `gold_gained` |
 | `improvable_cards` | 是，Meta 成长（`Run.java:208-223`） | 0/762 | Ledger 牌快照已含每张牌的 `misc`（`Snapshot.java:21`） |
 | `potions_obtained_alchemize`、`lesson_learned_per_floor` | 是，Meta 成长（`MetaScaling.java:31,33`） | 0/762 | 不建议记录，需用户决定（本机卡组含吃一堑 98 局，炼制药水 0 局） |
@@ -84,7 +84,7 @@ Architecture: [architecture.md](architecture.md) · Product spec: [product.md](p
 | 每幕总战损 | 局（每局每幕一个样本） | 上项加 `event_choices.damage_taken`、`path_per_floor` | 762 | 否 | 同上 | 同上 | 同上 | 同上 |
 | 遭遇死亡率、地精大块头致死 | 战斗 | `killed_by`、`damage_taken` | 死亡局 452/452 有 `killed_by` | 否 | 无 | 无缺口 | 精确 | `.run` |
 | 各幕存活率、幕划分 | 局 | `damage_taken` 中 Boss 层、`path_per_floor`、`floor_reached` | 762 | 否 | 快照 `act` 是游戏的真实幕号（`Snapshot.java:26`），TinyCat 靠 Boss 层推断 | 无缺口 | 精确 | Ledger `act` > `.run` 推断 |
-| 药水使用 | 战斗 | 原法 `potion_use_per_floor`；替代 `potions_floor_usage`（非空 441） | 原法 0；替代 762 | 有 | StatsIndex 两者都读（`StatsIndex.java:35-36`） | 不需补；按药水名统计才需要 RHP | 精确（数量），药水名（历史局不可得） | `.run` 数量；药水名 RHP |
+| 药水使用 | 战斗 | RHP `potion_use_per_floor` 优先；原版 `potions_floor_usage` 兜底（非空 441） | RHP 67/67（当前存档位 0）；原版 762 | 有 | StatsIndex 两者都读（`StatsIndex.java:35-36`） | 不需补；RHP 用于逐场/分幕计数，药水名历史局不可得 | 精确（数量），药水名新版可得 | RHP；原版兜底 |
 
 ### 4.4 事件、遗物、金币、删牌、火堆、商店、Meta
 
