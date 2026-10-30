@@ -168,6 +168,7 @@ public final class StatsCheck {
   check(metrics(Stats.build(Arrays.asList(nf(nativeRun("NB",20,17,false,"Cultist","17:M:Cultist:5"),"IRONCLAD","nb.run")),Collections.emptyList()),all).containsKey("hp_loss:1:Cultist"),"act fallback 17/34/52 without boss fights");
   // metrics.md 6.4: a run that ends on the act-1 boss chest floor never entered act 2.
   check(!metrics(Stats.build(Arrays.asList(nf(nativeRun("CH",20,17,false,null,"1:M:Jaw Worm:10","16:B:Hexaghost:20"),"IRONCLAD","ch.run")),Collections.emptyList()),all).containsKey("act_hp_loss:2"),"boss chest floor stays in the boss act");
+  check(m(m,"hp_loss:1:Hexaghost").boss&&!m(m,"hp_loss:1:Jaw Worm").boss,"boss-node HP-loss rows are flagged for the T0 danger tier");
   check(m(m,"act_hp_loss:1").denominator>0&&m(m,"coverage:act_hp_loss").unit.equals("run_act"),"act HP loss per run and act");
   // 10.8 coverage in each metric's own unit; fights fall back to runs when some run's fights are unknown.
   check(m(m,"coverage:act").unit.equals("run_act")&&m(m,"coverage:boss_relics").unit.equals("run_act")&&m(m,"coverage:damage").unit.equals("run")&&m(m,"coverage:reward").unit.equals("run")&&m(m,"win").coverUnit.equals("run"),"10.8 coverage units with unknown fights");

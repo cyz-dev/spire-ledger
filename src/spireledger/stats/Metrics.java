@@ -6,6 +6,8 @@ import static spireledger.stats.Metric.*;
 
 /** The M2 metrics of metrics.md section 6 as pure functions of a selection; nothing here is stored. */
 public final class Metrics {
+    /** metrics.md 8: v2 reads RunHistoryPlus potion_use_per_floor before vanilla potions_floor_usage. */
+    public static final String VERSION="metrics-v2";
     static final List<String> OUTCOMES=Arrays.asList("victory","death","abandon","unknown");
     static final List<String> FAMILIES=Arrays.asList("events","purchases","purges","campfire","potions","observed");
     static final Set<String> FIGHT_ROOMS=new HashSet<>(Arrays.asList("M","E","B"));
@@ -83,7 +85,7 @@ public final class Metrics {
                 boolean estimated=loss.status==Fact.Status.ESTIMATED;a[0]+=loss.value;if(estimated)a[2]=1;
                 // Healed in the fight: damage taken exceeds the HP actually lost by more than the threshold (metrics.md 6.4).
                 String split=c.damage==null?null:(c.damage-loss.value>threshold?"hp_loss_heal:":"hp_loss_noheal:")+c.act+":"+c.encounter;
-                for(String key:split==null?Collections.singletonList("hp_loss:"+c.act+":"+c.encounter):Arrays.asList("hp_loss:"+c.act+":"+c.encounter,split)){Metric m=get(key,MEAN,"combat","hp","hp_loss");m.add(loss.value,1);if(estimated)m.estimated++;}
+                for(String key:split==null?Collections.singletonList("hp_loss:"+c.act+":"+c.encounter):Arrays.asList("hp_loss:"+c.act+":"+c.encounter,split)){Metric m=get(key,MEAN,"combat","hp","hp_loss");m.add(loss.value,1);if(estimated)m.estimated++;if("B".equals(c.room))m.boss=true;}
             }
             // Per run and act: fights plus positive event damage; an act without fights is a known 0, one unknown fight leaves the act missing.
             Integer last=r.maxAct.or(null);if(last!=null)for(int act=1;act<=Math.min(4,last);act++){double[] a=acts.getOrDefault(act,new double[3]);boolean have=r.combats.known()&&a[1]==0&&r.eventDamage.known();cover("act_hp_loss","run_act",have?1:0,1);

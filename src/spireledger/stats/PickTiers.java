@@ -15,8 +15,10 @@ public final class PickTiers {
     public static final class Entry {
         public final String card,status;public final int act,tier,samples,estimated;
         public final double picked,offered,standard;
+        /** The row's own metric for exports that need its status and interval; transient so metadata.json keeps its entry shape. */
+        public final transient Metric metric;
         Entry(String card,int act,Metric metric){this(card,act,metric,metric.shown()?tier(metric.numerator,metric.denominator):8,-1);}
-        Entry(String card,int act,Metric metric,int tier,double standard){this.card=card;this.act=act;status=metric.status;samples=metric.samples;estimated=metric.estimated;picked=metric.numerator;offered=metric.denominator;this.tier=tier;this.standard=standard;}
+        Entry(String card,int act,Metric metric,int tier,double standard){this.card=card;this.act=act;this.metric=metric;status=metric.status;samples=metric.samples;estimated=metric.estimated;picked=metric.numerator;offered=metric.denominator;this.tier=tier;this.standard=standard;}
         public double rate(){return offered>0?picked/offered:0;}
         /** True for rows that carry a strength share instead of a picked/offered count. */
         public boolean standardized(){return standard>=0;}
@@ -36,10 +38,25 @@ public final class PickTiers {
     public static Entry observed(String card,int act,Metric metric){return new Entry(card,act,metric);}
     /** Skip/Bowl inside the standardized view: after the S..R00 groups, showing the actual observed rate. */
     public static Entry actual(String card,int act,Metric metric){return new Entry(card,act,metric,9,-1);}
+    /** A row under the minimum sample: it never takes part in a section's or a danger split's cuts. */
+    public static final int LOW=-2;
     /** Fisher-Jenks tiers (0 = highest) over the values shown in one export section; equal values always share a tier. */
     public static int[] naturalTiers(List<Double> values,int k){int n=values.size();int[] out=new int[n];if(n==0)return out;
         double[] v=new double[n];List<Integer> all=new ArrayList<>();for(int i=0;i<n;i++){double x=values.get(i)==null?0:values.get(i);v[i]=Double.isFinite(x)?x:0;all.add(i);}
         Map<Double,Integer> classes=jenks(v,all,Math.max(1,k));for(int i=0;i<n;i++)out[i]=classes.get(v[i]);return out;}
+    /** section-tiers-v1: Jenks S..R00 over the shown rows only; rows below the minimum sample get {@link #LOW}. */
+    public static int[] sectionTiers(List<Double> values,List<Boolean> shown){int[] out=new int[values.size()];List<Double> cut=new ArrayList<>();
+        for(int i=0;i<values.size();i++)if(shown.get(i))cut.add(values.get(i));int[] tiers=naturalTiers(cut,STANDARD_TIERS);
+        for(int i=0,k=0;i<values.size();i++)out[i]=shown.get(i)?tiers[k++]:LOW;return out;}
+    /**
+     * Monster danger (metrics.md 6.7): bosses are T0; the other shown rows, by mean loss descending, split into T1..T4 of
+     * near-equal size with the larger groups first, and a value equal to the one above keeps its tier. Hidden rows get {@link #LOW}.
+     */
+    public static int[] dangerTiers(List<Double> values,List<Boolean> boss,List<Boolean> shown){int n=values.size();int[] out=new int[n];List<Integer> rest=new ArrayList<>();
+        for(int i=0;i<n;i++){out[i]=!shown.get(i)?LOW:boss.get(i)?0:-1;if(out[i]==-1)rest.add(i);}
+        rest.sort((a,b)->Double.compare(values.get(b),values.get(a)));int base=rest.size()/4,extra=rest.size()%4,pos=0;
+        for(int t=1;t<=4;t++)for(int c=0;c<base+(t<=extra?1:0);c++,pos++){int i=rest.get(pos);out[i]=pos>0&&values.get(i).equals(values.get(rest.get(pos-1)))?out[rest.get(pos-1)]:t;}
+        return out;}
     /** The same tier/rate/sample order as {@link #entries}; used after appending rows the fit never reports. */
     public static void sort(List<Entry> entries){entries.sort(Comparator.comparingInt((Entry e)->e.tier).thenComparingDouble(e->-e.rate()).thenComparingInt(e->-e.samples).thenComparing(e->e.card));}
     /** Cards plus Skip that the standardized fit reports for this act, strongest share first; low samples stay out, as in the observed tiers. */

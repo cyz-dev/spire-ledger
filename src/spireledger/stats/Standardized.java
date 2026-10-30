@@ -3,7 +3,7 @@ package spireledger.stats;
 import java.util.*;
 
 /**
- * Standardized rate (metrics.md 6.7, standardized-v1): a Plackett-Luce point estimate over whole choice screens.
+ * Standardized rate (metrics.md 6.7, standardized-v2; v1 fitted Skip without reporting it): a Plackett-Luce point estimate over whole choice screens.
  *
  * <p>Each screen is a choice set S with P(pick i | S) = s_i / sum(S), so a pick against strong offers counts for
  * more than one against weak offers; the observed picked/offered rate cannot tell the two apart, which is why both
@@ -15,7 +15,7 @@ import java.util.*;
  * filter changes.</p>
  */
 public final class Standardized {
-    public static final String VERSION="standardized-v1",SKIP="SKIP";
+    public static final String VERSION="standardized-v2",SKIP="SKIP";
     static final double PRIOR_WINS=1,PRIOR_APPEARANCES=.01,TOLERANCE=1e-9,FLOOR=1e-12;static final int ROUNDS=2000;
 
     /** One fitted universe: every present id (Skip included) to strength share in percent (sums to 100), with the screens and ids behind it. */

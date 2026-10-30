@@ -21,13 +21,10 @@ public final class Csv {
                 low,high,m.estimated>0?number(m.estimated):"",m.excluded>0?number(m.excluded):""));
             return this;
         }
-        /** A picked/offered row (cards) with the same Chinese wording and a Wilson interval. */
-        public Table addRate(String act,String view,String tier,String label,double picked,double offered,int samples,String rawStatus,int estimated){
-            boolean shown=rawStatus.equals("ok")||rawStatus.equals("zero");
-            String value=shown&&offered>0?number(picked/offered*100):"";
-            double[] ci=shown?Metric.wilson(picked,offered):null;
-            rows.add(fields(title,act,view,tier,label,value,"%",number(picked),number(offered),number(samples),status(rawStatus),
-                ci==null?"":number(ci[0]*100),ci==null?"":number(ci[1]*100),estimated>0?number(estimated):"",""));
+        /** A model row (standardized share, campfire multiple): the value is the model's, gated by the support metric; no counts, no interval. */
+        public Table addModel(String act,String view,String tier,String label,double value,String unit,Metric support){
+            if(support==null){rows.add(fields(title,act,view,tier,label,"",unit,"","","","未记录","","","",""));return this;}
+            rows.add(fields(title,act,view,tier,label,support.shown()?number(value):"",unit,"","",number(support.samples),status(support.status),"","",support.estimated>0?number(support.estimated):"",""));
             return this;
         }
         public boolean empty(){return rows.isEmpty();}

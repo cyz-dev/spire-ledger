@@ -10,6 +10,8 @@ public final class Metric {
     public double squares;
     /** Campfire preference rows: the random baseline in percent (100 / average pool) their share is divided by. */
     public double baseline;
+    /** Actual-HP-loss rows of a boss-node fight (path B), which the danger tiers keep apart as T0. */
+    public boolean boss;
     Metric(String key,String kind,String unit,String measure,String cover,boolean winRate){this.key=key;this.kind=kind;this.unit=unit;this.measure=measure;this.cover=cover;this.winRate=winRate;}
     void add(double n,double d){numerator+=n;denominator+=d;samples++;squares+=n*n;}
     void count(double n){numerator+=n;samples++;}

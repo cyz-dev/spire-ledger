@@ -25,23 +25,26 @@ import java.util.*;
 final class PickRateChart {
     static final int COLUMNS=6,LIST_COLUMNS=3,TIERS=7;
     static final float CARD_ROW=85,LIST_ROW=96,HEADER_ROW=48,RULE_ROW=34;
-    static final int ACTUAL=9,LOW=-2,UNTIERED=-3;
+    static final int ACTUAL=9,LOW=PickTiers.LOW,UNTIERED=-3;
     static final Color[] COLORS={Color.valueOf("e5c07b"),Color.valueOf("98c379"),Color.valueOf("61afef"),Color.valueOf("c678dd"),Color.valueOf("e06c75"),Color.valueOf("d19a66"),Color.valueOf("7f848e"),Color.valueOf("626978"),Color.valueOf("8c929e"),Color.valueOf("56b6c2")};
     static final String SKIP="#skip",BOWL="#bowl";
     final StatsScreen screen;final List<List<PickTiers.Entry>> rows=new ArrayList<>();
     List<PickTiers.Entry> entries=Collections.emptyList();List<Section> sections=Collections.emptyList();final List<ListLine> listLines=new ArrayList<>();
     int act=1,offset,mode,kind;boolean exportRequested;String message="";Path lastExport;final Map<String,Texture> monsterTextures=new HashMap<>();Map<String,Path> monsterIndex;
-    static final Set<String> BOSSES=new HashSet<>(Arrays.asList("Hexaghost","Slime Boss","The Guardian","Collector","Automaton","Champ","Time Eater","Awakened One","Donu and Deca"));
     static final String[] HP_TIERS={"T0 BOSS（单独排序）","T1 极危","T2 高危","T3 中危","T4 低危"};
     PickRateChart(StatsScreen screen){this.screen=screen;}
     static String tr(String cn,String en){return HistoryScreen.tr(cn,en);}
     /** One tile of a non-card export: a relic image, a blank card placeholder, and its value in the section's tiers. */
     static final class Item{
-        final String card,relic,monster,name,detail,measure;int tone;final boolean estimated;final double value;int tier;Metric source;
+        final String card,relic,monster,name,detail,measure;int tone;final boolean estimated;final double value;int tier;Metric source;boolean ranked=true,model;
         Item(String card,String relic,String name,String detail,int tone,boolean estimated){this(card,relic,null,name,detail,tone,estimated,0,"");}
         Item(String card,String relic,String name,String detail,int tone,boolean estimated,double value,String measure){this(card,relic,null,name,detail,tone,estimated,value,measure);}
         Item(String card,String relic,String monster,String name,String detail,int tone,boolean estimated,double value,String measure){this.card=card;this.relic=relic;this.monster=monster;this.name=name;this.detail=detail;this.tone=tone;this.estimated=estimated;this.value=value;this.measure=measure;this.tier=UNTIERED;}
         Item with(Metric metric){source=metric;return this;}
+        /** Kept in the section but out of its cuts, e.g. sleep, which is a rate beside the campfire multiples. */
+        Item unranked(){ranked=false;return this;}
+        /** The value is a model number (standardized share or campfire multiple), not the source metric's own value. */
+        Item model(){model=true;return this;}
     }
     static final class Section{
         final int act;final String title,note;final List<Item> items;final boolean tiered;final String[] tierNames;
@@ -59,7 +62,10 @@ final class PickRateChart {
         static ListLine items(List<Item> items){return new ListLine(ITEMS,"","",items);}
     }
     void rebuild(Map<String,Metric> metrics){entries=kind==0?cards(metrics,mode):Collections.<PickTiers.Entry>emptyList();rows.clear();rows.addAll(group(entries));sections=buildSections(metrics,mode,kind==2?0:act);layoutSections();offset=0;message="";}
-    boolean exportable(){return !screen.selection.runs.isEmpty();}
+    /** Some act of this export has a row to draw, so no empty export folder is ever created (testing.md N6). */
+    boolean exportable(){Map<String,Metric> m=screen.metrics;
+        for(int a:exportActs())if(kind==0?!cards(m,0,a).isEmpty()||!cards(m,1,a).isEmpty():!buildSections(m,0,a).isEmpty()||kind!=4&&!buildSections(m,1,a).isEmpty()||(kind==2||kind==3)&&!buildSections(m,2,a).isEmpty())return true;
+        return false;}
     /** Cards are tiered per act, so the all-acts preview stays on act 1 while the export writes every act separately. */
     int previewAct(){return act>0?act:1;}
     /** One tier per row, at most COLUMNS cards per row; entries arrive tier-ascending. */
@@ -92,20 +98,21 @@ final class PickRateChart {
     }
     static String decimal(double value){return value>=10?String.format(Locale.ROOT,"%.1f",value):value>=1?String.format(Locale.ROOT,"%.2f",value):String.format(Locale.ROOT,"%.3f",value);}
     static String share(double value){return decimal(value)+"%";}
-    static String tierLabel(int tier){if(tier>=0&&tier<TIERS)return PickTiers.standardName(tier);if(tier==LOW)return tr("样本不足","Low sample");return "";}
+    static String tierLabel(int tier){if(tier>=0&&tier<TIERS)return PickTiers.standardName(tier);if(tier==LOW)return tr("样本不足","Low sample");if(tier==UNTIERED)return tr("不分档","Not tiered");return "";}
     /** Range of the values the tier actually holds, so the image states where its S..R00 cuts fell. */
     static String tierRange(int tier,List<Item> group){
         if(tier<0)return "";double low=Double.MAX_VALUE,high=-Double.MAX_VALUE;String unit="";
         for(Item item:group)if(item.tier==tier){low=Math.min(low,item.value);high=Math.max(high,item.value);unit=item.measure;}
         if(high<low)return "";return Double.compare(low,high)==0?decimal(low)+unit:decimal(low)+unit+" – "+decimal(high)+unit;
     }
-    /** Fisher-Jenks S..R00 over one section's displayed values; below-minimum rows stay separate at the end. */
+    /** Kernel section tiers (PickTiers.sectionTiers) over one section's ranked rows; below-minimum and unranked rows follow at the end. */
     static void tier(List<Item> items){
-        List<Double> values=new ArrayList<>();for(Item item:items)if(item.tier!=LOW)values.add(item.value);
-        int[] tiers=PickTiers.naturalTiers(values,TIERS);int k=0;
-        for(Item item:items)if(item.tier!=LOW)item.tier=tiers[k++];
-        items.sort((a,b)->{int by=Integer.compare(a.tier<0?99:a.tier,b.tier<0?99:b.tier);if(by!=0)return by;by=Double.compare(b.value,a.value);return by!=0?by:a.name.compareTo(b.name);});
+        List<Item> ranked=new ArrayList<>();for(Item item:items)if(item.ranked)ranked.add(item);
+        List<Double> values=new ArrayList<>();List<Boolean> shown=new ArrayList<>();for(Item item:ranked){values.add(item.value);shown.add(item.tier!=LOW);}
+        int[] tiers=PickTiers.sectionTiers(values,shown);for(int i=0;i<ranked.size();i++)ranked.get(i).tier=tiers[i];
+        items.sort((a,b)->{int by=Integer.compare(order(a.tier),order(b.tier));if(by!=0)return by;by=Double.compare(b.value,a.value);return by!=0?by:a.name.compareTo(b.name);});
     }
+    static int order(int tier){return tier>=0?tier:tier==LOW?99:100;}
     static void low(Item item,Metric metric){if(metric==null||!metric.shown())item.tier=LOW;}
     static String tileName(String id){if(SKIP.equals(id)||Standardized.SKIP.equals(id))return tr("跳过","Skip");if(BOWL.equals(id))return tr("歌唱碗","Singing Bowl");return HistoryScreen.cardName(id);}
     void text(SpriteBatch sb,String value,float x,float y,float width,float size,Color color){BitmapFont font=FontHelper.cardDescFont_N;float sx=font.getData().scaleX,sy=font.getData().scaleY;Color old=font.getColor().cpy();try{float factor=size/Math.max(1,font.getCapHeight());font.getData().setScale(sx*factor,sy*factor);String fit=HistoryLayout.fit(value,width,t->new GlyphLayout(font,t).width);FontHelper.renderFontLeftTopAligned(sb,font,fit,x,y,color);}finally{font.getData().setScale(sx,sy);font.setColor(old);}}
@@ -119,7 +126,7 @@ final class PickRateChart {
         blank(sb,x,y,size,size);
     }
     void relic(SpriteBatch sb,String id,float x,float y,float size){AbstractRelic relic=RelicLibrary.getRelic(id);if(relic!=null&&relic.img!=null){sb.setColor(Color.WHITE);sb.draw(relic.img,x,y,size,size);}else blank(sb,x,y,size,size);}
-    /** Encounter art supplied by the player, like TinyCat: the game's own monster files are Spine atlases, so no portrait is read from the jar. */
+    /** Encounter art the player put in a local monster-images folder: the game's own monster files are Spine atlases, and none are bundled. */
     void monster(SpriteBatch sb,String id,float x,float y,float size){Texture texture=monsterTexture(id);if(texture==null){blank(sb,x,y,size,size);return;}
         float scale=Math.min(size/texture.getWidth(),size/texture.getHeight());float w=texture.getWidth()*scale,h=texture.getHeight()*scale;
         sb.setColor(Color.WHITE);sb.draw(texture,x+(size-w)/2,y+(size-h)/2,w,h);}
@@ -127,20 +134,7 @@ final class PickRateChart {
         String key=normalizeMonster(id);if(key.isEmpty())return null;if(monsterTextures.containsKey(key))return monsterTextures.get(key);
         Texture texture=null;Path file=monsterFile(id);
         if(file!=null)try{texture=new Texture(new FileHandle(file.toFile()));texture.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);}catch(Exception error){texture=null;}
-        if(texture==null)texture=bundledMonster(key);
         monsterTextures.put(key,texture);return texture;}
-    /** Images packed into a private test build at build time; the release jar has none, so local files and the blank tile still apply. */
-    static Texture bundledMonster(String key){
-        if(key==null||key.isEmpty())return null;
-        try(InputStream stream=PickRateChart.class.getResourceAsStream(monsterResource(key))){
-            if(stream==null)return null;
-            ByteArrayOutputStream data=new ByteArrayOutputStream();byte[] chunk=new byte[8192];int read;
-            while((read=stream.read(chunk))>0)data.write(chunk,0,read);
-            byte[] png=data.toByteArray();Pixmap pixmap=new Pixmap(png,0,png.length);
-            try{Texture texture=new Texture(pixmap);texture.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);return texture;}finally{pixmap.dispose();}
-        }catch(Exception error){return null;}}
-    static String monsterResource(String id){return "/monster-images/"+normalizeMonster(id)+".png";}
-    static boolean bundledMonsterImages(){return PickRateChart.class.getResource("/monster-images/bundled.txt")!=null;}
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
         Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
@@ -263,8 +257,8 @@ final class PickRateChart {
                 out.add(new Section(a,title,tr("行动次数 · 锻造按被升级的牌逐张计数 · 计数不分档","Action counts · smiths by upgraded card · counts are not tiered"),items,false));
                 continue;
             }
-            Metric sleep=metrics.get("campfire_sleep:"+a);if(sleep!=null&&sleep.denominator>0&&listed(sleep)){Item item=new Item("",null,tr("睡觉","Sleep"),detail(sleep,pref(sleep)),-1,false,sleep.value()*100,"%");low(item,sleep);items.add(item.with(sleep));}
-            for(String key:screen.campfireRows("campfire_pref:"+a+":")){Metric m=metrics.get(key);if(!listed(m))continue;String id=key.substring(key.lastIndexOf(':')+1);Item item=campfireItem(id,detail(m,pref(m)),-1,m.baseline>0?m.value()*100/m.baseline:0,"×");low(item,m);items.add(item.with(m));}
+            Metric sleep=metrics.get("campfire_sleep:"+a);if(sleep!=null&&sleep.denominator>0&&listed(sleep)){Item item=new Item("",null,tr("睡觉","Sleep"),detail(sleep,pref(sleep)),-1,false,sleep.value()*100,"%");low(item,sleep);items.add(item.with(sleep).unranked());}
+            for(String key:screen.campfireRows("campfire_pref:"+a+":")){Metric m=metrics.get(key);if(!listed(m))continue;String id=key.substring(key.lastIndexOf(':')+1);Item item=campfireItem(id,detail(m,pref(m)),-1,m.baseline>0?m.value()*100/m.baseline:0,"×");low(item,m);items.add(item.with(m).model());}
             tier(items);
             Metric smiths=metrics.get("campfire_smiths:"+a),pool=metrics.get("campfire_pool:"+a),rebuild=metrics.get("campfire_rebuild:"+a);
             StringBuilder builder=new StringBuilder();if(smiths!=null&&visits.numerator>0)builder.append(tr("锻造 ","smith ")).append(screen.percent(smiths.numerator/visits.numerator));
@@ -284,7 +278,7 @@ final class PickRateChart {
         }else if(view==1){
             List<String> ids=new ArrayList<>(screen.neowShares.keySet());
             ids.sort((x,y)->{int by=Double.compare(screen.neowShares.get(y).doubleValue(),screen.neowShares.get(x).doubleValue());return by!=0?by:x.compareTo(y);});
-            for(String id:ids){Metric m=metrics.get("neow:"+id);Item item=new Item("",null,screen.neow(id),standardDetail(m,share(screen.neowShares.get(id).doubleValue())+tr("  /  出现 ","  /  offered ")+screen.quantity(m==null?0:m.denominator)),-1,false,screen.neowShares.get(id).doubleValue(),"%");low(item,m);items.add(item.with(m));}
+            for(String id:ids){Metric m=metrics.get("neow:"+id);Item item=new Item("",null,screen.neow(id),standardDetail(m,share(screen.neowShares.get(id).doubleValue())+tr("  /  出现 ","  /  offered ")+screen.quantity(m==null?0:m.denominator)),-1,false,screen.neowShares.get(id).doubleValue(),"%");low(item,m);items.add(item.with(m).model());}
             note=tr("强度份额 · 合计 100% · 缺少未选记录的局不参与拟合 · S–R00 分档","Strength shares · sums to 100% · runs without skipped options are not fitted · S–R00 tiers");
         }else{
             title=tr("涅奥选项 · 胜率","Neow options · win rate");
@@ -307,7 +301,7 @@ final class PickRateChart {
                 Map<String,Double> shares=screen.bossShares.get(Integer.valueOf(a));if(shares==null||shares.isEmpty())continue;
                 List<String> ids=new ArrayList<>(shares.keySet());
                 ids.sort((x,y)->{int by=Double.compare(shares.get(y).doubleValue(),shares.get(x).doubleValue());return by!=0?by:x.compareTo(y);});
-                for(String id:ids){Metric m=metrics.get("boss:"+a+":"+id);boolean skip=id.equals(Standardized.SKIP);Item item=new Item("",skip?null:id,skip?tr("跳过","Skip"):HistoryScreen.relicName(id),standardDetail(m,share(shares.get(id).doubleValue())+tr("  /  出现 ","  /  offered ")+screen.quantity(m==null?0:m.denominator)),-1,false,shares.get(id).doubleValue(),"%");low(item,m);items.add(item.with(m));}
+                for(String id:ids){Metric m=metrics.get("boss:"+a+":"+id);boolean skip=id.equals(Standardized.SKIP);Item item=new Item("",skip?null:id,skip?tr("跳过","Skip"):HistoryScreen.relicName(id),standardDetail(m,share(shares.get(id).doubleValue())+tr("  /  出现 ","  /  offered ")+screen.quantity(m==null?0:m.denominator)),-1,false,shares.get(id).doubleValue(),"%");low(item,m);items.add(item.with(m).model());}
             }else{
                 for(String key:screen.campfireRows(prefix)){Metric m=metrics.get(key);if(!listed(m))continue;String id=key.substring(prefix.length());Item item=id.equals(Standardized.SKIP)?new Item("",null,tr("跳过","Skip"),detail(m,pct(m)),-1,false,m.value()*100,"%"):new Item("",id,HistoryScreen.relicName(id),detail(m,pct(m)),-1,m.excluded>0,m.value()*100,"%");low(item,m);items.add(item.with(m));}
             }
@@ -330,13 +324,11 @@ final class PickRateChart {
             if(a<=3){
                 if(total!=null){Item item=new Item("",null,tr("本幕总战损（每局）","Act total per run"),detail(total,hp(total,tr("局","runs"))),-1,total.estimated>0,total.value()," HP");low(item,total);
                     out.add(new Section(a,title,tr("入层生命 − 本层结束生命 · 每局合计","Entry HP − floor end HP · per run"),Collections.singletonList(item.with(total)),false));}
-                List<Item> bosses=new ArrayList<>(),rest=new ArrayList<>();
-                for(String key:keys){Metric m=metrics.get(key);if(!listed(m))continue;Item item=new Item("",null,encounter(key),screen.encounter(encounter(key)),detail(m,hp(m,tr("场","fights"))),-1,m.estimated>0,m.value()," HP").with(m);low(item,m);
-                    if(BOSSES.contains(encounter(key))){item.tier=0;bosses.add(item);}else rest.add(item);}
-                Comparator<Item> byLoss=(x,y)->{int by=Double.compare(y.value,x.value);if(by!=0)return by;by=Integer.compare(y.source==null?0:y.source.samples,x.source==null?0:x.source.samples);return by!=0?by:x.name.compareTo(y.name);};
-                bosses.sort(byLoss);rest.sort(byLoss);
-                int base=rest.size()/4,extra=rest.size()%4,index=0;for(int t=1;t<=4;t++){int count=base+(t<=extra?1:0);for(int k=0;k<count;k++)rest.get(index++).tier=t;}
-                List<Item> fights=new ArrayList<>(bosses);fights.addAll(rest);for(Item item:fights)if(item.tier>=0)item.tone=item.tier;
+                List<Item> fights=new ArrayList<>();
+                for(String key:keys){Metric m=metrics.get(key);if(!listed(m))continue;fights.add(new Item("",null,encounter(key),screen.encounter(encounter(key)),detail(m,hp(m,tr("场","fights"))),-1,m.estimated>0,m.value()," HP").with(m));}
+                List<Double> values=new ArrayList<>();List<Boolean> boss=new ArrayList<>(),shown=new ArrayList<>();for(Item item:fights){values.add(item.value);boss.add(item.source.boss);shown.add(item.source.shown());}
+                int[] tiers=PickTiers.dangerTiers(values,boss,shown);for(int i=0;i<fights.size();i++){Item item=fights.get(i);item.tier=tiers[i];if(item.tier>=0)item.tone=item.tier;}
+                fights.sort((x,y)->{int by=Integer.compare(order(x.tier),order(y.tier));if(by!=0)return by;by=Double.compare(y.value,x.value);if(by!=0)return by;by=Integer.compare(y.source.samples,x.source.samples);return by!=0?by:x.name.compareTo(y.name);});
                 if(!fights.isEmpty())out.add(new Section(a,title+" · "+tr("遭遇危险度","danger"),tr("Boss 单列 T0，其余等人数分 T1–T4；事件战与第四幕不计入","T0 keeps bosses apart, others split into T1–T4 by equal counts; events and act 4 are left out"),fights,true,HP_TIERS));
             }else{
                 List<Item> items=new ArrayList<>();
@@ -374,20 +366,25 @@ final class PickRateChart {
         if(min==null)return tr("全部","all");
         return min.equals(max)?tr("全部（实际 A","all (actual A")+min+tr("）",")"):tr("全部（A","all (A")+min+tr("–A","–A")+max+tr("）",")");
     }
-    String winRate(){Metric m=screen.metrics.get("win");return m==null||m.samples<=0?"—":String.format(Locale.ROOT,"%.1f%%（%s/%s）",100*m.value(),screen.quantity(m.numerator),screen.quantity(m.denominator));}
-    /** Only the fields worth reading in the image; source, date, slot and version details move to metadata remarks. */
-    List<String> captions(int view){
+    String winRate(){Metric m=screen.metrics.get("win");return m==null||!m.shown()?"—":String.format(Locale.ROOT,"%.1f%%（%s/%s）",100*m.value(),screen.quantity(m.numerator),screen.quantity(m.denominator));}
+    /** Image header (metrics.md 8): filters, win basis, sources, sample counts, then the view's rate and tier rule, then versions and export time. */
+    List<String> captions(int view){List<String> text=head();text.addAll(rule(view));text.add(versions()+" · "+new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));return text;}
+    List<String> head(){
         Stats.Filter f=screen.filter;List<String> text=new ArrayList<>();
-        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))
-            +tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)
-            +tr(" · 结果："," · Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]
-            +tr(" · 口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))
-            +(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
-        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate()+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
+        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))+tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)+tr(" · 存档位 "," · Save slot ")+f.slot+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
+        SimpleDateFormat date=new SimpleDateFormat("yyyy-MM-dd");text.add(tr("日期：","Date: ")+(f.from==0?tr("不限","any"):date.format(new Date(f.from)))+" – "+(f.to==0?tr("不限","any"):date.format(new Date(f.to-1)))+tr(" · 标准模式 · 种子局包含"," · Standard mode · Seeded included"));
+        text.add(tr("结果：","Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]+tr(" · 胜利口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))+(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
+        text.add(tr("来源：","Sources: ")+new String[]{tr("原版战绩与账本合并","native + Ledger merged"),tr("有原版战绩","has native history"),tr("有账本记录","has Ledger record")}[screen.selected[6]]+(f.slOnly?tr(" · 仅已记录 SL"," · Recorded SL only"):tr(" · 最终尝试路径"," · Final attempt")));
+        Metric unknown=screen.metrics.get("reward_source:unknown");text.add(tr("包含操作来源未知的选择","Unknown action sources included")+(unknown==null?"":" ("+screen.quantity(unknown.numerator)+"/"+screen.quantity(unknown.denominator)+")")+tr(" · 排除已知自动化"," · Known automation excluded"));
+        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate());
+        return text;
+    }
+    String versions(){List<String> v=new ArrayList<>();v.add(Metrics.VERSION);if(kind==1)v.add("campfire-v1");if(kind==0||kind==2||kind==3)v.add(Standardized.VERSION);if(kind==0)v.add(PickTiers.VERSION);else if(kind!=4)v.add(PickTiers.SECTION_VERSION);return String.join(" · ",v);}
+    /** The view's rate and tier lines. */
+    List<String> rule(int view){List<String> text=new ArrayList<>();
         if(kind==4){
             text.add(tr("口径：实际战损 = 入层生命 − 本层结束生命（每场平均）；第一层缺入层记录时为估算","Rate: actual loss = entry HP − floor end HP, mean per fight; floor 1 is estimated without an entry record"));
             text.add(tr("分档：参考 TinyCat，Boss 单列 T0，其余按场均战损等人数分 T1–T4；事件战与第四幕不分档。","Tiers follow TinyCat: bosses stay in T0, the rest split into T1–T4 by equal counts on mean loss; event fights and act 4 are not tiered."));
-            if(bundledMonsterImages())text.add(tr("本构建已内置遭遇测试图片，仅限私人测试，不可分发。","This build bundles encounter test images for private testing only and must not be distributed."));
             return text;
         }
         if(kind==0){
@@ -405,7 +402,7 @@ final class PickRateChart {
         text.add(tr("分档：S–R00 · 对本段显示的百分比做 Fisher-Jenks（最多 7 档），同值同档；样本不足单列。","Tiers: S–R00 · Fisher-Jenks over the section percentages (up to 7 classes); ties share a tier; low samples separate."));
         return text;
     }
-    /** Readable source, date, slot, automation and version details that no longer fit in the image caption. */
+    /** The same source, date, slot, automation and version facts as the image header, as fields. */
     JsonObject remarks(){
         Stats.Filter f=screen.filter;JsonObject out=new JsonObject();
         out.addProperty("source",new String[]{tr("原版战绩与账本合并","native + Ledger merged"),tr("有原版战绩","has native history"),tr("有账本记录","has Ledger record")}[screen.selected[6]]+(f.slOnly?tr(" · 仅已记录 SL"," · Recorded SL only"):tr(" · 最终尝试路径"," · Final attempt")));
@@ -414,11 +411,9 @@ final class PickRateChart {
         out.addProperty("save_slot",f.slot);out.addProperty("standard_mode",true);out.addProperty("seeded",true);out.addProperty("min_offers",f.minSamples);
         Metric unknown=screen.metrics.get("reward_source:unknown");if(unknown!=null)out.addProperty("unknown_action_sources",screen.quantity(unknown.numerator)+"/"+screen.quantity(unknown.denominator));
         Metric excluded=screen.metrics.get("reward_automation_excluded");out.addProperty("known_automation_excluded",excluded==null?0:(long)excluded.numerator);out.addProperty("solver_used",solverUsed());
-        List<String> versions=new ArrayList<>();versions.add("metrics-v1");if(kind==0||kind==2||kind==3)versions.add(Standardized.VERSION);versions.add(PickTiers.VERSION);if(kind!=0&&kind!=4)versions.add(PickTiers.SECTION_VERSION);
-        out.add("versions",new Gson().toJsonTree(versions));out.addProperty("generated_at",new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));
+        out.add("versions",new Gson().toJsonTree(versions().split(" · ")));out.addProperty("generated_at",new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));
         if(kind==4){out.addProperty("export_scope",tr("图片与 CSV 只含当前选择的幕；幕选“全部”时每幕单独成图，CSV 一表一幕。","Images and CSV cover the selected act; with All, each act gets its own image and CSV table."));
-            out.addProperty("image_source",tr("本地 monster-images 优先，其次本构建内置的测试图片，缺失留白，不下载。","Local monster-images first, then bundled test images, blank when absent; nothing is downloaded."));
-            out.addProperty("bundled_images",bundledMonsterImages());}
+            out.addProperty("image_source",tr("只读玩家本地 monster-images 目录的图片，缺失留白，不打包、不下载。","Only images in the player's local monster-images folder; blank when absent, nothing bundled or downloaded."));}
         if(kind==2||kind==3)out.addProperty("interval_note",tr("界面不显示区间；CSV 的 95% 下限/上限给出 Wilson 区间作提示。","No interval in the image; the CSV's 95% bounds hold the Wilson interval as a hint."));
         return out;
     }
@@ -452,8 +447,8 @@ final class PickRateChart {
                     if(observed.isEmpty()&&standard.isEmpty())continue;
                     writeCards(sb,0,observed,a,directory,written,projection,transform);writeCards(sb,1,standard,a,directory,written,projection,transform);
                     Csv.Table table=new Csv.Table(tableTitle(a));
-                    for(PickTiers.Entry e:observed)table.addRate(String.valueOf(a),"一般率",cardTier(e,0),tileName(e.card),e.picked,e.offered,e.samples,e.status,e.estimated);
-                    for(PickTiers.Entry e:standard)table.addRate(String.valueOf(a),"标准率",cardTier(e,1),tileName(e.card),e.picked,e.offered,e.samples,e.status,e.estimated);
+                    for(PickTiers.Entry e:observed)table.add(String.valueOf(a),"一般率",cardTier(e,0),tileName(e.card),e.metric);
+                    for(PickTiers.Entry e:standard){if(e.standardized())table.addModel(String.valueOf(a),"标准率",cardTier(e,1),tileName(e.card),e.standard,"%",e.metric);else table.add(String.valueOf(a),"标准率",cardTier(e,1),tileName(e.card),e.metric);}
                     if(!table.empty()){tables.add(table);keptActs.add(a);}observedEntries.addAll(observed);standardEntries.addAll(standard);
                 }else{
                     List<Section> observed=buildSections(screen.metrics,0,a),standard=kind==4?Collections.<Section>emptyList():buildSections(screen.metrics,1,a),win=kind==2||kind==3?buildSections(screen.metrics,2,a):Collections.<Section>emptyList();
@@ -464,8 +459,7 @@ final class PickRateChart {
                     if(!table.empty()){tables.add(table);keptActs.add(a);}observedSections.addAll(observed);standardSections.addAll(standard);winSections.addAll(win);
                 }
             }
-            if(tables.isEmpty())message=tr("本类当前筛选无图，已保存 CSV：","No chart rows for this selection; saved CSV: ");
-            JsonObject data=new JsonObject();data.addProperty("metrics_version","metrics-v1");data.addProperty("tier_version",PickTiers.VERSION);data.addProperty("standardized_version",Standardized.VERSION);data.addProperty("csv_version",Csv.VERSION);
+            JsonObject data=new JsonObject();data.addProperty("metrics_version",Metrics.VERSION);data.addProperty("tier_version",PickTiers.VERSION);data.addProperty("standardized_version",Standardized.VERSION);data.addProperty("csv_version",Csv.VERSION);
             if(kind!=0&&kind!=4)data.addProperty("section_tier_version",PickTiers.SECTION_VERSION);
             data.addProperty("kind",kindName(kind));data.addProperty("act",act);data.addProperty("all_acts",act<=0);data.add("acts",new Gson().toJsonTree(keptActs));data.addProperty("run_count",screen.selection.runs.size());
             List<String> views=new ArrayList<>();if(kind==0){if(!observedEntries.isEmpty())views.add("observed");if(!standardEntries.isEmpty())views.add("standardized");}
@@ -490,7 +484,7 @@ final class PickRateChart {
         for(Section section:sections)for(Item item:section.items){
             String tier="";
             if(section.tiered&&item.tier!=UNTIERED){tier=item.tier==LOW?tr("样本不足","Low sample"):section.tierNames!=null&&item.tier>=0&&item.tier<section.tierNames.length?section.tierNames[item.tier]:PickTiers.standardName(item.tier);}
-            table.add(act<=0?"":String.valueOf(act),view,tier,item.name,item.source);
+            String a=act<=0?"":String.valueOf(act);if(item.model)table.addModel(a,view,tier,item.name,item.value,item.measure.equals("×")?"倍":item.measure,item.source);else table.add(a,view,tier,item.name,item.source);
         }
     }
     static List<Item> actualItems(List<PickTiers.Entry> entries){List<Item> out=new ArrayList<>();
