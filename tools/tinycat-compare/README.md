@@ -55,7 +55,7 @@ TinyCat 的默认口径写死在 `Run.valid`：只收 A20，排除每日、特�
 ## 2. Spire Ledger 导出格式（内核子任务按此实现）
 
 ```json
-{"meta": {"format": "spire-ledger-metrics", "format_version": 1, "metrics_version": "metrics-v2", "source": "Spire Ledger <version>",
+{"meta": {"format": "spire-ledger-metrics", "format_version": 1, "metrics_version": "metrics-v3", "source": "Spire Ledger <version>",
           "filters": {"tinycat_alignment": true, "save_slot": 0, "ascension": [20], "modes": "exclude_daily_special_endless",
                       "include_abandons": true, "seed_filter": "all", "win_definition": "heart_kill", "sources": ["native"]},
           "run_ids": {"ALL": ["IRONCLAD/1700000000.run"], "IRONCLAD": ["IRONCLAD/1700000000.run"], "THE_SILENT": [], "DEFECT": [], "WATCHER": []}},

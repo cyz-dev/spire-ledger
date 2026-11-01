@@ -12,6 +12,8 @@
 | 包边界、记录 schema、回合重打、同装 Mod、求解器 | [docs/architecture.md](docs/architecture.md) |
 | 用户能看到的功能和非目标 | [docs/product.md](docs/product.md) |
 | 怎么验证、手测清单 | [docs/testing.md](docs/testing.md) |
+| 已知缺口、为什么不这么做（图源、打包、兼容性） | [docs/issues/](docs/issues/) 里对应的 issue，先看结论与"没有采纳的选项" |
+| 打包、发版、发布说明 | [docs/release.md](docs/release.md)。发布包不得含图片，`build.ps1` 会强制检查 |
 
 回复协作者时先写明：这次需求落在哪几节、口径是否已有定义、要动哪些文件。metrics.md 还没有定义的口径，先在 metrics.md 里写定义（单位、分母、缺失规则、与 TinyCat 的差异），再写代码。
 
@@ -77,6 +79,7 @@
 - 在自己的 fork 或功能分支上工作，推送后开 PR，由维护者审阅合并。不要直接推 `main`，也不要合并自己的 PR。
 - 只 `git add` 自己改的路径，不用 `git commit -a` 或 `git add .`。`build/`、`sendToDevs/`、游戏 jar、SaveStateMod jar 和真实记录都不进 Git。
 - 提交信息用英文，写成一句说明做了什么的祈使句，和现有历史一致，例如 `Fix beta.3 stats defects and commit the dump behind the Python checks`。一个提交只做一件事；重写、修复和新功能尽量分开提交。
+- 提交作者必须是贡献者本人的身份，与 PR 来源账号一致：先 `git config user.name "<贡献者名>"`、`git config user.email "<本人邮箱>"`，再提交，不要沿用机器上残留的他人配置。PR #18 的两条提交署名成了另一个身份，合入后只能靠重写历史更正。（2026-10-31）
 
 每次完成后，代理给协作者的汇报包含四项：
 

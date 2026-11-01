@@ -30,7 +30,7 @@ final class PickRateChart {
     static final String SKIP="#skip",BOWL="#bowl";
     final StatsScreen screen;final List<List<PickTiers.Entry>> rows=new ArrayList<>();
     List<PickTiers.Entry> entries=Collections.emptyList();List<Section> sections=Collections.emptyList();final List<ListLine> listLines=new ArrayList<>();
-    int act=1,offset,mode,kind;boolean exportRequested;String message="";Path lastExport;final Map<String,Texture> monsterTextures=new HashMap<>();Map<String,Path> monsterIndex;
+    int act=1,offset,mode,kind;boolean exportRequested;String message="";Path lastExport;final Map<String,Texture> monsterTextures=new HashMap<>();Map<String,Path> monsterIndex;int artBudget;
     static final String[] HP_TIERS={"T0 BOSS（单独排序）","T1 极危","T2 高危","T3 中危","T4 低危"};
     PickRateChart(StatsScreen screen){this.screen=screen;}
     static String tr(String cn,String en){return HistoryScreen.tr(cn,en);}
@@ -126,24 +126,28 @@ final class PickRateChart {
         blank(sb,x,y,size,size);
     }
     void relic(SpriteBatch sb,String id,float x,float y,float size){AbstractRelic relic=RelicLibrary.getRelic(id);if(relic!=null&&relic.img!=null){sb.setColor(Color.WHITE);sb.draw(relic.img,x,y,size,size);}else blank(sb,x,y,size,size);}
-    /** Encounter art the player put in a local monster-images folder: the game's own monster files are Spine atlases, and none are bundled. */
-    void monster(SpriteBatch sb,String id,float x,float y,float size){Texture texture=monsterTexture(id);if(texture==null){blank(sb,x,y,size,size);return;}
+    /** Encounter art: a picture the player put in a monster-images folder, otherwise the encounter drawn from the game's own monster files (EncounterArt). */
+    void monster(SpriteBatch sb,String id,float x,float y,float size){Texture texture=monsterTexture(sb,id);if(texture==null){blank(sb,x,y,size,size);return;}
         float scale=Math.min(size/texture.getWidth(),size/texture.getHeight());float w=texture.getWidth()*scale,h=texture.getHeight()*scale;
         sb.setColor(Color.WHITE);sb.draw(texture,x+(size-w)/2,y+(size-h)/2,w,h);}
-    Texture monsterTexture(String id){
-        String key=normalizeMonster(id);if(key.isEmpty())return null;if(monsterTextures.containsKey(key))return monsterTextures.get(key);
+    /** Cached per encounter key, since "2 Louse" and "3 Louse" draw differently; the preview renders at most artBudget new encounters a frame, an export all of them. */
+    Texture monsterTexture(SpriteBatch sb,String id){
+        if(id==null||id.isEmpty())return null;if(monsterTextures.containsKey(id))return monsterTextures.get(id);
         Texture texture=null;Path file=monsterFile(id);
         if(file!=null)try{texture=new Texture(new FileHandle(file.toFile()));texture.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);}catch(Exception error){texture=null;}
-        monsterTextures.put(key,texture);return texture;}
+        if(texture==null){if(artBudget<=0)return null;artBudget--;try{texture=EncounterArt.render(sb,id);}catch(Throwable error){texture=null;}}
+        monsterTextures.put(id,texture);return texture;}
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
         Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
-    /** Images are read from the local game folder or the mod's data folder; nothing is downloaded or bundled. */
+    /** The player's own override folder; no other mod's folder is read. */
+    static Path imageDir(){return StateMod.ROOT.getParent().resolve("monster-images");}
+    /** Override pictures come only from the player's folder and the mod's own folder; nothing is downloaded, bundled, or borrowed from another mod. */
     Map<String,Path> monsterIndex(){
         if(monsterIndex!=null)return monsterIndex;
         monsterIndex=new HashMap<>();List<Path> roots=new ArrayList<>();
-        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images","monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
-        roots.add(StateMod.ROOT.getParent().resolve("monster-images"));
+        roots.add(imageDir());
+        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
         for(Path root:roots){if(!Files.isDirectory(root))continue;
             try(java.util.stream.Stream<Path> walk=Files.walk(root)){
                 walk.filter(Files::isRegularFile).sorted().forEach(path->{String name=path.getFileName().toString();int dot=name.lastIndexOf('.');if(dot<=0)return;
@@ -151,7 +155,8 @@ final class PickRateChart {
                     String key=normalizeMonster(name.substring(0,dot));if(!key.isEmpty()&&!monsterIndex.containsKey(key))monsterIndex.put(key,path);});
             }catch(Exception ignored){}}
         return monsterIndex;}
-    static String normalizeMonster(String value){return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");}
+    /** The file name is the encounter name; a leading enemy count ("2 Fungi Beasts") is tolerated but never required. */
+    static String normalizeMonster(String value){return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("^\\d+\\s*","").replaceAll("[^a-z0-9]","");}
     void dispose(){for(Texture texture:monsterTextures.values())if(texture!=null)texture.dispose();monsterTextures.clear();monsterIndex=null;}
     void image(SpriteBatch sb,Item item,float x,float y,float size){if(item.card!=null&&!item.card.isEmpty())portrait(sb,item.card,x,y,size);else if(item.relic!=null&&!item.relic.isEmpty())relic(sb,item.relic,x,y,size);else if(item.monster!=null&&!item.monster.isEmpty())monster(sb,item.monster,x,y,size);else blank(sb,x,y,size,size);}
     void drawRow(SpriteBatch sb,List<PickTiers.Entry> row,float x,float top,float width,float height,int view,List<PickTiers.Entry> source){
@@ -181,7 +186,7 @@ final class PickRateChart {
         if(kind==4)return tr("实际战损不可用：当前筛选没有可用的战斗战损记录。","Actual HP loss unavailable: no usable combat loss records in this selection.");
         return tr("标准率不可用：本幕至少需要 2 屏有效选牌，且筛选后仍保留 2 张不同卡。","Standardized rate unavailable: this act needs at least two usable reward screens and two distinct cards after filtering.");}
     void render(SpriteBatch sb){
-        float top=screen.bodyTop();
+        artBudget=2;float top=screen.bodyTop();
         text(sb,heading(),Settings.WIDTH*.06f,top,Settings.WIDTH*.87f,23*Settings.scale,Settings.GOLD_COLOR);
         top-=35*Settings.scale;
         if(kind==0)renderCards(sb,top);else renderSections(sb,top);
@@ -367,16 +372,16 @@ final class PickRateChart {
         return min.equals(max)?tr("全部（实际 A","all (actual A")+min+tr("）",")"):tr("全部（A","all (A")+min+tr("–A","–A")+max+tr("）",")");
     }
     String winRate(){Metric m=screen.metrics.get("win");return m==null||!m.shown()?"—":String.format(Locale.ROOT,"%.1f%%（%s/%s）",100*m.value(),screen.quantity(m.numerator),screen.quantity(m.denominator));}
-    /** Image header (metrics.md 8): filters, win basis, sources, sample counts, then the view's rate and tier rule, then versions and export time. */
-    List<String> captions(int view){List<String> text=head();text.addAll(rule(view));text.add(versions()+" · "+new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));return text;}
+    /** Image header (metrics.md 8): two filter lines and the view's rate and tier rule, four lines in all; dates, sources, slot and versions live in remarks(). */
+    List<String> captions(int view){List<String> text=head();text.addAll(rule(view));return text;}
     List<String> head(){
         Stats.Filter f=screen.filter;List<String> text=new ArrayList<>();
-        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))+tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)+tr(" · 存档位 "," · Save slot ")+f.slot+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
-        SimpleDateFormat date=new SimpleDateFormat("yyyy-MM-dd");text.add(tr("日期：","Date: ")+(f.from==0?tr("不限","any"):date.format(new Date(f.from)))+" – "+(f.to==0?tr("不限","any"):date.format(new Date(f.to-1)))+tr(" · 标准模式 · 种子局包含"," · Standard mode · Seeded included"));
-        text.add(tr("结果：","Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]+tr(" · 胜利口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))+(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
-        text.add(tr("来源：","Sources: ")+new String[]{tr("原版战绩与账本合并","native + Ledger merged"),tr("有原版战绩","has native history"),tr("有账本记录","has Ledger record")}[screen.selected[6]]+(f.slOnly?tr(" · 仅已记录 SL"," · Recorded SL only"):tr(" · 最终尝试路径"," · Final attempt")));
-        Metric unknown=screen.metrics.get("reward_source:unknown");text.add(tr("包含操作来源未知的选择","Unknown action sources included")+(unknown==null?"":" ("+screen.quantity(unknown.numerator)+"/"+screen.quantity(unknown.denominator)+")")+tr(" · 排除已知自动化"," · Known automation excluded"));
-        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate());
+        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))
+            +tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)
+            +tr(" · 结果："," · Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]
+            +tr(" · 口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))
+            +(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
+        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate()+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
         return text;
     }
     String versions(){List<String> v=new ArrayList<>();v.add(Metrics.VERSION);if(kind==1)v.add("campfire-v1");if(kind==0||kind==2||kind==3)v.add(Standardized.VERSION);if(kind==0)v.add(PickTiers.VERSION);else if(kind!=4)v.add(PickTiers.SECTION_VERSION);return String.join(" · ",v);}
@@ -413,7 +418,8 @@ final class PickRateChart {
         Metric excluded=screen.metrics.get("reward_automation_excluded");out.addProperty("known_automation_excluded",excluded==null?0:(long)excluded.numerator);out.addProperty("solver_used",solverUsed());
         out.add("versions",new Gson().toJsonTree(versions().split(" · ")));out.addProperty("generated_at",new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));
         if(kind==4){out.addProperty("export_scope",tr("图片与 CSV 只含当前选择的幕；幕选“全部”时每幕单独成图，CSV 一表一幕。","Images and CSV cover the selected act; with All, each act gets its own image and CSV table."));
-            out.addProperty("image_source",tr("只读玩家本地 monster-images 目录的图片，缺失留白，不打包、不下载。","Only images in the player's local monster-images folder; blank when absent, nothing bundled or downloaded."));}
+            out.addProperty("image_dir","~/.spire-ledger/monster-images");
+            out.addProperty("image_source",tr("遭遇图由本机游戏的怪物资源实时绘制；monster-images 目录里与遭遇同名的图片优先。不打包、不下载、不读其他 Mod 的图。","Encounter art is drawn at runtime from the local game's monster files; a same-named picture in a monster-images folder takes precedence. Nothing is bundled, downloaded, or read from another mod."));}
         if(kind==2||kind==3)out.addProperty("interval_note",tr("界面不显示区间；CSV 的 95% 下限/上限给出 Wilson 区间作提示。","No interval in the image; the CSV's 95% bounds hold the Wilson interval as a hint."));
         return out;
     }
@@ -435,7 +441,7 @@ final class PickRateChart {
     String kindNameCn(){switch(kind){case 1:return tr("火堆行动","Campfire actions");case 2:return tr("涅奥选项","Neow options");case 3:return tr("Boss 遗物","Boss relics");case 4:return tr("实际战损","Actual HP loss");default:return tr("卡牌抓率","Card picks");}}
     /** One CSV table per exported act, rows only from what that act's images contain. */
     void export(SpriteBatch sb)throws Exception{
-        message="";
+        message="";artBudget=Integer.MAX_VALUE;
         List<Csv.Table> tables=new ArrayList<>();List<PickTiers.Entry> observedEntries=new ArrayList<>(),standardEntries=new ArrayList<>();
         List<Section> observedSections=new ArrayList<>(),standardSections=new ArrayList<>(),winSections=new ArrayList<>();List<Integer> keptActs=new ArrayList<>();
         Path root=StateMod.ROOT.getParent().resolve("exports");Files.createDirectories(root);Path directory=Files.createDirectory(root.resolve("charts-"+new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())+"-"+UUID.randomUUID().toString().substring(0,8)));

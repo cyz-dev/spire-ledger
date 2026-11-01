@@ -20,7 +20,7 @@ Product spec: [product.md](product.md)
 - 只有 `record` 写局内事实；派生数字不落盘（导出文件除外）。每局摘要是记录事实的投影，不含任何计算出的指标；它带指向源记录的有效性标记，过期或缺失时从源记录重建，不被信任为真值。
 - 打开统计或复盘不改变局内状态、不推进 RNG。
 - 读取方不能阻断写入：Windows 上读句柄会让原子替换失败，写入必须对此有界重试，失败不得停掉整局记录。
-- 已审核的同装 Mod：BaseMod、StSLib、SuperFastMode 1.0.8、求解器 `sts1solver`；另有 ColoredMap 2.4.1、coloredPowertips 2.3.0、HighlightPath 0.0.3，以及 2026-10-28 经原生探针回归的 RunHistoryPlus 1.8.3、HideInfo 0.0.1、justclick 0.1.1、lolifontmod 0.2（只接受这些精确版本）。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器 0.9.6 及以后同装时支持重打，回退前清空旧结果并停止自动操作。版本只设下限，`SolverReplay.contract()` 在运行时核对账本调用和 patch 的求解器成员（`instance`、`cancel(boolean)`、`stopAll()`、`runAutoPlayer`、`receivePostUpdate`、`receivePostRender`），缺任何一个就按不支持处理；带后缀的测试版不算更新（2026-10-28）。其他未审核 Mod 一律记 `unknown`。
+- 已审核的同装 Mod：BaseMod、StSLib、SuperFastMode 1.0.8、求解器 `sts1solver`；另有 ColoredMap 2.4.1、coloredPowertips 2.3.0、HighlightPath 0.0.3，以及 2026-10-28 经原生探针回归的 RunHistoryPlus 1.8.3、HideInfo 0.0.1、justclick 0.1.1、lolifontmod 0.2，与 2026-11-01 按“不改战斗状态、不进快照字段”加入的 CardImageReplacer 2.0（只接受这些精确版本）。求解器的执行动作经 `withAutomation` 标为 `known_automation`；求解器 0.9.6 及以后同装时支持重打，回退前清空旧结果并停止自动操作。版本只设下限，`SolverReplay.contract()` 在运行时核对账本调用和 patch 的求解器成员（`instance`、`cancel(boolean)`、`stopAll()`、`runAutoPlayer`、`receivePostUpdate`、`receivePostRender`），缺任何一个就按不支持处理；带后缀的测试版不算更新（2026-10-28）。其他未审核 Mod 一律记 `unknown`。
 - SuperFastMode 1.0.8 为可选的已审核加速 Mod。记录与回合附件读取均接受它；练习子进程复制已加载的 jar 及 `SuperFastModeConfig.properties`。快照不保存插值或速度设置，沿用现有动作队列稳定边界。人工操作仍须经过原生 UI 提交路径。
 
 ### 构建档
@@ -100,7 +100,7 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 导航状态由 `HistoryScreen` 统一管理。首次索引完成后，只在当前存档位选择最近记录，优先当前局；用户主动切到历史或统计后，异步索引不得把页面拉回去。三个顶部入口随时可达，关闭直接回到游戏。统计保留筛选，详细诊断的返回只收起诊断。
 
-`stats.PickTiers` 只对现有 `Metrics` 的 `pick:<act>:<card>` 指标分档，不重复计算抓率。`PickRateChart` 使用同一份指标条目渲染预览和离屏 PNG；卡图与遗物图只读游戏已有资源，实际战损优先读玩家放在本地 `monster-images` 目录的遭遇图（游戏自带的怪物素材是 Spine 图集，不能直接当立绘），本地没有时回退到私有测试构建打入 jar 的 `monster-images/<key>.png`，不构造卡牌或调用 RNG。导出由玩家点击触发，输出到 `~/.spire-ledger/exports/` 的新目录，包含所选幕的 PNG、`metrics.csv` 与 `metadata.json`；幕下拉选“全部”时按幕各写一组图，CSV 每个幕一张表。每页最多 18 行，失败清理本次新建产物并恢复渲染状态。既有导出不覆盖，源记录不变。
+`stats.PickTiers` 只对现有 `Metrics` 的 `pick:<act>:<card>` 指标分档，不重复计算抓率。`PickRateChart` 使用同一份指标条目渲染预览和离屏 PNG；卡图与遗物图只读游戏已有资源。实际战损的遭遇图由 `EncounterArt` 在运行时用玩家本机游戏的怪物资源绘制：`MonsterHelper.getEncounter(key)` 生成该遭遇的怪物组，按 `AbstractMonster.render` 的本体部分（骨骼动画或贴图，六火亡魂另画 `HexaghostBody`，不画血条和意图）在离屏缓冲里画两遍，黑底一遍、白底一遍，由两遍之差还原透明度，再裁到实际像素。生成怪物会在地牢随机数上掷血量和组员，所以期间用临时随机数替换 `AbstractDungeon` 的全部随机数字段，结束后放回，浏览统计不推进对局随机数（`StatsOptionsProbe` 用小鬼群核对）。游戏不认识的遭遇返回道歉史莱姆，按无图处理，留空白卡框。绘制保存并恢复当前帧缓冲、视口和画笔矩阵，所以导出分块渲染时也能调用；预览每帧最多新画 2 个遭遇，导出一次画完。`~/.spire-ledger/monster-images`（`PickRateChart.imageDir()`）与 `mods/SpireLedger/monster-images`、`mods/spire-ledger/monster-images` 里与遭遇同名的 png/jpg 优先，作为玩家的替换图；不读其他 Mod 的目录。文件名归一化：去扩展名、转小写、去掉非字母数字，容忍开头的人数前缀。jar 不带任何图片，`build.ps1` 打包后检查，命中图片即失败。卡图与遗物图不构造卡牌、不调用 RNG。（用户决定，2026-11-01）导出由玩家点击触发，输出到 `~/.spire-ledger/exports/` 的新目录，包含所选幕的 PNG、`metrics.csv` 与 `metadata.json`；幕下拉选“全部”时按幕各写一组图，CSV 每个幕一张表。每页最多 18 行，失败清理本次新建产物并恢复渲染状态。既有导出不覆盖，源记录不变。
 
 ### 标准化率与四类长图（2026-10-29）
 
@@ -110,17 +110,31 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 ### 三口径分离、分段分档与 CSV（2026-10-30）
 
-涅奥与 Boss 遗物的选取列表不再混入胜率：`Metrics` 的 `neow:*`/`boss:<act>:*` 只进一般率，`standardized-v2` 份额只进标准率，胜率走 `related:neow:*`/`related:boss:<act>:*` 的独立口径（每局只计一次，胜负未知进 `excluded_count`；仅胜/仅败筛选下由 `Metric.shown()` 统一判为 `hidden_by_result_filter`，界面列表显示“—”）。`StatsScreen` 的三口径只在所选口径下取对应前缀；Boss 在三种口径下都按幕插入表头。卡牌标准率把跳过纳入拟合与 S–R00 分档，歌唱碗并入跳过，另用 `PickTiers.actual()` 列实际占比；一般率仍把它们并入候选。“跳过与歌唱碗”页（`StatsScreen.skipPage()`，卡牌与构筑的第 2 项）固定用一般率，只取 `skip:`、`bowl:` 前缀，先跳过后歌唱碗，不插幕标题。
+涅奥与 Boss 遗物的选取列表不再混入胜率：`Metrics` 的 `neow:*`/`boss:<act>:*` 只进一般率，`standardized-v2` 份额只进标准率，胜率走 `related:neow:*`/`related:boss:<act>:*` 的独立口径（每局只计一次，胜负未知进 `excluded_count`；仅胜/仅败筛选下由 `Metric.shown()` 统一判为 `hidden_by_result_filter`，界面列表显示“—”）。`StatsScreen` 的三口径只在所选口径下取对应前缀；Boss 在三种口径下都按幕插入表头。卡牌标准率把跳过纳入拟合与 S–R00 分档，歌唱碗并入跳过，另用 `PickTiers.actual()` 列实际占比；一般率仍把它们并入候选。“跳过与歌唱碗”页（`StatsScreen.skipPage()`）在 2026-10-31 删除：`resetCategory()` 的卡牌与构筑从 6 项回到 5 项，`skip:`、`bowl:` 只在卡牌页的一般率里作为普通候选行、在标准率里作为 `SKIP` 份额与“实际占比”行出现，不再有单独的按前缀排序分支。
 
-非卡牌导出与预览共用 `PickRateChart.buildSections()`，每个分节调用 `PickTiers.sectionTiers()`：只对达到最少样本量的条目做 Fisher-Jenks（`naturalTiers(values,7)`，最多 7 档，等值同档），其余标 `PickTiers.LOW`，单独列在该分节末尾（标准率按该条目的出现次数判断）；档位标签 S–R00，分节规则行给出本次的数值范围；行动次数是计数、不分档，火堆标准化倍里的睡觉是占比、和倍数分开不分档（`section-tiers-v1`）。`stats.Csv.body()` 把当前筛选的同一份 `Map<String,Metric>` 写成固定列；`Table.addModel()` 写模型行（标准率份额、火堆标准化倍），数值来自模型，分子分母和区间留空，样本与状态取支撑该条目的观测指标（UTF-8 BOM、RFC 4180），被筛选隐藏的数字留空并保留 `status`，所有能形成区间的比率与均值都写 95% 区间；界面与图片只给总览的胜率与五个均值显示区间。实际战损是第五类内容：`PickRateChart.hpLoss()` 按幕建节，每节先放 `act_hp_loss:<act>` 的每局均值，再按场均战损降序列出 `hp_loss:` 行（导出只含全部对局，不含有无回复拆分）。2026-10-31 起第 1–3 幕改用 TinyCat 危险度分档（`PickTiers.dangerTiers()`，Boss 由 `Metric.boss` 判断，即地图 `B` 节点的战斗）：Boss 单独为 T0，其余遭遇按场均战损降序等人数切 T1–T4（极危、高危、中危、低危），同值同档，样本不足单列；事件战和第四幕不分档，`section_tiers` 只记录 T0–T4。遭遇图按文件名匹配（去除非字母数字、忽略大小写），依次查 `mods/SpireLedger/monster-images`、`mods/spire-ledger/monster-images`、`monster-images` 与 `~/.spire-ledger/monster-images`，都没有时用空白卡框，jar 不打包任何遭遇图；纹理按遭遇缓存，关闭统计页时释放。导出只有一个“导出 PNG+CSV”按钮：幕下拉选具体幕时写该幕的图片、该幕的 `metrics.csv` 和 `metadata.json`；选“全部”时展开到该内容的全部幕，每幕单独成图，CSV 合并为一个文件、按幕分成多张表；所选范围没有任何行时 `exportable()` 为假，不建空目录。`metadata.json` 含 `views`、`win_captions`、`section_tier_version`、`all_acts` 与 `acts`（实际战损不写分档/标准率字段）。`Csv` 为 v2：15 个中文列（表、幕、口径、分档、条目、数值、单位、分子、分母、样本、状态、95% 下限、95% 上限、含估算、未知不计），每张表第一列重复表名，空行分隔；行只来自本次导出的幕与条目，比率与区间写百分比。
+非卡牌导出与预览共用 `PickRateChart.buildSections()`，每个分节调用 `PickTiers.sectionTiers()`：只对达到最少样本量的条目做 Fisher-Jenks（`naturalTiers(values,7)`，最多 7 档，等值同档），其余标 `PickTiers.LOW`，单独列在该分节末尾（标准率按该条目的出现次数判断）；档位标签 S–R00，分节规则行给出本次的数值范围；行动次数是计数、不分档，火堆标准化倍里的睡觉是占比、和倍数分开不分档（`section-tiers-v1`）。`stats.Csv.body()` 把当前筛选的同一份 `Map<String,Metric>` 写成固定列；`Table.addModel()` 写模型行（标准率份额、火堆标准化倍），数值来自模型，分子分母和区间留空，样本与状态取支撑该条目的观测指标（UTF-8 BOM、RFC 4180），被筛选隐藏的数字留空并保留 `status`，所有能形成区间的比率与均值都写 95% 区间；界面与图片只给总览的胜率与五个均值显示区间。实际战损是第五类内容：`PickRateChart.hpLoss()` 按幕建节，每节先放 `act_hp_loss:<act>` 的每局均值，再按场均战损降序列出 `hp_loss:` 行（导出只含全部对局，不含有无回复拆分）。2026-10-31 起第 1–3 幕改用 TinyCat 危险度分档（`PickTiers.dangerTiers()`，Boss 由 `Metric.boss` 判断，即地图 `B` 节点的战斗）：Boss 单独为 T0，其余遭遇按场均战损降序等人数切 T1–T4（极危、高危、中危、低危），同值同档，样本不足单列；事件战和第四幕不分档，`section_tiers` 只记录 T0–T4。遭遇图的来源见上文 `EncounterArt`；`metadata.json` 在实际战损页额外写 `image_dir`、`image_source`；纹理按遭遇键缓存（`2 Louse` 与 `3 Louse` 分开），关闭统计页时释放。导出只有一个“导出 PNG+CSV”按钮：幕下拉选具体幕时写该幕的图片、该幕的 `metrics.csv` 和 `metadata.json`；选“全部”时展开到该内容的全部幕，每幕单独成图，CSV 合并为一个文件、按幕分成多张表；所选范围没有任何行时 `exportable()` 为假，不建空目录。`metadata.json` 含 `views`、`win_captions`、`section_tier_version`、`all_acts` 与 `acts`（实际战损不写分档/标准率字段）。`Csv` 为 v2：15 个中文列（表、幕、口径、分档、条目、数值、单位、分子、分母、样本、状态、95% 下限、95% 上限、含估算、未知不计），每张表第一列重复表名，空行分隔；行只来自本次导出的幕与条目，比率与区间写百分比。
+
+### 卡牌屏的口径（2026-11-01）
+
+`Native.read` 对 `card_choices` 的**每一条**建一个 `Run.Screen`，只在 `picked` 为空或 `floor` 缺失时跳过，不再按“该层有战斗记录”过滤（旧代码用 `fightFloors.contains(floor)`，把事件、商店、火堆和涅奥来源的屏整类丢掉，无色牌因此全部缺席）。`act` 由 `act(bounds,floor)` 推出，第 0 层（涅奥开局选牌）落在第 1 幕。`kind` 仍由 `picked` 判定 `skip`/`bowl`/`card`；`.run` 不记录歌唱碗是否在售，`bowlOffered` 留 `null`，这些屏不进歌唱碗率。`Metrics.screens()` 的奖励覆盖率仍按“有战斗且已收到奖励屏的战斗 / 应有奖励的战斗”计算，新增的非战斗屏不改变它的分子分母。Ledger 记录层只有 `COMBAT_REWARD` 候选，schema 只增不改（§2.5），所以账本局的屏少于同一局的原版 `.run`，合并时按局逐个取，不做补偿。
 
 ### 幕下拉与回复下拉（2026-10-31）
 
 `Metrics` 新增 `damage_act:<act>:<encounter>`、`death_act:<act>:<encounter>`、`encounter_potions_act:<act>:<encounter>` 与 `potions_act:<act>`，作为原有总键的按幕补充，CSV 键只增不改；`potions_act` 把逐层药水记录按该层战斗所在幕归并，战斗外的使用只留在总 `potions`。`death_act` 的死亡事实仍沿用 `outcome=death`、`floor=floor_reached`、`encounter=killed_by`，只按该场战斗所在幕分键。`Native` 读取药水时优先用 RunHistoryPlus 的逐层 `potion_use_per_floor`（第 i 项对应第 i+1 层，每层最多 9 瓶），原版 `potions_floor_usage` 只记录最后使用的楼层，仅在没有 RHP 字段时回退。`StatsScreen.actShown()` 决定当前页是否显示幕下拉：卡牌、Boss 遗物、遭遇平均承伤、药水、火堆和实际战损；Boss 遗物只存在第 1、2 幕，用只有三行的 `bossActMenu`，其余用五行的 `actMenu`。`hiddenRow()` 处理实际战损的回复视图：全部只留基础 `hp_loss:` 行，有回复/无回复只留对应分组，`act_hp_loss:` 在三种视图都保留。`campfirePage()` 同样遵守幕筛选；切换分类或重置回到“全部”。导出页的幕选择独立于统计页的幕/回复筛选：`chartAct`（卡牌、火堆、实际战损，第 1–4 幕）与 `chartBossAct`（Boss 遗物，第 1–2 幕）只决定“导出 PNG+CSV”的幕，`PickRateChart.hpLoss()` 只用 `hp_loss:`，不含有无回复拆分；涅奥没有幕，不显示幕下拉。
 
-### 导出抬头与求解器标记（2026-10-31）
+### 商店与事件页的按幕拆分（2026-11-01）
 
-`PickRateChart.captions()` 由三段组成：`head()`（职业、进阶、存档位、最少出现；日期、标准模式、种子局；结果、胜利口径、放弃；来源与 SL 路径；未知操作来源计数与排除已知自动化；选中局数与胜率）、`rule()`（本图口径与分档说明），以及一行 `versions()` 加导出时间。`remarks()` 把同样的信息按字段再写一遍，实际战损另记导出范围与图片来源，涅奥与 Boss 遗物另记区间说明。`ascensionLabel()` 在筛选为“全部”时按选中局写出实际范围（如“全部（实际 A20）”）。胜率取 `win` 指标的分子分母，与界面一致。标题由 `solverMark()` 追加“ · 含求解器”：`Run.automation` 是 `Ledger` 在任一确认决策的 `action_source=known_automation` 时写下的 `Fact`，未关联的原版 `.run` 不写该事实，因此不会误标。
+`Native.acts()` 原本已按幕记录 `purchase:<item>` 与 `event:<name>`（分别供 `Export` 的 `purchase` 行与 `event_related` 行使用），现在再补两类按幕键：`eventchoice:<name> / <choice>` 与 `remove:shop:<card>`。两者都不改原有键——CSV 的 `event_related` 仍按事件名聚合（`Export` 只认 `event:` 前缀），`purge:SHOP` 仍是删牌总数，所以导出粒度不变。`remove:shop:` 由 `items_purged` 与 `items_purged_floors` 逐条配对得出，此前只按数量累计。
+
+`Metrics.countsByAct()` 读 `Native.ACTS`，把这三类键翻成界面的按幕指标 `purchase:<act>:<item>`、`remove:shop:<act>:<card>`、`event:<act>:<name> / <choice>`，并对事件补 `related:event:<act>:…` 的选后胜率；`act` 为 0（楼层字段缺失）的条目只留在无幕总计里，构成记录（Ledger）没有楼层，也只进总计。
+
+`StatsScreen` 侧：`actShown()` 把“战斗与资源”的第 4 项（商店购买与删除）与第 6 项（事件选择）纳入，共用 `actMenu`；`actOf()` 与 `metricGroup()` 认得这三类带幕键（`isAct()` 只认单个数字 0–4，事件名不会被当成幕号），`actHeader()` 给出“第 N 幕 · 商店购买与删除 / 事件选择”，`label()` 在显示前剥掉幕号。排序沿用 `metricOrder` 的组序，因此不带幕的总计排在各幕之前。两页都不进导出：`PickRateChart` 的 `chartKind` 只有五类内容，`metrics.csv` 的 `purchase` 行本来就有 `act` 维度。
+
+事件页另有一个口径下拉 `eventRateMenu`（次数 / 胜率），与涅奥、Boss 遗物的 `choiceRateMenu` 同构但只有两档（事件没有标准化拟合）。`mode()` 在事件页返回 `eventMode==1?2:0`，`rebuild()` 据此二选一地往 `prefixes` 里放 `event:` 或 `related:event:`——两种单位不同（事件次数 / 局）的行因此不会同时出现。`visibleMenus()` 与 `layout()` 把下拉放在第 1 行中间那格（分类在左、幕在右），`changedSelectionTo()` 收到该菜单时重置分页并重建。
+
+### 四行导出抬头与求解器标记（2026-10-31）
+
+`PickRateChart.captions()` 固定 4 行：`head()` 2 行（职业、进阶、结果、胜负口径、放弃开关；选中局数与胜率、最少出现次数）与 `rule()` 2 行（本图口径、分档说明），不再拼 `versions()` 与导出时间。日期范围、存档位、标准模式、种子局、来源与 SL 路径、未知操作来源计数、排除的已知自动化局数、口径版本和导出时间由 `remarks()` 按字段写进 `metadata.json`；实际战损另记导出范围与图片来源，涅奥与 Boss 遗物另记区间说明。抬头行数 4 与每行 60 个汉字的上限由原生探针 `StatsOptionsProbe` 断言行数与每行长度（它跑在真实游戏里，能直接读 `captions`），新增字段先过 metrics.md 第 8 节的“图片必需”表，放不下就进 `remarks`。`ascensionLabel()` 在筛选为“全部”时按选中局写出实际范围（如“全部（实际 A20）”）。胜率取 `win` 指标的分子分母，与界面一致。标题由 `solverMark()` 追加“ · 含求解器”：`Run.automation` 是 `Ledger` 在任一确认决策的 `action_source=known_automation` 时写下的 `Fact`，未关联的原版 `.run` 不写该事实，因此不会误标。
 
 
 `Stats.readNative` 先严格 UTF-8、再 GBK、最后系统默认解码原版 `.run`，并去掉 BOM；与 TinyCat 在中文 Windows 上的读取方式一致。

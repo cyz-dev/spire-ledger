@@ -135,9 +135,9 @@ public final class StatsCheck {
   check(Stats.win(run(index,"D4"),false)&&!Stats.win(run(index,"D4"),true),"10.2 an act-4 death wins on the act-3 basis");
   // 10.3 survival by death facts: H all four acts, V3 ends in act 3 with a win, D4 dies in act 4, L-act3 cleared act 3, legacy win reached act 4.
   check(is(m(m,"act:3"),5,5)&&is(m(m,"act:4"),2,3),"10.3 act survival from death facts: act3 "+m(m,"act:3").numerator+"/"+m(m,"act:3").denominator+" act4 "+m(m,"act:4").numerator+"/"+m(m,"act:4").denominator);
-  // 10.5 native card_choices: fight floors only (Neow's floor 0 is not a reward), a Ledger floor replaces the .run floor.
-  check(is(m(m,"pick:1:Inflame"),1,1)&&!m.containsKey("pick:1:Neow Card")&&!m.containsKey("pick:1:Shrug It Off")&&is(m(m,"pick:1:Carnage"),0,1)&&is(m(m,"pick:1:Bash"),1,2),"10.5 .run card_choices in pick rates, Ledger floors first");
-  check(is(m(m,"skip:1"),2,4)&&is(m(m,"bowl:1"),0,2),"skip over all screens; bowl only where the bowl was offered");
+  // 10.5 native card_choices: every entry is a screen, as in TinyCat; floor 0 (Neow) counts in act 1, a Ledger floor replaces the .run floor.
+  check(is(m(m,"pick:1:Inflame"),1,1)&&is(m(m,"pick:1:Neow Card"),1,1)&&is(m(m,"pick:1:Anger"),0,1)&&!m.containsKey("pick:1:Shrug It Off")&&is(m(m,"pick:1:Carnage"),0,1)&&is(m(m,"pick:1:Bash"),1,2),"10.5 every .run card_choices entry counts, Neow's floor 0 included, Ledger floors first");
+  check(is(m(m,"skip:1"),2,5)&&is(m(m,"bowl:1"),0,2),"skip over all screens; bowl only where the bowl was offered");
   check(is(m(m,"boss:1:SKIP"),0,1)&&is(m(m,"boss:2:SKIP"),1,1)&&is(m(m,"boss:1:Runic Cube"),1,1)&&is(m(m,"boss:2:Astrolabe"),0,1),"10.6 boss relic skip is a candidate");
   check(is(m(m,"encounter_potions:Jaw Worm"),2,2)&&m(m,"encounter_potions:Jaw Worm").value()==1,"10.7 per-fight potions from potions_floor_usage");
   check(is(m(m,"damage_act:1:Jaw Worm"),70,4)&&m(m,"damage_act:1:Jaw Worm").value()==17.5,"10.7 per-act encounter damage counts only that act's fights");
