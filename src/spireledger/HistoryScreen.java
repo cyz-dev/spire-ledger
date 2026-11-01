@@ -49,7 +49,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     }
     final Hitbox[] sections=new Hitbox[4];final int[] sectionRows=new int[4];
     final Hitbox replayButton=new Hitbox(180*Settings.scale,40*Settings.scale);
-    DropdownMenu turnMenu;int turnSelection;List<JsonObject> availableTurns=new ArrayList<>();JsonObject manifest;
+    DropdownMenu turnMenu,attemptMenu;int turnSelection,attemptSelection,lastTurn=-1;List<JsonObject> availableTurns=new ArrayList<>();Map<Integer,List<JsonObject>> turnAttempts=new HashMap<>();JsonObject manifest;
     List<Integer> floorOrder=new ArrayList<>();int floorIndex;boolean expandedDeck;List<JsonObject> viewRecords=new ArrayList<>();DropdownMenu branchMenu;int branchSelection;List<JsonObject> events=new ArrayList<>();List<Row> lines=new ArrayList<>();
     float rowHeight(){return Math.max(FontHelper.cardDescFont_N.getLineHeight()*1.12f*1.35f,Settings.HEIGHT*.033f);}
     int visibleRows(){return Math.max(1,(int)(Settings.HEIGHT*.495f/rowHeight()));}
@@ -87,7 +87,8 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     @Override public void changedSelectionTo(DropdownMenu menu,int index,String option){
         if(menu==focusMenu){eventIndex=focusEvents.get(index);makeLines();return;}
         if(menu==branchMenu){branchSelection=index;prepareFloors();makeLines();return;}
-        if(menu==turnMenu){turnSelection=index;return;}
+        if(menu==turnMenu){turnSelection=index;attemptSelection=0;return;}
+        if(menu==attemptMenu){attemptSelection=index;return;}
         for(int i=0;i<filters.length;i++)if(menu==filters[i])selections[i]=index;filter();
     }
     void clear(){Arrays.fill(selections,0);for(DropdownMenu d:filters)d.setSelectedIndex(0);query="";filter();}
@@ -95,7 +96,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     int controllerFocus;
     void controller(List<Hitbox> targets){if(!Settings.isControllerMode||targets.isEmpty())return;com.megacrit.cardcrawl.helpers.controller.CInputAction up=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.up,down=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.down,left=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.left,right=com.megacrit.cardcrawl.helpers.controller.CInputActionSet.right;if(up.isJustPressed()||left.isJustPressed()){controllerFocus--;up.unpress();left.unpress();}else if(down.isJustPressed()||right.isJustPressed()){controllerFocus++;down.unpress();right.unpress();}else return;controllerFocus=Math.floorMod(controllerFocus,targets.size());com.megacrit.cardcrawl.helpers.controller.CInputHelper.setCursor(targets.get(controllerFocus));}
     void select(HistoryIndex.Summary s){
-        review.reset();selected=s;detail=null;manifest=null;availableTurns.clear();turnMenu=null;turnSelection=0;events.clear();lines.clear();eventIndex=lineOffset=0;raw=false;expandedDeck=false;branchMenu=null;branchSelection=0;message=tr("正在读取此局…","Reading selected run…");
+        review.reset();selected=s;detail=null;manifest=null;availableTurns.clear();turnAttempts.clear();turnMenu=null;attemptMenu=null;turnSelection=0;attemptSelection=0;events.clear();lines.clear();eventIndex=lineOffset=0;raw=false;expandedDeck=false;branchMenu=null;branchSelection=0;message=tr("正在读取此局…","Reading selected run…");
         detailTask=io.submit(()->{
             JsonObject d=s.current&&live!=null&&s.id.equals(HistoryIndex.str(HistoryIndex.obj(live,"metadata"),"run_id"))?live:HistoryIndex.readDetail(s.file);
             try{
@@ -106,14 +107,14 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             return d;
         });
     }
-    void dismissMenus(){typing=false;TextInput.stopTextReceiver(this);for(DropdownMenu d:filters)d.isOpen=false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu))if(d!=null)d.isOpen=false;stats.dismissMenus();CardCrawlGame.isPopupOpen=oldPopup;consume();}
+    void dismissMenus(){typing=false;TextInput.stopTextReceiver(this);for(DropdownMenu d:filters)d.isOpen=false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu,attemptMenu))if(d!=null)d.isOpen=false;stats.dismissMenus();CardCrawlGame.isPopupOpen=oldPopup;consume();}
     void footer(){prev.move(Settings.WIDTH*.33f,Settings.HEIGHT*.13f);next.move(Settings.WIDTH*.50f,Settings.HEIGHT*.13f);}
     void showLatest(){dismissMenus();historyMode=true;HistoryIndex.Summary run=HistoryIndex.latest(index.runs,CardCrawlGame.saveSlot,Boolean.getBoolean("spireledger.fixture"));if(run!=null)select(run);else showHistory();}
     void showHistory(){dismissMenus();currentRequested=false;historyMode=true;selected=null;detail=null;detailTask=null;manifest=null;raw=false;lineOffset=0;footer();}
     void showStats(){dismissMenus();currentRequested=false;historyMode=false;footer();stats.rebuild();}
     boolean navigate(){
         if(!historyMode&&stats.openDropdown())return false;
-        if(historyMode){for(DropdownMenu d:filters)if(d.isOpen)return false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu))if(d!=null&&d.isOpen)return false;}
+        if(historyMode){for(DropdownMenu d:filters)if(d.isOpen)return false;for(DropdownMenu d:Arrays.asList(focusMenu,branchMenu,turnMenu,attemptMenu))if(d!=null&&d.isOpen)return false;}
         if(click(latestTab)){if(indexTask!=null)currentRequested=true;else showLatest();return true;}
         if(click(historyTab)){showHistory();return true;}
         if(click(home)){showStats();return true;}return false;
@@ -140,23 +141,33 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             if(focusMenu!=null){focusMenu.update();if(focusMenu.isOpen)return;}
             if(raw&&branchMenu!=null){branchMenu.update();if(branchMenu.isOpen)return;}
             if(turnMenu!=null){turnMenu.update();if(turnMenu.isOpen)return;}
+            if(attemptMenu!=null){attemptMenu.update();if(attemptMenu.isOpen)return;}
             List<Hitbox> controls=new ArrayList<>(Arrays.asList(sections));
             if(focusMenu!=null)controls.add(focusMenu.getHitbox());
             if(raw&&branchMenu!=null)controls.add(branchMenu.getHitbox());
             if(turnMenu!=null)controls.add(turnMenu.getHitbox());
+            if(attemptMenu!=null)controls.add(attemptMenu.getHitbox());
             controls.addAll(Arrays.asList(prev,next,diagnostics,replayButton,latestTab,historyTab,home,cancel.hb));
             controller(controls);
             for(int i=0;i<sections.length;i++)if(click(sections[i])){if(i==0)expandedDeck=false;else if(i==1||i==3)expandedDeck=true;makeLines();lineOffset=sectionRows[i];}
             if(click(prev)&&floorIndex>0){floorIndex--;focusFloor();makeLines();}
             if(click(next)&&floorIndex+1<floorOrder.size()){floorIndex++;focusFloor();makeLines();}
             if(click(diagnostics)){raw=!raw;makeLines();}
-            if(!availableTurns.isEmpty()&&turnSelection<availableTurns.size()&&click(replayButton))replaySelected();
+            if(currentTurn()!=null&&click(replayButton))replaySelected();
             if(InputHelper.scrolledDown)lineOffset+=3;if(InputHelper.scrolledUp)lineOffset-=3;lineOffset=Math.max(0,Math.min(maxLineOffset(),lineOffset));
         }
         bar.update();bar.parentScrolledToPercent(selected==null?(filtered.size()<=6?0:(float)offset/(filtered.size()-6)):(maxLineOffset()==0?0:(float)lineOffset/maxLineOffset()));
     }
+    static long capturedAt(JsonObject o){return o!=null&&o.has("captured_at")&&!o.get("captured_at").isJsonNull()?o.get("captured_at").getAsLong():0L;}
+    /** The selected attempt of the selected turn; falls back to that turn's newest snapshot. */
+    JsonObject currentTurn(){
+        if(availableTurns.isEmpty())return null;
+        JsonObject head=availableTurns.get(Math.min(Math.max(turnSelection,0),availableTurns.size()-1));
+        List<JsonObject> list=turnAttempts.get(HistoryIndex.num(head,"turn",1));
+        return list==null||attemptSelection<0||attemptSelection>=list.size()?head:list.get(attemptSelection);
+    }
     void replaySelected(){
-                JsonObject targetTurn=availableTurns.get(turnSelection);
+                JsonObject targetTurn=currentTurn();
                 Path runDir=selected.file!=null?selected.file.getParent():StateMod.ROOT.resolve(selected.id);
                 if(ReplayLauncher.canReplayCurrent(targetTurn)){
                     try{
@@ -222,14 +233,15 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             }
             text(sb,tr("滚动查看 ","Scroll ")+(lines.isEmpty()?0:lineOffset+1)+"–"+Math.min(lines.size(),lineOffset+visibleRows())+" / "+lines.size(),Settings.WIDTH*.70f,Settings.HEIGHT*.05f,MUTED);
             button(sb,prev,tr("上一层","Previous floor"));button(sb,next,tr("下一层","Next floor"));button(sb,diagnostics,raw?tr("收起诊断","Hide diagnostics"):tr("原始诊断","Diagnostics"));
-            if(!availableTurns.isEmpty()&&turnSelection<availableTurns.size()){
-                boolean canCurrent=ReplayLauncher.canReplayCurrent(availableTurns.get(turnSelection));
+            if(currentTurn()!=null){
+                boolean canCurrent=ReplayLauncher.canReplayCurrent(currentTurn());
                 button(sb,replayButton,canCurrent?tr("当前战斗重打","Restart turn"):tr("独立练习实例","Practice turn"));
             }
         }
         if(selected!=null&&focusMenu!=null)focusMenu.render(sb,Settings.WIDTH*.06f,Settings.HEIGHT*.78f);
         if(raw&&selected!=null&&branchMenu!=null)branchMenu.render(sb,Settings.WIDTH*.64f,Settings.HEIGHT*.78f);
         if(selected!=null&&turnMenu!=null)turnMenu.render(sb,Settings.WIDTH*.45f,Settings.HEIGHT*.78f);
+        if(selected!=null&&attemptMenu!=null)attemptMenu.render(sb,Settings.WIDTH*.62f,Settings.HEIGHT*.78f);
         navigation(sb);bar.render(sb);cancel.render(sb);
     }
     void add(String value){add(value,Tone.NORMAL);}
@@ -300,30 +312,47 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(!choices)add(tr("本层没有选牌记录。","No card choices recorded on this floor."),Tone.MUTED);sectionRows[2]=lines.size();for(JsonObject e:events)if(floor(e)==selectedFloor&&"build_change".equals(HistoryIndex.str(e,"type"))&&"settled".equals(HistoryIndex.str(e,"status")))compactChanges(HistoryIndex.obj(e,"before"),HistoryIndex.obj(e,"after"));
         for(JsonObject e:events)if(floor(e)==selectedFloor&&"ending".equals(HistoryIndex.str(e,"type")))add(tr("本局结局：","Result: ")+friendly(HistoryIndex.str(e,"outcome")),Tone.HEADER);
         sectionRows[1]=sectionRows[3]=0;add(tr("完整当时牌组：点击“选牌前状态”或“结算结果”。","Full observed decks: choose Before or Result."),Tone.MUTED);
-        availableTurns.clear();
+        availableTurns.clear();turnAttempts.clear();
         boolean restoreAllowed = manifest != null && manifest.has("restore_available") && manifest.get("restore_available").getAsBoolean() && TurnAdapter.ID.equals(Recorder.string(manifest,"adapter"));
         if(restoreAllowed && manifest.has("snapshots")){
             List<String> branches = selected != null ? new ArrayList<>(selected.branches) : Collections.emptyList();
             String currentBranch = branchSelection == 0 ? (selected != null ? selected.lastBranch : "") : branchSelection == 1 ? "" : (branchSelection - 2 < branches.size() ? branches.get(branchSelection - 2) : "");
             Set<String> pathSnapshots=new HashSet<>();
             for(JsonObject event:viewRecords)if("turn_snapshot".equals(Recorder.string(event,"type")))pathSnapshots.add(Recorder.string(event,"snapshot_id"));
+            // One row per turn; attempts of the same turn fold into the newest one and stay selectable below.
+            Map<Integer,List<JsonObject>> byTurn=new TreeMap<>();
             for(JsonElement item:manifest.getAsJsonArray("snapshots")){
                 JsonObject pt=item.getAsJsonObject();
                 boolean branchMatch = branchSelection==0?pathSnapshots.contains(Recorder.string(pt,"snapshot_id")):currentBranch.isEmpty() || currentBranch.equals(Recorder.string(pt, "branch_id"));
                 if(branchMatch && HistoryIndex.num(pt,"floor",0)==selectedFloor&&"recorded".equals(Recorder.string(pt,"availability"))){
-                    availableTurns.add(pt);
+                    byTurn.computeIfAbsent(HistoryIndex.num(pt,"turn",1),k->new ArrayList<>()).add(pt);
                 }
+            }
+            for(Map.Entry<Integer,List<JsonObject>> group:byTurn.entrySet()){
+                List<JsonObject> list=group.getValue();list.sort((a,b)->Long.compare(capturedAt(b),capturedAt(a)));
+                turnAttempts.put(group.getKey(),list);availableTurns.add(list.get(0));
             }
         }
         if(!availableTurns.isEmpty()){
             List<String> turnLabels=new ArrayList<>();
             for(JsonObject pt:availableTurns){int turn=HistoryIndex.num(pt,"turn",1),played=HistoryIndex.num(pt,"played",0);
-                turnLabels.add(tr("第 ","Turn ")+turn+tr(" 回合","")+(played>0?tr(" · 已出 "," · ")+played+tr(" 张"," played"):tr(" · 回合起点"," · turn start")));}
+                List<JsonObject> list=turnAttempts.get(turn);int more=list==null?0:list.size()-1;
+                turnLabels.add(tr("第 ","Turn ")+turn+tr(" 回合","")+(played>0?tr(" · 已出 "," · ")+played+tr(" 张"," played"):tr(" · 回合起点"," · turn start"))+(more>0?tr(" · 另 "," · ")+more+tr(" 次"," more"):""));}
             turnMenu=dropdown(turnLabels.toArray(new String[0]));
             if(turnSelection>=availableTurns.size())turnSelection=0;
             turnMenu.setSelectedIndex(turnSelection);
-            boolean canCurrent=ReplayLauncher.canReplayCurrent(availableTurns.get(turnSelection));
-            JsonObject picked=availableTurns.get(turnSelection);
+            int shownTurn=HistoryIndex.num(availableTurns.get(turnSelection),"turn",1);
+            if(shownTurn!=lastTurn){lastTurn=shownTurn;attemptSelection=0;}
+            List<JsonObject> attempts=turnAttempts.get(shownTurn);
+            if(attempts!=null&&attempts.size()>1){
+                List<String> labels=new ArrayList<>();
+                for(int i=0;i<attempts.size();i++)labels.add(tr("第 ","Attempt ")+(i+1)+tr(" 次",""));
+                attemptMenu=dropdown(labels.toArray(new String[0]));
+                if(attemptSelection>=attempts.size())attemptSelection=0;
+                attemptMenu.setSelectedIndex(attemptSelection);
+            }else{attemptMenu=null;attemptSelection=0;}
+            boolean canCurrent=ReplayLauncher.canReplayCurrent(currentTurn());
+            JsonObject picked=currentTurn();
             add(tr("回合重打：已就绪（","Turn practice: ready (")+availableTurns.size()+tr(" 个回合点）· "," snapshots) · ")+(canCurrent?tr("当前战斗可直接重打","in-combat restart"):tr("退出局可启动独立练习","launch isolated practice")),Tone.GOOD);
             if(HistoryIndex.num(picked,"played",0)>0)add(tr("这份快照取自本回合已经打出 ","This checkpoint was captured after ")+HistoryIndex.num(picked,"played",0)+tr(" 张牌之后；重打从那一刻继续，不回到回合开始。"," cards were played this turn, so practice resumes from that point rather than the turn start."),Tone.MUTED);
         }else{
@@ -337,13 +366,14 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         String reason=turnUnavailableReason(manifest,floor);
         if(reason.equals("unsupported"))return tr("本局录制时的 Mod 组合未被当时的版本支持：回合点只记录了位置，没有保存可重打快照，旧记录无法补录。","The mod combination used when this run was recorded was not supported then: turn points were logged without a replay snapshot, and past turns cannot be reconstructed.");
         if(reason.equals("missing"))return tr("本层的回合快照是在已经出牌或弃牌后才观察到的，没有保存可重打快照。","Turn checkpoints on this floor were observed after cards were played or discarded, so no replay snapshot was saved.");
+        if(reason.equals("duplicate"))return tr("本层的回合状态与前一次尝试完全相同，已合并到那次快照，不重复占盘。切到含那次尝试的分支即可重打。","The board on this floor matched an earlier attempt exactly, so it was merged into that snapshot instead of stored again. Switch to the branch holding that attempt to replay it.");
         return tr("本层没有保存的回合快照。","No turn snapshot was saved on this floor.");
     }
     /** Compatibility is decided once per run, so a floor with no turn point still inherits an unsupported verdict recorded on other floors. */
     static String turnUnavailableReason(JsonObject manifest,int floor){
-        boolean unsupported=false,missing=false,here=false,runUnsupported=false;
-        if(manifest.has("snapshots"))for(JsonElement item:manifest.getAsJsonArray("snapshots")){JsonObject pt=item.getAsJsonObject();String availability=Recorder.string(pt,"availability");runUnsupported|="unsupported".equals(availability);if(HistoryIndex.num(pt,"floor",0)!=floor)continue;here=true;unsupported|="unsupported".equals(availability);missing|="missing".equals(availability);}
-        return unsupported||!here&&runUnsupported?"unsupported":missing?"missing":"none";
+        boolean unsupported=false,missing=false,duplicate=false,here=false,runUnsupported=false;
+        if(manifest.has("snapshots"))for(JsonElement item:manifest.getAsJsonArray("snapshots")){JsonObject pt=item.getAsJsonObject();String availability=Recorder.string(pt,"availability");runUnsupported|="unsupported".equals(availability);if(HistoryIndex.num(pt,"floor",0)!=floor)continue;here=true;unsupported|="unsupported".equals(availability);missing|="missing".equals(availability);duplicate|="duplicate".equals(availability);}
+        return unsupported||!here&&runUnsupported?"unsupported":missing?"missing":duplicate?"duplicate":"none";
     }
     void compactChanges(JsonObject before,JsonObject after){HistoryLayout.Delta delta=HistoryLayout.delta(before,after);if(!delta.identitiesComplete){add(tr("逐张变化身份未记录；完整前后牌组仍可查看。","Per-card identity unavailable; full observed decks remain available."),Tone.MUTED);return;}for(HistoryLayout.Change c:delta.cards)if(c.kind.equals("added"))add(tr("＋ 新增  ","＋ Added  ")+card(c.after),Tone.GOOD);else if(c.kind.equals("removed"))add(tr("－ 移除  ","－ Removed  ")+card(c.before),Tone.REMOVED);else add(tr("↔ 观察变化  ","↔ Observed change  ")+card(c.before)+" → "+card(c.after),Tone.CHANGED);for(String key:Arrays.asList("hp","max_hp","gold"))if(before.has(key)&&after.has(key)&&!Objects.equals(before.get(key),after.get(key)))add((key.equals("gold")?tr("金币 ","Gold "):key.equals("hp")?tr("生命 ","HP "):tr("生命上限 ","Max HP "))+resourceDelta(before,after,key),Tone.CHANGED);}
     @Override public String getCurrentText(){return query;}
