@@ -362,7 +362,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(raw){add(tr("高级诊断 · 原始事件","Advanced diagnostics · original events"),Tone.HEADER);for(JsonObject e:events)if(floor(e)==selectedFloor)add(e.toString(),Tone.MUTED);}
     }
     String turnUnavailableText(int floor){
-        if(manifest==null)return tr("回合重打：此局没有快照附件。开启回合快照后，在支持的环境中进入新的玩家回合，再从此处选择回合点。","Turn practice: this run has no snapshots. Enable turn recording, enter a new player turn in a supported environment, then select a checkpoint here.");
+        if(manifest==null)return tr("回合重打：此局没有快照附件。开启回合快照后，在支持的环境中进入新的玩家回合，再从此处选择回合点。","Turn practice: this run has no snapshots. Enable turn recording, enter a new player turn in a supported environment, then select a checkpoint here.")+(TurnRecorder.blocker.isEmpty()?"":tr("（当前停在："," (waiting on: ")+blockerText()+tr("）",")"));
         String reason=turnUnavailableReason(manifest,floor);
         if(reason.equals("unsupported"))return tr("本局录制时的 Mod 组合未被当时的版本支持：回合点只记录了位置，没有保存可重打快照，旧记录无法补录。","The mod combination used when this run was recorded was not supported then: turn points were logged without a replay snapshot, and past turns cannot be reconstructed.");
         if(reason.equals("missing"))return tr("本层的回合快照是在已经出牌或弃牌后才观察到的，没有保存可重打快照。","Turn checkpoints on this floor were observed after cards were played or discarded, so no replay snapshot was saved.");
@@ -370,6 +370,17 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         return tr("本层没有保存的回合快照。","No turn snapshot was saved on this floor.");
     }
     /** Compatibility is decided once per run, so a floor with no turn point still inherits an unsupported verdict recorded on other floors. */
+    /** Why no capture happened, in words the player can act on. */
+    static String blockerText(){
+        String b=TurnRecorder.blocker;
+        if(b.equals("turn recording off"))return tr("回合快照开关未开","turn checkpoint recording is off");
+        if(b.equals("turn recording stopped"))return tr("录制已停止，见日志","recording stopped, see the log");
+        if(b.equals("game not ready"))return tr("游戏未就绪","the game is not ready yet");
+        if(b.equals("history screen open"))return tr("账本界面打开中","this screen is open");
+        if(b.equals("turn not settled"))return tr("回合还没稳定（动画或结算未结束）","the turn is not settled yet");
+        if(b.equals("no combat started"))return tr("没有建立战斗身份（战斗开始钩子未触发）","no combat identity was created");
+        return b;
+    }
     static String turnUnavailableReason(JsonObject manifest,int floor){
         boolean unsupported=false,missing=false,duplicate=false,here=false,runUnsupported=false;
         if(manifest.has("snapshots"))for(JsonElement item:manifest.getAsJsonArray("snapshots")){JsonObject pt=item.getAsJsonObject();String availability=Recorder.string(pt,"availability");runUnsupported|="unsupported".equals(availability);if(HistoryIndex.num(pt,"floor",0)!=floor)continue;here=true;unsupported|="unsupported".equals(availability);missing|="missing".equals(availability);duplicate|="duplicate".equals(availability);}

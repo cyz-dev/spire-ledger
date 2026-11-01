@@ -16,6 +16,8 @@ final class TurnRecorder {
     static TurnFiles files;
     static boolean restoringCombat, pendingLoad;
     static int lastFloor=-1;
+    /** Why the last observe() stopped short; the history screen shows it when a floor has no snapshot. */
+    static String blocker="";
     static boolean readPreference() {
         try {
             java.nio.file.Path p = StateMod.ROOT.getParent().resolve("turn_recording_enabled.txt");
@@ -50,9 +52,13 @@ final class TurnRecorder {
     }
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
-        if(!enabled||failed||!StateMod.ready()||!HistoryScreen.active()||!TurnAdapter.capturable())return;
+        if(!enabled){blocker="turn recording off";return;}
+        if(failed){blocker="turn recording stopped";return;}
+        if(!StateMod.ready()){blocker="game not ready";return;}
+        if(HistoryScreen.active()){blocker="history screen open";return;}
+        if(!TurnAdapter.capturable()){blocker="turn not settled";return;}
         try{
-            StateMod.ensure();if(combatId.isEmpty())return;
+            StateMod.ensure();if(combatId.isEmpty()){blocker="no combat started";return;}blocker="";
             if(owner!=StateMod.recorder){
                 owner=StateMod.recorder;
                 JsonObject environment=new JsonObject();
