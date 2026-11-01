@@ -30,6 +30,10 @@ public final class Hooks {
     @SpirePatch(clz=AbstractPlayer.class,method="preBattlePrep") public static class CombatIdentity {
         @SpirePrefixPatch public static void before(){TurnRecorder.battle();}
     }
+    // A save load re-enters the same combat; TurnRecorder keeps the combat id when the floor did not move.
+    @SpirePatch(clz=com.megacrit.cardcrawl.saveAndContinue.SaveAndContinue.class,method="loadSaveFile",paramtypez={AbstractPlayer.PlayerClass.class}) public static class SaveLoaded {
+        @SpirePrefixPatch public static void before(){TurnRecorder.saveLoaded();}
+    }
     @SpirePatch(clz=AbstractPlayer.class,method="updateInput") public static class TurnReady {
         @SpirePrefixPatch public static void before(){TurnRecorder.observe();}
     }

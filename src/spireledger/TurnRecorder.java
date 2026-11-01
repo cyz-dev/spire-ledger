@@ -14,7 +14,8 @@ final class TurnRecorder {
     static String combatId = "", lastKey = "";
     static Recorder owner;
     static TurnFiles files;
-    static boolean restoringCombat;
+    static boolean restoringCombat, pendingLoad;
+    static int lastFloor=-1;
     static boolean readPreference() {
         try {
             java.nio.file.Path p = StateMod.ROOT.getParent().resolve("turn_recording_enabled.txt");
@@ -32,7 +33,21 @@ final class TurnRecorder {
         status = enabled ? "Turn recording ready" : "Turn recording off";
     }
     static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}return ReplayEnvironment.loaded();}
-    static void battle(){if(restoringCombat)restoringCombat=false;else combatId=UUID.randomUUID().toString();lastKey="";}
+    /** The floor decides whether a load re-entered the same fight; offline checks run without a dungeon, so fall back to 0. */
+    static int floorNow(){try{return AbstractDungeon.floorNum;}catch(Throwable ignored){return 0;}}
+    /** Set by the load hook so the next battle prep can tell "S/L back into this fight" from "a new fight". */
+    static void saveLoaded(){pendingLoad=true;}
+    /**
+     * A save load returns to the same combat unless the floor moved, so the combat keeps its id and the repeated turn
+     * is stored as a branch attempt rather than as a second fight (architecture, 2026-11-01).
+     */
+    static void battle(){
+        boolean load=pendingLoad;pendingLoad=false;
+        int floor=floorNow();
+        if(restoringCombat){restoringCombat=false;lastKey="";lastFloor=floor;return;}
+        if(load&&floor==lastFloor&&!combatId.isEmpty()){lastKey="";return;}
+        combatId=UUID.randomUUID().toString();lastKey="";lastFloor=floor;
+    }
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
         if(!enabled||failed||!StateMod.ready()||!HistoryScreen.active()||!TurnAdapter.capturable())return;
@@ -50,7 +65,8 @@ final class TurnRecorder {
                 files=new TurnFiles(owner.directory,owner.runId,environment);
             }
             String key=owner.branch+":"+combatId+":"+GameActionManager.turn;if(key.equals(lastKey))return;
-            JsonObject entry=new JsonObject();entry.addProperty("branch_id",owner.branch);entry.addProperty("combat_id",combatId);entry.addProperty("floor",AbstractDungeon.floorNum);entry.addProperty("turn",GameActionManager.turn);entry.addProperty("phase","player_turn_ready");entry.addProperty("captured_at",System.currentTimeMillis());
+            JsonObject entry=new JsonObject();entry.addProperty("branch_id",owner.branch);entry.addProperty("combat_id",combatId);
+            entry.addProperty("branch_parent",owner.branchParent);entry.addProperty("branch_parent_snapshot",owner.branchParentSnapshot);entry.addProperty("branch_reason",owner.branchReason);entry.addProperty("floor",AbstractDungeon.floorNum);entry.addProperty("turn",GameActionManager.turn);entry.addProperty("phase","player_turn_ready");entry.addProperty("captured_at",System.currentTimeMillis());
             long checkpointStart=System.nanoTime();JsonObject snapshot=null;
             if(!compatible()){entry.addProperty("availability","unsupported");entry.addProperty("reason","unverified_mod_versions_or_combination");}
             else{
@@ -59,7 +75,7 @@ final class TurnRecorder {
                 long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);
                 entry.addProperty("reason",played==0?"player_turn_ready":"mid_turn_after_"+played+"_cards");
             }
-            JsonObject ref=files.publish(entry,snapshot);lastKey=key;if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);status="recorded".equals(Recorder.string(ref,"availability"))?"Turn saved; practice ready":"Turn unavailable: "+Recorder.string(ref,"reason");
+            JsonObject ref=files.publish(entry,snapshot);lastKey=key;lastFloor=floorNow();if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);String availability=Recorder.string(ref,"availability");status="recorded".equals(availability)?"Turn saved; practice ready":"duplicate".equals(availability)?"Turn unchanged: the same board is already stored":"Turn unavailable: "+Recorder.string(ref,"reason");
         }catch(Exception ex){DiagnosticReport.error("turn_recording",ex);failed=true;status="Turn recording stopped: "+ex.getClass().getSimpleName();System.err.println("[Spire Ledger] "+status);ex.printStackTrace();}
     }
 }

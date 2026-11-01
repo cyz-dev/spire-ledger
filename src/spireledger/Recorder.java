@@ -18,6 +18,8 @@ public final class Recorder implements AutoCloseable {
     public final Path directory;
     public final String runId;
     public String branch;
+    /** The checkpoint a new session or rollback branched from; empty for the first branch of a run. */
+    public String branchParent="",branchParentSnapshot="",branchReason="run_start";
     private final JsonObject root;
     private final JsonArray records;
     private final FileOutputStream journal;
@@ -50,6 +52,7 @@ public final class Recorder implements AutoCloseable {
         journal=new FileOutputStream(log.toFile(),true);
         if(sequence==0) {JsonObject h=new JsonObject();h.add("header",root.get("metadata"));line(h);}
         branch=UUID.randomUUID().toString();
+        recoverParent();
         int existing=0;
         try(DirectoryStream<Path> paths=Files.newDirectoryStream(directory,"segment-*.json")){for(Path p:paths)existing++;}
         segment=existing;segmentStart=records.size();
@@ -58,6 +61,23 @@ public final class Recorder implements AutoCloseable {
         for(JsonElement e:records)if("decision".equals(string(e.getAsJsonObject(),"type")))begun.add(string(e.getAsJsonObject(),"decision_id"));
         begun.removeAll(completed);
         for(String id:begun){JsonObject e=object("result");e.addProperty("decision_id",id);e.addProperty("status","interrupted");e.addProperty("reason","process_restart");append(e);completed.add(id);}
+    }
+    /**
+     * A new process opens a new branch. Its parent is the last checkpoint the previous session published, so the
+     * manifest forms a tree of S/L sessions instead of a flat list (architecture, 2026-11-01).
+     */
+    private void recoverParent(){
+        try{
+            Path manifest=directory.resolve("replay").resolve("manifest.json");
+            if(!Files.exists(manifest)||Files.size(manifest)>8*1024*1024)return;
+            JsonArray points=new JsonParser().parse(new String(Files.readAllBytes(manifest),StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("snapshots");
+            if(points==null)return;
+            for(int i=points.size()-1;i>=0;i--){
+                JsonObject last=points.get(i).getAsJsonObject();
+                if(!"recorded".equals(string(last,"availability")))continue;
+                branchParent=string(last,"branch_id");branchParentSnapshot=string(last,"snapshot_id");branchReason="process_restart";return;
+            }
+        }catch(Exception ignored){}
     }
     public static JsonObject copy(JsonObject value){return new JsonParser().parse(value.toString()).getAsJsonObject();}
     public static String string(JsonObject o,String key){return o.has(key)&&!o.get(key).isJsonNull()?o.get(key).getAsString():"";}
@@ -110,6 +130,8 @@ public final class Recorder implements AutoCloseable {
     }
     public void forkBranch(String parentBranch,String reason,JsonObject details)throws IOException {
         branch=UUID.randomUUID().toString();
+        branchParent=parentBranch;branchReason=reason;
+        branchParentSnapshot=details!=null&&details.has("snapshot_id")?string(details,"snapshot_id"):"";
         JsonObject e=object("turn_rollback");
         e.addProperty("parent_branch_id",parentBranch);
         e.addProperty("reason",reason);

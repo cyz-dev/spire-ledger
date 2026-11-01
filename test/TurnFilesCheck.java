@@ -15,5 +15,19 @@ public final class TurnFilesCheck {
   boolean valFailed = false;
   try { TurnAdapter.validateSnapshot(new JsonObject()); } catch (IllegalArgumentException ex) { valFailed = true; }
   check(valFailed, "empty snapshot rejected by validateSnapshot");
-System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures");}
+JsonObject board=new JsonParser().parse("{\"hp\":30,\"deck\":[{\"uuid\":\"a\",\"id\":\"Strike\"}],\"monsters\":[{\"hb\":{\"x\":1,\"y\":2},\"draw_y\":3,\"intent_alpha\":0.5,\"health_hb\":{\"y\":4,\"hovered\":true}}]}").getAsJsonObject();
+  JsonObject sameBoard=new JsonParser().parse("{\"hp\":30,\"deck\":[{\"uuid\":\"b\",\"id\":\"Strike\"}],\"monsters\":[{\"hb\":{\"x\":1,\"y\":9},\"draw_y\":7,\"intent_alpha\":0.9,\"health_hb\":{\"y\":8,\"hovered\":false}}]}").getAsJsonObject();
+  JsonObject otherBoard=new JsonParser().parse("{\"hp\":29,\"deck\":[{\"uuid\":\"a\",\"id\":\"Strike\"}],\"monsters\":[]}").getAsJsonObject();
+  check(TurnFiles.contentHash(board).equals(TurnFiles.contentHash(sameBoard)),"uuid and presentation values never split the same board");
+  check(!TurnFiles.contentHash(board).equals(TurnFiles.contentHash(otherBoard)),"a different board hashes differently");
+  Path dedupe=directory.resolve("dedupe");Files.createDirectories(dedupe);
+  TurnFiles store=new TurnFiles(dedupe,"second-run",new JsonObject());JsonObject point=new JsonObject();point.addProperty("combat_id","c");point.addProperty("turn",1);
+  JsonObject firstCopy=store.publish(point,new JsonParser().parse(board.toString()).getAsJsonObject());
+  JsonObject secondCopy=store.publish(point,new JsonParser().parse(sameBoard.toString()).getAsJsonObject());
+  check("recorded".equals(Recorder.string(firstCopy,"availability"))&&"duplicate".equals(Recorder.string(secondCopy,"availability")),"the same board is stored once and the repeat points at it: "+secondCopy);
+  check(Recorder.string(secondCopy,"duplicate_of").equals(Recorder.string(firstCopy,"snapshot_id")),"the repeat keeps its own id and names the original");
+  long stored;try(java.util.stream.Stream<Path> list=Files.list(dedupe.resolve("replay").resolve("turns"))){stored=list.count();}
+  check(stored==1,"two identical points leave one file on disk: "+stored);
+  check(TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST).getAsJsonArray("snapshots").size()==2,"both attempts stay in the manifest");
+System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures, one copy per board");}
 }
