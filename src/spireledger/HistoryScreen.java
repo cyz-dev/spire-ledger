@@ -158,6 +158,15 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         }
         bar.update();bar.parentScrolledToPercent(selected==null?(filtered.size()<=6?0:(float)offset/(filtered.size()-6)):(maxLineOffset()==0?0:(float)lineOffset/maxLineOffset()));
     }
+    /** One row per turn holding its newest point, plus every attempt of that turn newest first (architecture, 2026-11-01). */
+    static void foldTurns(List<JsonObject> points,List<JsonObject> turns,Map<Integer,List<JsonObject>> attempts){
+        Map<Integer,List<JsonObject>> byTurn=new TreeMap<>();
+        for(JsonObject pt:points)byTurn.computeIfAbsent(HistoryIndex.num(pt,"turn",1),k->new ArrayList<>()).add(pt);
+        for(Map.Entry<Integer,List<JsonObject>> group:byTurn.entrySet()){
+            List<JsonObject> list=group.getValue();list.sort((a,b)->Long.compare(capturedAt(b),capturedAt(a)));
+            attempts.put(group.getKey(),list);turns.add(list.get(0));
+        }
+    }
     static long capturedAt(JsonObject o){return o!=null&&o.has("captured_at")&&!o.get("captured_at").isJsonNull()?o.get("captured_at").getAsLong():0L;}
     /** The selected attempt of the selected turn; falls back to that turn's newest snapshot. */
     JsonObject currentTurn(){
@@ -319,19 +328,13 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             String currentBranch = branchSelection == 0 ? (selected != null ? selected.lastBranch : "") : branchSelection == 1 ? "" : (branchSelection - 2 < branches.size() ? branches.get(branchSelection - 2) : "");
             Set<String> pathSnapshots=new HashSet<>();
             for(JsonObject event:viewRecords)if("turn_snapshot".equals(Recorder.string(event,"type")))pathSnapshots.add(Recorder.string(event,"snapshot_id"));
-            // One row per turn; attempts of the same turn fold into the newest one and stay selectable below.
-            Map<Integer,List<JsonObject>> byTurn=new TreeMap<>();
+            List<JsonObject> points=new ArrayList<>();
             for(JsonElement item:manifest.getAsJsonArray("snapshots")){
                 JsonObject pt=item.getAsJsonObject();
                 boolean branchMatch = branchSelection==0?pathSnapshots.contains(Recorder.string(pt,"snapshot_id")):currentBranch.isEmpty() || currentBranch.equals(Recorder.string(pt, "branch_id"));
-                if(branchMatch && HistoryIndex.num(pt,"floor",0)==selectedFloor&&"recorded".equals(Recorder.string(pt,"availability"))){
-                    byTurn.computeIfAbsent(HistoryIndex.num(pt,"turn",1),k->new ArrayList<>()).add(pt);
-                }
+                if(branchMatch && HistoryIndex.num(pt,"floor",0)==selectedFloor&&"recorded".equals(Recorder.string(pt,"availability")))points.add(pt);
             }
-            for(Map.Entry<Integer,List<JsonObject>> group:byTurn.entrySet()){
-                List<JsonObject> list=group.getValue();list.sort((a,b)->Long.compare(capturedAt(b),capturedAt(a)));
-                turnAttempts.put(group.getKey(),list);availableTurns.add(list.get(0));
-            }
+            foldTurns(points,availableTurns,turnAttempts);
         }
         if(!availableTurns.isEmpty()){
             List<String> turnLabels=new ArrayList<>();
