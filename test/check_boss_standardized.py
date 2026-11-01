@@ -162,11 +162,11 @@ def fit(blocks_for_act):
         if max_rel < TOL:
             break
 
-    total = sum(strength[i] for relic, i in universe.items() if relic != SKIP and seen[i])
+    total = sum(strength[i] for relic, i in universe.items() if seen[i])
     if total <= 0.0:
         return {}, len(groups)
     share = {relic: 100.0 * strength[i] / total
-             for relic, i in universe.items() if relic != SKIP and seen[i]}
+             for relic, i in universe.items() if seen[i]}
     return share, len(groups)
 
 

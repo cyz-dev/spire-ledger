@@ -41,7 +41,7 @@ def to_ledger(base, mapping):
             out["denominator"] = out["numerator"] + out.pop("_losses")
     filters = {k: v for k, v in mapping["required_ledger_filters"].items()}
     filters["save_slot"] = base["meta"]["filters"]["save_slot"]
-    meta = {"format": "spire-ledger-metrics", "format_version": 1, "metrics_version": "metrics-v1",
+    meta = {"format": "spire-ledger-metrics", "format_version": 1, "metrics_version": "metrics-v2",
             "source": "selftest projection", "filters": filters, "run_ids": base["meta"]["run_ids"]}
     return {"meta": meta, "rows": list(rows.values())}
 

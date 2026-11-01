@@ -95,10 +95,12 @@ final class Native {
         if(isArray(o,"campfire_choices")){Map<String,Integer> m=new LinkedHashMap<>();for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();String key=str(c,"key"),id=cardId(str(c,"data"));m.merge("campfire:"+key,1,Integer::sum);
                 if(key.equals("SMITH")&&!id.isEmpty())m.merge("upgrade:campfire:"+id,1,Integer::sum);if(key.equals("PURGE")&&!id.isEmpty())m.merge("remove:campfire:"+id,1,Integer::sum);}
             r.counts.put("campfire",Fact.of(m,N));r.campfires=Campfire.build(o,r.character.or(""),b,r.maxAct.known()&&r.maxAct.value>=4);}
-        // Explicit use records only, never inferred from slot changes; each entry of potions_floor_usage is one use on that floor.
-        if(isArray(o,"potions_floor_usage")){Map<String,Integer> m=new LinkedHashMap<>();Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potions_floor_usage");m.put("potions",uses.size());for(JsonElement e:uses){Integer floor=integer(e);if(floor!=null)byFloor.merge(floor,1,Integer::sum);}
+        // RunHistoryPlus logs every drink per floor; vanilla potions_floor_usage kept only the last floor in most real files, so RHP wins. TinyCat caps a floor at 9.
+        if(isArray(o,"potion_use_per_floor")){Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potion_use_per_floor");int total=0;
+            for(int i=0;i<uses.size();i++)if(uses.get(i).isJsonArray()){int used=Math.min(uses.get(i).getAsJsonArray().size(),9);byFloor.put(i+1,used);total+=used;}
+            Map<String,Integer> m=new LinkedHashMap<>();m.put("potions",total);r.counts.put("potions",Fact.of(m,Fact.RHP));r.potionsByFloor=Fact.of(byFloor,Fact.RHP);}
+        else if(isArray(o,"potions_floor_usage")){Map<String,Integer> m=new LinkedHashMap<>();Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potions_floor_usage");m.put("potions",uses.size());for(JsonElement e:uses){Integer floor=integer(e);if(floor!=null)byFloor.merge(floor,1,Integer::sum);}
             r.counts.put("potions",Fact.of(m,N));r.potionsByFloor=Fact.of(byFloor,N);}
-        else if(isArray(o,"potion_use_per_floor")){Map<Integer,Integer> byFloor=new HashMap<>();JsonArray uses=arr(o,"potion_use_per_floor");for(int i=0;i<uses.size();i++)if(uses.get(i).isJsonArray())byFloor.put(i+1,uses.get(i).getAsJsonArray().size());r.potionsByFloor=Fact.of(byFloor,Fact.RHP);}
         r.counts.put(ACTS,Fact.of(acts(o,b),N));return r;
     }
 

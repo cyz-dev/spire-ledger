@@ -33,7 +33,7 @@ public final class Export {
         Stats.Filter f=filter(slot);List<Run> runs=new ArrayList<>();Map<String,Integer> excluded=new TreeMap<>();
         if(only==null){Stats.Selection s=Stats.select(index,f,0);runs.addAll(s.runs);excluded.putAll(s.excluded);}else for(Run r:index.runs)if(only.contains(r.nativeFile))runs.add(r);
         runs.sort(Comparator.comparing(r->r.nativeFile));
-        JsonObject meta=new JsonObject();meta.addProperty("format","spire-ledger-metrics");meta.addProperty("format_version",1);meta.addProperty("metrics_version","metrics-v1");meta.addProperty("source",source);
+        JsonObject meta=new JsonObject();meta.addProperty("format","spire-ledger-metrics");meta.addProperty("format_version",1);meta.addProperty("metrics_version",Metrics.VERSION);meta.addProperty("source",source);
         JsonObject filters=new JsonParser().parse("{\"tinycat_alignment\":true,\"save_slot\":0,\"ascension\":[20],\"modes\":\"exclude_daily_special_endless\",\"include_abandons\":true,\"seed_filter\":\"all\",\"win_definition\":\"heart_kill\",\"sources\":[\"native\"]}").getAsJsonObject();
         filters.addProperty("save_slot",slot);meta.add("filters",filters);meta.addProperty("runs_scanned",index.nativeFiles);meta.addProperty("run_list",only!=null);
         JsonObject why=new JsonObject();for(Map.Entry<String,Integer> e:excluded.entrySet())why.addProperty(e.getKey(),e.getValue());meta.add("excluded_by_reason",why);

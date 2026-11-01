@@ -1,6 +1,6 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-10-30（`v0.5.0`）
+Last updated: 2026-11-01（`v0.6.0-beta.1`）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
@@ -17,9 +17,32 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 独立校验：`test/check_overview.py`、`test/check_boss_standardized.py`；离线断言 `StatsCheck`、`StatsDisplayCheck`。
 - 边界：不要改 beta.2 的既有页面文案和指标口径；新增结论前先对照 [metrics.md](metrics.md)。
 - 独立练习探针：`integration-replay.ps1 -Mode save -LaunchPractice -SuperFastMode -ExperimentalTurns -Scenario ordinary-act3`（或 `ordinary`、`ordinary-act2`、`ordinary-act4`）会真正启动练习子进程并核对相同行动结果；2026-10-29 四幕均通过。
-- 已知失败、未修的探针（2026-10-29 实测，beta.3 或 beta.4 的 jar 同样失败，不是 beta.5 引入）：`integration-stats-ui.ps1` 默认模式停在“three real native and three unlinked notes runs merged into six logical runs”；`integration-stats-options.ps1` 停在“Neow shares are fitted from the skipped log”。`integration-history.ps1` 与 `integration-stats-ui.ps1 -ReviewLayout` 已在 beta.5 修好并通过。
+- 已知失败、未修的探针：`integration-stats-ui.ps1` 默认模式停在“three real native and three unlinked notes runs merged into six logical runs”（2026-10-29 实测）。`integration-stats-options.ps1` 曾停在“Neow shares are fitted from the skipped log”：本机存档位 0 的局都没有 `neow_bonuses_skipped_log`，涅奥标准率本来就拟合不了，是探针写死了“必须有份额”。2026-10-30 起第 4、14、16 阶段按数据判断：有未选记录时检查份额和三张图；没有时检查不出份额、不写标准率图，只写 `neow-win.png`。`integration-history.ps1` 与 `integration-stats-ui.ps1 -ReviewLayout` 已在 beta.5 修好并通过。
+- 2026-10-30 按新口径改写了 `StatsOptionsProbe`（三口径、Boss 按幕胜率、S–R00 档位行、`-win.png` 与 `metrics.csv` 断言）。2026-10-31 又扩到 32 个阶段（药水、分幕死亡率、导出选幕、幕选“全部”导出、战损 T0–T4、中文 scoped CSV），并在隔离实例上用真实存档位 0 的 1122 局只读副本跑通（Windows 隐藏窗口；本机无 WSL，故 `-Headless` 不可用）。上面“停在 Neow shares…”的旧失败记录来自改动前的探针。PR #18 自述的跑通用的是打包了遭遇图的私有构建；维护者接手后去掉打包、恢复完整图片抬头，并在本机用 `-Headless`（WSL Xvfb）静音跑通全部 32 个阶段（2026-10-30，实例 `spire-ledger-dev/pr18-options-05`，存档位 0 选中 625 局，无涅奥未选记录）。
+- 2026-11-01 发布 0.6.0-beta.1 前在发布分支上复跑：`build.ps1 -Check` 全部通过；`StatsDump` 加两条 Python 独立重算（存档位 0，选中 654 局）通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0，存档位 0 选中 625 局）。这个探针的断言写死了中文文案，`-Language ENG` 会在第 2 阶段“the rest-site total is a count”失败，v0.5.0 的探针同样如此，不是界面问题。`integration-stats-ui.ps1` 仍停在上面登记的“merged into six logical runs”。
 
-## beta.5 改动（先测这一节）
+## 0.6.0-beta.1 改动（先测这一节）
+
+这一批改动随 0.6.0-beta.1 发布：涅奥/Boss 遗物的独立胜率口径、Boss 遗物按幕分组、非卡牌导出的 S–R00 分档、卡牌标准率把跳过纳入拟合与分档、PNG+CSV 一键导出，实际战损按幕分组和对应的 `hp-loss` 导出，以及所有按幕分组页面的幕下拉和实际战损的回复下拉。2026-10-31 又加入 RunHistoryPlus 优先的药水读取、分幕遭遇死亡率、导出页选幕（幕下拉含“全部”）、实际战损 T0–T4 分档和中文 scoped `csv-v2`。维护者已通过 `build.ps1 -Check` 的离线断言和 32 阶段原生探针；下面的界面项待手测。
+
+| # | 怎么玩 | 看什么 |
+|---|---|---|
+| W1 | “卡牌与构筑 → 候选出现与选取”，切“口径：一般率”和“口径：标准率”，逐幕翻看 | 两种视图都保留跳过/歌唱碗：一般率里它们作为该幕候选一起排序；标准率里跳过按拟合份额参与 S–R00 分档和排序，歌唱碗并入跳过并另列“实际占比”，合计 100%（含跳过）。顶部说明写明“含跳过”。另切“跳过与歌唱碗”页：只列各幕跳过率和歌唱碗率，先跳过后歌唱碗，没有幕标题；在卡牌页切到标准率后再回来，这页仍是一般率。 |
+| W2 | 切“涅奥选择与结果”，分别选“口径：一般率 / 标准率 / 胜率” | 三种口径各自成表：一般率=被选/出现，标准率=合计 100% 的强度份额，胜率=选了该选项的局里赢了多少。原来的“所选对局胜率（相关）”混排行不再出现在一般率和标准率里；胜率行显示选择局数，胜负未知的局标注“未知不计”。 |
+| W3 | 切“Boss遗物选择与结果”，三种口径各看一遍 | 三种口径都按幕分组，出现“第 N 幕 · Boss 遗物 · …”分表。一般率保留“跳过”；标准率把跳过与遗物一起拟合、显示份额；胜率显示“胜局 / 选了该遗物的局”，每局只计一次。 |
+| W4 | 把结果筛选切到“仅胜”或“仅败”，再看涅奥/Boss 的胜率口径 | 列表里的胜率行显示“—”；导出页的胜率预览提示“胜率不可用：仅胜/仅败筛选下不显示所选对局胜率”，并且不写 `-win.png`。切回“全部”后数字恢复。 |
+| W5 | 在“导出”页分别选火堆行动、涅奥选项、Boss 遗物，选一幕，点“导出 PNG+CSV” | 火堆写 `campfire-actN.png` 与 `campfire-actN-standardized.png`；涅奥写 `neow.png`、`neow-standardized.png`、`neow-win.png`；Boss 遗物写 `boss-actN.png`、`boss-actN-standardized.png`、`boss-actN-win.png`。每个分节按 S–R00 分档（Fisher-Jenks，最多 7 档，同值同档），档位规则行给出本段数值范围；低于最少样本量的条目单列“样本不足”，不参与分档；火堆行动次数是计数，不分档。抬头印全部筛选、来源、操作来源、选中局数与胜率、本图口径与分档说明，最后一行是口径版本（`metrics-v2` 等）与导出时间；火堆标准化倍里睡觉只列数值、不分档。 |
+| W6 | 打开导出目录 | 同目录多一个 `metrics.csv`（UTF-8 带 BOM，中文 15 列 `表,幕,口径,分档,条目,数值,单位,分子,分母,样本,状态,95%下限,95%上限,含估算,未知不计`），只含本次导出的幕与条目，按幕/口径分表、表间空行。被结果筛选隐藏的数字留空并标“结果筛选隐藏”，胜率行带 Wilson 95% 区间（百分数），界面和图片不给区间。`metadata.json` 有 `csv_version=csv-v2`、`all_acts`、`acts`、`section_tier_version`、`win_captions`、`remarks`（来源、日期、存档位、版本与生成时间），`views` 里可能出现 `win`；标准率和火堆标准化倍的行有数值、没有分子分母和区间，数值与图上一致；选实际战损时 `kind` 为 `hp-loss`。 |
+| W7 | 打开“战斗与资源 → 实际战损”，再进“导出 → 实际战损” | 界面按幕插入“第 N 幕 · 实际战损”，每幕先列该幕每局总战损，再按场均战损降序列出各遭遇。用“回复”下拉切换全部 / 有回复 / 无回复：全部每场只显示一条基础行，另两个视图只显示对应分组，每幕总战损在每个视图都保留，不再混排。第 1–3 幕的“遭遇危险度”按 TinyCat 分档：Boss 单列 T0，其余按场均战损降序切成 T1 极危 / T2 高危 / T3 中危 / T4 低危，同值同档，样本不足单列；事件战与第四幕不分档。导出写 `hp-loss-actN.png`，按幕分节、含 T0–T4 档位行，数值单位是生命，且只含全部对局（不区分有无回复）。在幕下拉里选“全部”后点“导出 PNG+CSV”时写出 `hp-loss-act1.png`–`hp-loss-act4.png`，不生成合并长图，CSV 合并为一表一幕。敌人图片从 `mods/SpireLedger/monster-images/`（或 `~/.spire-ledger/monster-images/`）按遭遇名匹配，忽略大小写和空格；缺失时留白，jar 不带任何遭遇图。低于最少出现次数的遭遇单列“样本不足”，不进 T1–T4。`remarks` 写明导出范围、图片来源和缺失留白规则。 |
+| W8 | 在“卡牌与构筑 → 候选出现与选取 / Boss遗物选择与结果”和“战斗与资源 → 遭遇平均承伤 / 药水使用 / 火堆行动 / 实际战损 / 遭遇死亡率”逐页切换幕下拉 | 每页只显示所选幕的分表，表头为“第 N 幕 · …”；选“全部”恢复各幕。卡牌、承伤、药水、火堆、战损、遭遇死亡率为“全 / 1 / 2 / 3 / 4 幕”；Boss 遗物只有第 1、2 幕，下拉为“全 / 1 / 2”。切换分类或点“重置”时幕筛选回到“全部”。药水页按幕列出总使用次数与各遭遇每场使用，数字来自 RunHistoryPlus 逐层记录，药水总数、每场与分幕能对上；药水没有对应的导出图。 |
+
+本批已知边界，按预期记录即可：
+
+- 胜率口径是选后相关（选了该选项的局里赢了多少），不是该选项/遗物带来的收益；每局只计一次，胜负未知的局不进分母。
+- 界面与图片不给选后胜率区间；区间只在 `metrics.csv` 的“95%下限 / 95%上限”，只作提示。
+- S–R00 是对本次样本的分段断点，每次导出可能不同；同一分节内分档，不跨幕合并，也不是可配置阈值。
+
+## beta.5 改动
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -36,17 +59,17 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 ## beta.3 新增改动
 
-这一批改动随 beta.3 发布，仍需手动回归。维护者已通过 10 项离线断言、真实游戏内原生探针（真实 66 局，存档位 0）和两份 Python 独立重算；下面检查手玩体验和边界。
+这一批改动随 beta.3 发布，仍需手动回归。维护者已通过 10 项离线断言、真实游戏内原生探针（真实 66 局，存档位 0）和两份 Python 独立重算；下面检查手玩体验和边界。N2、N4–N6 已按 2026-10-30 的口径与导出按钮更新，0.6.0-beta.1 的改动以 W1–W8 为准。
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
 | N1 | 打开个人统计“总览”，分别在中文/英文、1024×768 和 1920×1080 下查看；切换职业、进阶和结果筛选 | 新增“平均得分、商店平均删牌、事件平均删牌、平均每局删牌”四行；连同卡组大小，每个均值第二行显示 `95%区间 下限–上限`，胜率显示 Wilson 区间。区间不拆字、不溢出，筛选后数字和区间一起变化；仅胜/仅败时胜率类显示“—”。 |
-| N2 | 进入“导出图 → 卡牌抓率”，选第一幕，“口径：一般率”，点“导出本幕 PNG”；再切“口径：标准率”导出。对第二至四幕重复 | 每次生成 `act-N.png` 和 `act-N-standardized.png` 各一张（标准率不可拟合时不生成）。一般率保留 T0–T6、跳过和歌唱碗；标准率显示 S、A、B、C、D、R0、R00，合计约 100%，不含跳过/歌唱碗。长图 1600px 宽、内容不截断、分块拼接处无接缝；`metadata.json` 的 `views`、`entries`、`standardized_entries`、`skip_bowl_observed` 与图片一致。 |
+| N2 | 进入“导出 → 卡牌抓率”，选第一幕，点“导出 PNG+CSV”（2026-10-30 起不再有单独的“本幕/长图”按钮）。对第二至四幕重复 | 每次生成 `act-N.png` 和 `act-N-standardized.png` 各一张（标准率不可拟合时不生成）。一般率保留 T0–T6、跳过和歌唱碗；标准率显示 S、A、B、C、D、R0、R00，合计约 100%（含跳过的拟合份额），歌唱碗并入跳过并单列实际占比（2026-10-30 起）。长图 1600px 宽、内容不截断、分块拼接处无接缝；`metadata.json` 的 `views`、`entries`、`standardized_entries`、`skip_bowl_observed` 与图片一致，`remarks` 含来源、日期、存档位、版本与生成时间。 |
 | N3 | 切“火堆行动”，分别导出“行动次数”和“标准化倍” | 生成 `campfire.png` 与 `campfire-standardized.png`。行动次数按幕列出休息/锻造/抽烟/举重/挖掘/回忆，锻造按被升级的牌逐张计数；标准化倍显示 `占比 倍数`，候选池为每张可升级牌加可用遗物行动，不含睡觉、不把锻造整体算一项。第三幕为进第四幕拿的回忆不进入候选池和回忆行；行与行不重叠，四幕合计与分幕都在。 |
-| N4 | 切“涅奥选项”，先看一般率再导出标准率 | 文案为“删除1张牌”“变一张牌”“稀有牌三选一 / 代价”“删两张牌”“变两张牌”等；无代价的选项不再重复“/ 无”。一般率显示被选/出现；标准率为合计 100% 的强度份额，只使用有完整选项记录的局，缺少未选记录的旧局显示“—”。选项使用空白卡图占位，名称可读。 |
-| N5 | 切“Boss 遗物”，逐幕导出一般率与标准率 | 生成 `boss.png` 与 `boss-standardized.png`，按幕分节；一般率含“跳过”，标准率把跳过当同屏对手但不报告。遗物使用游戏内图片，跳过热图留白，稀有度/估算标记可读。 |
-| N6 | 在导出图页反复切换内容、幕和口径；在无数据筛选下点导出；导出后点“打开文件夹” | 只有“卡牌抓率”显示幕选择；非卡牌导出按钮为“导出长图 PNG”；无数据时提示“当前筛选没有可导出的记录”，不创建空目录；导出成功提示以“图片已保存：”开头，“打开文件夹”定位到本次目录。 |
-| N7 | 施加最少样本、结果、胜负口径、存档位和来源筛选，再核对总览与导出 | 低样本进入“样本不足”，不当作 0%；排除已知自动化、保留来源未知的规则不变；筛选条件、样本数和排除原因写进图片抬头与 `metadata.json`；切换筛选后区间随样本重算。 |
+| N4 | 切“涅奥选项”，三种口径各看一遍（2026-10-30 起增加胜率） | 文案为“删除1张牌”“变一张牌”“稀有牌三选一 / 代价”“删两张牌”“变两张牌”等；无代价的选项不再重复“/ 无”。一般率显示被选/出现；标准率为合计 100% 的强度份额，只使用有完整选项记录的局，缺少未选记录的旧局显示“—”；胜率为选了该选项的局里赢了多少。选项使用空白卡图占位，名称可读。导出目录同时有 `neow.png`、`neow-standardized.png` 与 `neow-win.png`。 |
+| N5 | 切“Boss 遗物”，三种口径各看一遍 | 生成 `boss.png`、`boss-standardized.png` 与 `boss-win.png`，三种口径都按幕分节；一般率含“跳过”，标准率显示跳过的拟合份额，胜率按幕给出选后胜率。遗物使用游戏内图片，跳过热图留白，稀有度/估算标记可读。 |
+| N6 | 在导出页反复切换内容、幕和口径；在无数据筛选下点导出；导出后点“打开文件夹” | 所有有幕的内容（卡牌、火堆、Boss 遗物、实际战损）都显示幕选择，Boss 遗物只有第 1–2 幕和“全部”，涅奥没有幕选择；界面只有“导出 PNG+CSV”一个按钮，幕下拉选“全部”时每幕单独成图、CSV 一表一幕；无数据时提示“当前筛选没有可导出的记录”，不创建空目录；导出成功提示以“图片与 CSV 已保存：”开头，“打开文件夹”定位到本次目录。 |
+| N7 | 施加最少样本、结果、胜负口径、存档位和来源筛选，再核对总览与导出 | 低样本进入“样本不足”，不当作 0%；排除已知自动化、保留来源未知的规则不变；图片抬头印全部筛选、来源和口径版本，`remarks` 再按字段记录；样本数和排除原因写进 `metadata.json`；切换筛选后区间随样本重算。 |
 | N8 | 在已验证环境上逐个加入 RunHistoryPlus 1.8.3、HideInfo 0.0.1、justclick 0.1.1、lolifontmod 0.2，打一场战斗并尝试回合重打 | 新白名单组合应照常录制并可恢复；若某个组合仍不支持，历史页应显示“本局录制时的 Mod 组合未被当时的版本支持”，而不是笼统的“没有快照”。四个 Mod 同时启用也测一次。程序探针：`integration-replay.ps1 -Mode save -ReplayCurrent -SuperFastMode -ExperimentalTurns -WaitForExit -ExtraMods <jar>,...`，报告的 `extra_mods` 记下实际版本；版本与白名单不一致时探针失败。2026-10-28 维护者用工坊版（2802958032、3015223743、3492244303、2443729104）跑过：四个各自单独、四个同装、四个加求解器 0.9.6 与三个视觉 Mod，均 PASS；手玩体验仍待测。 |
 | N9 | 用中文 Windows 的原版 `.run`（GBK 编码）和带 BOM 的 UTF-8 `.run` 各放一局到 `runs/`，打开统计；顺路看事件名 | 两种编码都能读取，中文事件名/卡名不乱码；统计计数正确，错误列表不新增“Unrecognized native history format”。 |
 | N10 | 中文界面打开 Mod 设置页、触发一次记录关闭/恢复、正常结束或放弃一局；再切英文 | 设置页两个开关、当前状态、导出按钮、归档提示均为对应语言；中文不溢出，英文回退正常；状态行显示“就绪 · 本地记录已开启”“记录已关闭”“已归档：胜利/死亡/放弃”等。 |
@@ -78,7 +101,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 0.6.0-beta.1 时从 [v0.6.0-beta.1](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.1) 下载 `SpireLedger.jar`；测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
@@ -134,7 +157,7 @@ java -cp "build\gson;build\stats-classes" spireledger.stats.GoldCheck <游戏目
 ## 暂时不能测
 
 - 与求解器 Mod 同装时，求解器动作自动标为“已知自动化”。这需要求解器一侧先接入，计划在 M3。
-- 遗物效果量（读 Relic Stats 的数据）、其他 Tierlist、CSV 导出和可配置分档阈值，计划在后续版本。
+- 遗物效果量（读 Relic Stats 的数据）、其他 Tierlist 和可配置分档阈值，计划在后续版本。
 - 标准化率的置信区间与自然断点参数复测：当前只移植 TinyCat 的点估计和 Jenks 分档，没有移植自助法区间；份额为描述性结果，不作为强度结论验收。
 
-标准化抓率、涅奥/Boss 标准率和火堆标准化倍已经可以测试，见上文 N2–N5；卡牌实际抓率 PNG 仍可回归。
+标准化抓率、涅奥/Boss 标准率、涅奥/Boss 选后胜率、火堆标准化倍和 `metrics.csv` 导出已经可以测试，见上文 W1–W6 与 N2–N5；卡牌实际抓率 PNG 仍可回归。
