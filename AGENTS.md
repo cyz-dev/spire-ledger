@@ -13,6 +13,7 @@
 | 用户能看到的功能和非目标 | [docs/product.md](docs/product.md) |
 | 怎么验证、手测清单 | [docs/testing.md](docs/testing.md) |
 | 已知缺口、为什么不这么做（图源、打包、兼容性） | [docs/issues/](docs/issues/) 里对应的 issue，先看结论与"没有采纳的选项" |
+| 打包、发版、发布说明 | [docs/release.md](docs/release.md)。发布包不得含图片，`build.ps1` 会强制检查 |
 
 回复协作者时先写明：这次需求落在哪几节、口径是否已有定义、要动哪些文件。metrics.md 还没有定义的口径，先在 metrics.md 里写定义（单位、分母、缺失规则、与 TinyCat 的差异），再写代码。
 

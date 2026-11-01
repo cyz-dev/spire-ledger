@@ -133,7 +133,7 @@ beta.3 已发布，相对 beta.2 的改动：
 ./build.ps1 -Game '<游戏目录>' -SaveStateSource '<SaveStateMod-1.3.0.jar 的完整路径>' -Check
 ```
 
-输出为 `build/SpireLedger.jar`。
+输出为 `build/SpireLedger.jar`。脚本打完包会检查 jar 里有没有图片或 `monster-images/` 目录，命中就报错——**发布包不带任何遭遇图**。发版前请过一遍 [docs/release.md](docs/release.md)（含可直接粘贴的「遭遇图需自备」说明模板）。
 
 原生游戏测试入口见 `integration-stats-ui.ps1`、`integration-stats-options.ps1` 和 `integration-replay.ps1`；真实对局布局测试依赖维护者本地记录。总览与 Boss 标准率另有独立 Python 校验：
 
