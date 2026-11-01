@@ -74,9 +74,9 @@ final class Native {
             r.purges=Fact.of(purges,N);
         }
 
-        // Card rewards: only floors with a fight are post-combat screens; Neow and event card choices share the field.
-        if(isArray(o,"card_choices")&&hasFights){Set<Integer> fightFloors=new HashSet<>();for(Run.Combat c:combats)fightFloors.add(c.floor);List<Run.Screen> screens=new ArrayList<>();
-            for(JsonElement e:arr(o,"card_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String picked=str(c,"picked");if(floor==null||!fightFloors.contains(floor)||picked.isEmpty())continue;
+        // Card rewards: every card_choices entry is one screen, as in TinyCat. Transforming a card never writes an entry, so no floor filter is needed.
+        if(isArray(o,"card_choices")&&hasFights){List<Run.Screen> screens=new ArrayList<>();
+            for(JsonElement e:arr(o,"card_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String picked=str(c,"picked");if(floor==null||picked.isEmpty())continue;
                 String kind=picked.equals("SKIP")?"skip":picked.equals("Singing Bowl")?"bowl":"card";Set<String> offered=new LinkedHashSet<>();for(String id:strings(arr(c,"not_picked")))offered.add(cardId(id));if(kind.equals("card"))offered.add(cardId(picked));
                 // .run never says whether the bowl was on offer, so these screens stay out of the bowl rate.
                 screens.add(new Run.Screen(act(b,floor),floor,offered,kind,kind.equals("card")?cardId(picked):"","unknown",N,null));}
@@ -108,11 +108,15 @@ final class Native {
     static final String ACTS="acts";
     static Map<String,Integer> acts(JsonObject o,int[] b){Map<String,Integer> m=new TreeMap<>();
         for(String field:Arrays.asList("event_choices","campfire_choices","items_purchased","items_purged","relics","path_per_floor"))if(isArray(o,field))m.put("has|"+field,1);
-        for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");at(m,b,floor,"event:"+str(c,"event_name"),1);at(m,b,floor,"purge:EVENT",strings(arr(c,"cards_removed")).size());}
+        // Events split two ways: the name alone feeds the CSV event rate, the name with the choice feeds the events page (metrics.md 6.5).
+        for(JsonElement e:arr(o,"event_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String name=str(c,"event_name"),choice=str(c,"player_choice");
+            at(m,b,floor,"event:"+name,1);if(!name.isEmpty())at(m,b,floor,"eventchoice:"+name+" / "+choice,1);at(m,b,floor,"purge:EVENT",strings(arr(c,"cards_removed")).size());}
         for(JsonElement e:arr(o,"campfire_choices"))if(e.isJsonObject()){JsonObject c=e.getAsJsonObject();Integer floor=integer(c,"floor");String key=str(c,"key"),id=cardId(str(c,"data"));if(key.isEmpty())continue;at(m,b,floor,"campfire:"+key,1);
             if(key.equals("SMITH")&&!id.isEmpty())at(m,b,floor,"upgrade:campfire:"+id,1);if(key.equals("PURGE")&&!id.isEmpty())at(m,b,floor,"purge:CAMPFIRE",1);}
         List<String> bought=strings(arr(o,"items_purchased"));JsonArray boughtAt=arr(o,"item_purchase_floors");for(int i=0;i<bought.size();i++)at(m,b,i<boughtAt.size()?integer(boughtAt.get(i)):null,"purchase:"+item(bought.get(i)),1);
-        int purged=arr(o,"items_purged").size();JsonArray purgedAt=arr(o,"items_purged_floors");for(int i=0;i<purged;i++)at(m,b,i<purgedAt.size()?integer(purgedAt.get(i)):null,"purge:SHOP",1);
+        // Purged cards carry their floor as well, so the shops page can split the removals by act next to the buys.
+        List<String> purged=strings(arr(o,"items_purged"));JsonArray purgedAt=arr(o,"items_purged_floors");
+        for(int i=0;i<purged.size();i++){Integer floor=i<purgedAt.size()?integer(purgedAt.get(i)):null;at(m,b,floor,"purge:SHOP",1);String id=cardId(purged.get(i));if(!id.isEmpty())at(m,b,floor,"remove:shop:"+id,1);}
         // RunHistoryPlus only; vanilla has no Neow removal record (metrics.md 6.5).
         if(o.get("neow_bonus_log")!=null&&o.get("neow_bonus_log").isJsonObject()){JsonObject neow=obj(o,"neow_bonus_log");m.put("has|neow_bonus_log",1);at(m,b,null,"purge:NEOW",strings(arr(neow,"cardsRemoved")).size());}
         // Empty Cage removes two cards that .run never lists: +2, estimated, in the act whose boss relic it was.

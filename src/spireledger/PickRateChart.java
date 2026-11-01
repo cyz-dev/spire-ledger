@@ -367,16 +367,16 @@ final class PickRateChart {
         return min.equals(max)?tr("全部（实际 A","all (actual A")+min+tr("）",")"):tr("全部（A","all (A")+min+tr("–A","–A")+max+tr("）",")");
     }
     String winRate(){Metric m=screen.metrics.get("win");return m==null||!m.shown()?"—":String.format(Locale.ROOT,"%.1f%%（%s/%s）",100*m.value(),screen.quantity(m.numerator),screen.quantity(m.denominator));}
-    /** Image header (metrics.md 8): filters, win basis, sources, sample counts, then the view's rate and tier rule, then versions and export time. */
-    List<String> captions(int view){List<String> text=head();text.addAll(rule(view));text.add(versions()+" · "+new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));return text;}
+    /** Image header (metrics.md 8): two filter lines and the view's rate and tier rule, four lines in all; dates, sources, slot and versions live in remarks(). */
+    List<String> captions(int view){List<String> text=head();text.addAll(rule(view));return text;}
     List<String> head(){
         Stats.Filter f=screen.filter;List<String> text=new ArrayList<>();
-        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))+tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)+tr(" · 存档位 "," · Save slot ")+f.slot+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
-        SimpleDateFormat date=new SimpleDateFormat("yyyy-MM-dd");text.add(tr("日期：","Date: ")+(f.from==0?tr("不限","any"):date.format(new Date(f.from)))+" – "+(f.to==0?tr("不限","any"):date.format(new Date(f.to-1)))+tr(" · 标准模式 · 种子局包含"," · Standard mode · Seeded included"));
-        text.add(tr("结果：","Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]+tr(" · 胜利口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))+(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
-        text.add(tr("来源：","Sources: ")+new String[]{tr("原版战绩与账本合并","native + Ledger merged"),tr("有原版战绩","has native history"),tr("有账本记录","has Ledger record")}[screen.selected[6]]+(f.slOnly?tr(" · 仅已记录 SL"," · Recorded SL only"):tr(" · 最终尝试路径"," · Final attempt")));
-        Metric unknown=screen.metrics.get("reward_source:unknown");text.add(tr("包含操作来源未知的选择","Unknown action sources included")+(unknown==null?"":" ("+screen.quantity(unknown.numerator)+"/"+screen.quantity(unknown.denominator)+")")+tr(" · 排除已知自动化"," · Known automation excluded"));
-        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate());
+        text.add(tr("职业：","Class: ")+(f.character.isEmpty()?tr("全部","all"):HistoryScreen.className(f.character))
+            +tr(" · 进阶："," · Ascension: ")+ascensionLabel(f)
+            +tr(" · 结果："," · Results: ")+new String[]{tr("全部","all"),tr("仅胜","wins"),tr("仅败","losses")}[screen.selected[8]]
+            +tr(" · 口径："," · Wins: ")+(f.heart?tr("杀心","Heart"):tr("通过第三幕","act 3"))
+            +(f.includeAbandon?tr(" · 包含放弃"," · Abandoned included"):tr(" · 不含放弃"," · Abandoned excluded")));
+        text.add(tr("选中 ","Selected ")+screen.quantity(screen.selection.runs.size())+tr(" 局 · 胜率 "," runs · Win rate ")+winRate()+tr(" · 最少出现 "," · Min offers ")+f.minSamples+tr(" 次",""));
         return text;
     }
     String versions(){List<String> v=new ArrayList<>();v.add(Metrics.VERSION);if(kind==1)v.add("campfire-v1");if(kind==0||kind==2||kind==3)v.add(Standardized.VERSION);if(kind==0)v.add(PickTiers.VERSION);else if(kind!=4)v.add(PickTiers.SECTION_VERSION);return String.join(" · ",v);}

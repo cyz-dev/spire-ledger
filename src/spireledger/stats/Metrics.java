@@ -6,15 +6,15 @@ import static spireledger.stats.Metric.*;
 
 /** The M2 metrics of metrics.md section 6 as pure functions of a selection; nothing here is stored. */
 public final class Metrics {
-    /** metrics.md 8: v2 reads RunHistoryPlus potion_use_per_floor before vanilla potions_floor_usage. */
-    public static final String VERSION="metrics-v2";
+    /** metrics.md 8: v3 counts every card_choices screen, as TinyCat does; v2 read RunHistoryPlus potions before vanilla ones. */
+    public static final String VERSION="metrics-v3";
     static final List<String> OUTCOMES=Arrays.asList("victory","death","abandon","unknown");
     static final List<String> FAMILIES=Arrays.asList("events","purchases","purges","campfire","potions","observed");
     static final Set<String> FIGHT_ROOMS=new HashSet<>(Arrays.asList("M","E","B"));
     final List<Run> runs;final Stats.Filter f;final Map<String,Metric> out=new LinkedHashMap<>();final Map<String,double[]> cover=new LinkedHashMap<>();final Map<String,String> coverUnits=new HashMap<>();
     Metrics(List<Run> runs,Stats.Filter f){this.runs=runs;this.f=f;}
 
-    public static Map<String,Metric> compute(Stats.Selection s,Stats.Filter f){Metrics m=new Metrics(s.runs,f);m.runLevel();m.neow();m.screens();m.combats();m.counts();m.campfires();return m.finish();}
+    public static Map<String,Metric> compute(Stats.Selection s,Stats.Filter f){Metrics m=new Metrics(s.runs,f);m.runLevel();m.neow();m.screens();m.combats();m.counts();m.countsByAct();m.campfires();return m.finish();}
 
     Metric get(String key,String kind,String unit,String measure,String cover,boolean winRate){return out.computeIfAbsent(key,k->new Metric(k,kind,unit,measure,cover,winRate));}
     Metric get(String key,String kind,String unit,String measure,String cover){return get(key,kind,unit,measure,cover,false);}
@@ -105,6 +105,20 @@ public final class Metrics {
     void counts(){for(Run r:runs)for(String family:FAMILIES){if(family.equals("observed")&&!r.has(Fact.LEDGER))continue;Fact<Map<String,Integer>> c=r.counts.get(family);boolean known=c!=null&&c.known();cover(family,"run",known?1:0,1);
         if(known)for(Map.Entry<String,Integer> e:c.value.entrySet()){if(family.equals("campfire")&&e.getKey().startsWith("campfire:"))continue; // the campfire page builds its own per-card rows
             get(e.getKey(),COUNT,family.equals("potions")?"run":"event","",family).count(e.getValue());}}}
+
+    /**
+     * metrics.md 6.5: the shops and events pages split their rows by act, so every purchase, shop removal and event
+     * choice also gets a row "<kind>:&lt;act&gt;:&lt;id&gt;" next to the act-less total. Only the native .run carries
+     * event and purchase floors; a Ledger record has neither, so those runs count in the totals only. A floor the file
+     * leaves out (act 0) stays in the totals as well, since it belongs to no act.
+     */
+    void countsByAct(){
+        for(Run r:runs){Fact<Map<String,Integer>> fam=r.counts.get(Native.ACTS);if(fam==null||!fam.known())continue;Boolean w=Stats.win(r,f.heart);
+            for(Map.Entry<String,Integer> e:fam.value.entrySet()){String[] k=e.getKey().split("\\|",2);if(k.length<2||k[0].equals("has")||k[0].equals("0"))continue;String act=k[0];
+                if(k[1].startsWith("purchase:"))get("purchase:"+act+":"+k[1].substring(9),COUNT,"event","","purchases").count(e.getValue());
+                else if(k[1].startsWith("remove:shop:"))get("remove:shop:"+act+":"+k[1].substring(12),COUNT,"event","","purges").count(e.getValue());
+                else if(k[1].startsWith("eventchoice:")){String key="event:"+act+":"+k[1].substring(12);get(key,COUNT,"event","","events").count(e.getValue());related(key,w);}}}
+    }
 
     /** Per-act campfire tallies; act 0 is the four-act total. */
     static final class CampfireAgg{
