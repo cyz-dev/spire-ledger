@@ -1,6 +1,6 @@
 # Spire Ledger product spec
 
-Last confirmed: 2026-11-01（`v0.6.0-beta.1` 内测版，PR #18 接手的统计与导出待手动测试）
+Last confirmed: 2026-11-02（`v0.6.0-beta.2` 内测版，PR #18 与 PR #20 接手的统计与导出待手动测试）
 Architecture: [architecture.md](architecture.md)
 Metrics contract: [metrics.md](metrics.md)（M1 验收前建立，proposed）
 Resolved and moved items: [product-DONE.md](product-DONE.md)
@@ -104,6 +104,7 @@ Spire Ledger（尖塔账本）是《杀戮尖塔 1》的本地记录、统计与
 - 2026-10-29 发布 beta.5：第三、四幕的独立练习与复盘提示叠字修正。（用户决定，2026-10-29）
 - 2026-10-30 发布 0.5.0 正式版，内容与 beta.5 相同，只更新许可说明。（用户决定，2026-10-30）
 - 2026-11-01 发布 0.6.0-beta.1：按幕统计、实际战损、`metrics.csv` 导出与导出页改版，接手 PR #18。新功能尚待手测，按惯例先发 beta；发布经用户授权。（2026-11-01）
+- 2026-11-02 发布 0.6.0-beta.2：卡牌抓率计入全部选牌屏（`metrics-v3`）、删除跳过与歌唱碗页、商店与事件按幕分组和中文名、遭遇图运行时绘制、导出图抬头 4 行，接手 PR #20。发布经用户授权。（2026-11-02）
 - 自有代码 GPL-3.0。内嵌的改造 SaveState 仍在主 jar 内，上游 2026-10-29 加了 MIT 许可证；NOTICE 写明署名、来源、修改摘要和 MIT 原文。（用户决定，2026-10-25；许可更新 2026-10-30）
 
 ## Non-goals

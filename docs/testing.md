@@ -1,6 +1,6 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-11-01（`v0.6.0-beta.1`）
+Last updated: 2026-11-02（`v0.6.0-beta.2`）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
@@ -21,10 +21,11 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 2026-10-30 按新口径改写了 `StatsOptionsProbe`（三口径、Boss 按幕胜率、S–R00 档位行、`-win.png` 与 `metrics.csv` 断言）。2026-10-31 又扩到 32 个阶段（药水、分幕死亡率、导出选幕、幕选“全部”导出、战损 T0–T4、中文 scoped CSV），并在隔离实例上用真实存档位 0 的 1122 局只读副本跑通（Windows 隐藏窗口；本机无 WSL，故 `-Headless` 不可用）。上面“停在 Neow shares…”的旧失败记录来自改动前的探针。PR #18 自述的跑通用的是打包了遭遇图的私有构建；维护者接手后去掉打包、恢复完整图片抬头，并在本机用 `-Headless`（WSL Xvfb）静音跑通全部 32 个阶段（2026-10-30，实例 `spire-ledger-dev/pr18-options-05`，存档位 0 选中 625 局，无涅奥未选记录）。
 - 2026-11-01 发布 0.6.0-beta.1 前在发布分支上复跑：`build.ps1 -Check` 全部通过；`StatsDump` 加两条 Python 独立重算（存档位 0，选中 654 局）通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0，存档位 0 选中 625 局）。这个探针的断言写死了中文文案，`-Language ENG` 会在第 2 阶段“the rest-site total is a count”失败，v0.5.0 的探针同样如此，不是界面问题。`integration-stats-ui.ps1` 仍停在上面登记的“merged into six logical runs”。
 - 2026-11-01 接手 PR #20：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和 1920×1080 下 32 个阶段均通过，实际战损导出 20/20 个遭遇由游戏资源画出，生成小鬼群前后两个地牢随机数的计数不变。PR 原版的探针第 28 阶段仍按 6 个卡牌页取 Boss 遗物页，接手时改为第 5 页。
+- 2026-11-02 发布 0.6.0-beta.2 前在发布提交上复跑：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0），实际战损导出 20/20 个遭遇由游戏资源画出。
 
-## 0.6.0-beta.1 改动（先测这一节）
+## 0.6.0-beta.1 与 beta.2 改动（先测这一节）
 
-这一批改动随 0.6.0-beta.1 发布：涅奥/Boss 遗物的独立胜率口径、Boss 遗物按幕分组、非卡牌导出的 S–R00 分档、卡牌标准率把跳过纳入拟合与分档、PNG+CSV 一键导出，实际战损按幕分组和对应的 `hp-loss` 导出，以及所有按幕分组页面的幕下拉和实际战损的回复下拉。2026-10-31 又加入 RunHistoryPlus 优先的药水读取、分幕遭遇死亡率、导出页选幕（幕下拉含“全部”）、实际战损 T0–T4 分档和中文 scoped `csv-v2`。维护者已通过 `build.ps1 -Check` 的离线断言和 32 阶段原生探针；下面的界面项待手测。
+W1–W8 随 0.6.0-beta.1 发布，W9–W16 随 0.6.0-beta.2 发布（PR #20）。beta.1 的改动：涅奥/Boss 遗物的独立胜率口径、Boss 遗物按幕分组、非卡牌导出的 S–R00 分档、卡牌标准率把跳过纳入拟合与分档、PNG+CSV 一键导出，实际战损按幕分组和对应的 `hp-loss` 导出，以及所有按幕分组页面的幕下拉和实际战损的回复下拉。2026-10-31 又加入 RunHistoryPlus 优先的药水读取、分幕遭遇死亡率、导出页选幕（幕下拉含“全部”）、实际战损 T0–T4 分档和中文 scoped `csv-v2`。维护者已通过 `build.ps1 -Check` 的离线断言和 32 阶段原生探针；下面的界面项待手测。
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -36,7 +37,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 | W6 | 打开导出目录 | 同目录多一个 `metrics.csv`（UTF-8 带 BOM，中文 15 列 `表,幕,口径,分档,条目,数值,单位,分子,分母,样本,状态,95%下限,95%上限,含估算,未知不计`），只含本次导出的幕与条目，按幕/口径分表、表间空行。被结果筛选隐藏的数字留空并标“结果筛选隐藏”，胜率行带 Wilson 95% 区间（百分数），界面和图片不给区间。`metadata.json` 有 `csv_version=csv-v2`、`all_acts`、`acts`、`section_tier_version`、`win_captions`、`remarks`（来源、日期、存档位、版本与生成时间），`views` 里可能出现 `win`；标准率和火堆标准化倍的行有数值、没有分子分母和区间，数值与图上一致；选实际战损时 `kind` 为 `hp-loss`。 |
 | W7 | 打开“战斗与资源 → 实际战损”，再进“导出 → 实际战损” | 界面按幕插入“第 N 幕 · 实际战损”，每幕先列该幕每局总战损，再按场均战损降序列出各遭遇。用“回复”下拉切换全部 / 有回复 / 无回复：全部每场只显示一条基础行，另两个视图只显示对应分组，每幕总战损在每个视图都保留，不再混排。第 1–3 幕的“遭遇危险度”按 TinyCat 分档：Boss 单列 T0，其余按场均战损降序切成 T1 极危 / T2 高危 / T3 中危 / T4 低危，同值同档，样本不足单列；事件战与第四幕不分档。导出写 `hp-loss-actN.png`，按幕分节、含 T0–T4 档位行，数值单位是生命，且只含全部对局（不区分有无回复）。在幕下拉里选“全部”后点“导出 PNG+CSV”时写出 `hp-loss-act1.png`–`hp-loss-act4.png`，不生成合并长图，CSV 合并为一表一幕。敌人图片由本机游戏资源画出（W16），jar 不带任何遭遇图。低于最少出现次数的遭遇单列“样本不足”，不进 T1–T4。`remarks` 写明导出范围、图片来源（`image_dir`）和图片来源说明（`image_source`）。 |
 | W8 | 在“卡牌与构筑 → 候选出现与选取 / Boss遗物选择与结果”和“战斗与资源 → 遭遇平均承伤 / 药水使用 / 火堆行动 / 实际战损 / 遭遇死亡率”逐页切换幕下拉 | 每页只显示所选幕的分表，表头为“第 N 幕 · …”；选“全部”恢复各幕。卡牌、承伤、药水、火堆、战损、遭遇死亡率为“全 / 1 / 2 / 3 / 4 幕”；Boss 遗物只有第 1、2 幕，下拉为“全 / 1 / 2”。切换分类或点“重置”时幕筛选回到“全部”。药水页按幕列出总使用次数与各遭遇每场使用，数字来自 RunHistoryPlus 逐层记录，药水总数、每场与分幕能对上；药水没有对应的导出图。 |
-| W9 | “卡牌与构筑 → 候选出现与选取”，选一个有过事件选牌的职业（机器人、铁甲战士均可） | 列表里出现无色牌（神话、纯净、深谋远虑等）和事件/商店来源的牌。抓率分母比 0.6.0-beta.1 大（本机存档位 1 的 406 局：屏数 10261 → 10687，其中 203 屏含无色牌）；涅奥开局选牌算进第 1 幕。CSV 与导出图的条目、分档随样本变化。（2026-11-01 修正，未发布） |
+| W9 | “卡牌与构筑 → 候选出现与选取”，选一个有过事件选牌的职业（机器人、铁甲战士均可） | 列表里出现无色牌（神话、纯净、深谋远虑等）和事件/商店来源的牌。抓率分母比 0.6.0-beta.1 大（本机存档位 1 的 406 局：屏数 10261 → 10687，其中 203 屏含无色牌）；涅奥开局选牌算进第 1 幕。CSV 与导出图的条目、分档随样本变化。（2026-11-01 修正，随 beta.2 发布） |
 | W10 | 打开“战斗与资源 → 商店购买与删除”和“战斗与资源 → 事件选择”，再逐页切换顶部幕下拉 | 两页都先列不带幕号的总计（购买 · 会员卡 162、购买 · 医药箱 132 ……；螺旋走廊 · Max HP 272 ……），随后按“第 N 幕 · 商店购买与删除 / 事件选择”插入各幕，幕内按次数降序；选“第 1 幕”后只剩该幕，总计与其它幕隐藏。切换到分类或点“重置”后幕筛选回到“全部”。两页都没有导出图，导出页也选不到它们。页脚写明按幕只来自原版战绩、构筑记录只进总计。事件页第 1 行中间多一个“口径：次数 / 口径：胜率”下拉：选“次数”只列“事件 · 选项 + 次数”，选“胜率”只列“事件 · 选项 · 所选对局胜率（相关）+ 百分比（胜局/局数）”，两种行不会同时出现；筛选“仅胜”或“仅败”时胜率行显示“—”。（2026-11-01） |
 | W12 | “战斗与资源 → 事件选择”看事件与选项的名字 | 事件名走游戏自带汉化（如“翅膀雕像”“金神像”），选项走内置对照表（如“Card Removal → 移除卡牌”“Lose Max HP → 失去最大生命”）；商店/事件里的金币、药水、卡牌组合写成“金币 金币 药水”。若还有英文残留，页脚会列出“有 N 条事件选项没有中文名：…”，按 `~/.spire-ledger/i18n/event-choices.tsv` 里「英文<TAB>中文」补一行即可。（2026-11-01） |
 | W16 | 打开“个人统计 → 导出 → 实际战损”预览，翻到各幕，再导出一幕；之后在一局进行中（地图界面）打开同一页，返回游戏继续打 | 每个遭遇都显示游戏里的怪物形象，多只怪的遭遇画在一起，“2 只虱虫”和“3 只虱虫”分别画 2 只和 3 只，六火亡魂显示本体；刚打开时可能先空白一两帧再逐个出现。导出的 PNG 同样有图。往 `~/.spire-ledger/monster-images/` 放一张 `Jaw Worm.png` 后重进该页，大颚虫改用这张图。对局中看过此页后，后续战斗的怪物血量和组合不受影响。（2026-11-01 改为游戏资源实时绘制） |
@@ -106,7 +107,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 0.6.0-beta.1 时从 [v0.6.0-beta.1](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.1) 下载 `SpireLedger.jar`；测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 0.6.0-beta.2 时从 [v0.6.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.2) 下载 `SpireLedger.jar`，它也包含 beta.1 的改动；测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。
