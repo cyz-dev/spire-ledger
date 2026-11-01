@@ -138,11 +138,11 @@ final class PickRateChart {
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
         Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
-    /** Images are read from the local game folder or the mod's data folder; nothing is downloaded or bundled. */
+    /** Images are read from local folders only, including an installed TinyCat's; nothing is downloaded or bundled. */
     Map<String,Path> monsterIndex(){
         if(monsterIndex!=null)return monsterIndex;
         monsterIndex=new HashMap<>();List<Path> roots=new ArrayList<>();
-        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images","monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
+        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images","mods/TinyCat/monster-images","monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
         roots.add(StateMod.ROOT.getParent().resolve("monster-images"));
         for(Path root:roots){if(!Files.isDirectory(root))continue;
             try(java.util.stream.Stream<Path> walk=Files.walk(root)){
@@ -151,7 +151,8 @@ final class PickRateChart {
                     String key=normalizeMonster(name.substring(0,dot));if(!key.isEmpty()&&!monsterIndex.containsKey(key))monsterIndex.put(key,path);});
             }catch(Exception ignored){}}
         return monsterIndex;}
-    static String normalizeMonster(String value){return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");}
+    /** TinyCat names its files with a leading count ("2 Fungi Beasts.png"), so that prefix is dropped before matching. */
+    static String normalizeMonster(String value){return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("^\\d+\\s*","").replaceAll("[^a-z0-9]","");}
     void dispose(){for(Texture texture:monsterTextures.values())if(texture!=null)texture.dispose();monsterTextures.clear();monsterIndex=null;}
     void image(SpriteBatch sb,Item item,float x,float y,float size){if(item.card!=null&&!item.card.isEmpty())portrait(sb,item.card,x,y,size);else if(item.relic!=null&&!item.relic.isEmpty())relic(sb,item.relic,x,y,size);else if(item.monster!=null&&!item.monster.isEmpty())monster(sb,item.monster,x,y,size);else blank(sb,x,y,size,size);}
     void drawRow(SpriteBatch sb,List<PickTiers.Entry> row,float x,float top,float width,float height,int view,List<PickTiers.Entry> source){
