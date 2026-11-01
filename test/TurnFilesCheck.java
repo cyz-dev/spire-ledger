@@ -29,5 +29,11 @@ JsonObject board=new JsonParser().parse("{\"hp\":30,\"deck\":[{\"uuid\":\"a\",\"
   long stored;try(java.util.stream.Stream<Path> list=Files.list(dedupe.resolve("replay").resolve("turns"))){stored=list.count();}
   check(stored==1,"two identical points leave one file on disk: "+stored);
   check(TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST).getAsJsonArray("snapshots").size()==2,"both attempts stay in the manifest");
+String[] allowed={"basemod|5.56.0","RunHistoryPlus|1.8.3","superfastmode|1.0.8","stslib|2.12.0","spire-ledger|0.6.0-beta.1","HideInfo|0.0.1","lolifontmod|0.2","CardImageReplacer|2.0"};
+  JsonArray combination=new JsonArray();
+  for(String pair:allowed){String[] parts=pair.split("\\|");JsonObject mod=new JsonObject();mod.addProperty("id",parts[0]);mod.addProperty("version",parts[1]);combination.add(mod);}
+  check(ReplayEnvironment.accepts(combination),"the installed combination with CardImageReplacer stays inside the whitelist");
+  combination.get(combination.size()-1).getAsJsonObject().addProperty("version","2.1");
+  check(!ReplayEnvironment.accepts(combination),"an unreviewed build of the same mod is still rejected");
 System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures, one copy per board");}
 }

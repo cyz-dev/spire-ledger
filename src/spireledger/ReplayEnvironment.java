@@ -19,6 +19,8 @@ final class ReplayEnvironment {
         mods.put("HideInfo","0.0.1");
         mods.put("justclick","0.1.1");
         mods.put("lolifontmod","0.2");
+        // Card art and font replacers change no combat state and draw nothing the capture reads.
+        mods.put("CardImageReplacer","2.0");
         OPTIONAL=Collections.unmodifiableMap(mods);
     }
     static boolean accepts(JsonArray mods) {
