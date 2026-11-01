@@ -35,7 +35,7 @@ Copy-Item "$PSScriptRoot\viewer\review.html" $classes
 & jar cf "$out\SpireLedger.jar" -C $classes .
 if($LASTEXITCODE -ne 0){throw 'jar failed'}
 # Encounter art must never enter the release jar: the monster images belong to Mega Crit, and this repo is public (docs/issues/2026-11-01-monster-images.md).
-# Players keep their own art in ~/.spire-ledger/monster-images or mods/SpireLedger/monster-images; the jar only reads those folders at runtime.
+# Encounter art is drawn at runtime from the player's own game files (EncounterArt); override pictures live in ~/.spire-ledger/monster-images.
 $shipped=@(& jar tf "$out\SpireLedger.jar" | Where-Object {$_ -match '(^|/)monster-images/' -or $_ -match '\.(png|jpe?g)$'})
 if($shipped.Count -gt 0){throw "The jar must not ship images or a monster-images folder: $($shipped -join ', '). Keep encounter art in ~/.spire-ledger/monster-images instead of src/; see docs/issues/2026-11-01-monster-images.md"}
 if($Check){
