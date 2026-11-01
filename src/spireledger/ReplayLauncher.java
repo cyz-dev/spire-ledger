@@ -407,7 +407,7 @@ final class ReplayLauncher {
                 TurnAdapter.restore(targetSnapshot);
                 practiceInitialized = true;
                 System.out.println("[Spire Ledger] Practice snapshot successfully restored: " + practiceTargetSnapshotId);
-                JsonObject receipt=new JsonObject();receipt.addProperty("status","ready");receipt.addProperty("run_id",practiceTargetRunId);receipt.addProperty("snapshot_id",practiceTargetSnapshotId);receipt.addProperty("interactive",TurnAdapter.stable());
+                JsonObject receipt=new JsonObject();receipt.addProperty("status","ready");receipt.addProperty("run_id",practiceTargetRunId);receipt.addProperty("snapshot_id",practiceTargetSnapshotId);receipt.addProperty("interactive",!HistoryScreen.active()&&TurnAdapter.restoreReady());
                 Files.write(Paths.get("practice-startup.json"),receipt.toString().getBytes(StandardCharsets.UTF_8));
             }
         } catch (Exception ex) {

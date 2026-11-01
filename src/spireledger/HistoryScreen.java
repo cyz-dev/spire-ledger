@@ -317,12 +317,15 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         }
         if(!availableTurns.isEmpty()){
             List<String> turnLabels=new ArrayList<>();
-            for(JsonObject pt:availableTurns)turnLabels.add(tr("第 ","Turn ")+HistoryIndex.num(pt,"turn",1)+tr(" 回合",""));
+            for(JsonObject pt:availableTurns){int turn=HistoryIndex.num(pt,"turn",1),played=HistoryIndex.num(pt,"played",0);
+                turnLabels.add(tr("第 ","Turn ")+turn+tr(" 回合","")+(played>0?tr(" · 已出 "," · ")+played+tr(" 张"," played"):tr(" · 回合起点"," · turn start")));}
             turnMenu=dropdown(turnLabels.toArray(new String[0]));
             if(turnSelection>=availableTurns.size())turnSelection=0;
             turnMenu.setSelectedIndex(turnSelection);
             boolean canCurrent=ReplayLauncher.canReplayCurrent(availableTurns.get(turnSelection));
+            JsonObject picked=availableTurns.get(turnSelection);
             add(tr("回合重打：已就绪（","Turn practice: ready (")+availableTurns.size()+tr(" 个回合点）· "," snapshots) · ")+(canCurrent?tr("当前战斗可直接重打","in-combat restart"):tr("退出局可启动独立练习","launch isolated practice")),Tone.GOOD);
+            if(HistoryIndex.num(picked,"played",0)>0)add(tr("这份快照取自本回合已经打出 ","This checkpoint was captured after ")+HistoryIndex.num(picked,"played",0)+tr(" 张牌之后；重打从那一刻继续，不回到回合开始。"," cards were played this turn, so practice resumes from that point rather than the turn start."),Tone.MUTED);
         }else{
             add(turnUnavailableText(selectedFloor),manifest==null||restoreAllowed?Tone.MUTED:Tone.WARN);
             turnMenu=null;

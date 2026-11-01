@@ -35,7 +35,7 @@ final class TurnRecorder {
     static void battle(){if(restoringCombat)restoringCombat=false;else combatId=UUID.randomUUID().toString();lastKey="";}
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
-        if(!enabled||failed||!StateMod.ready()||!TurnAdapter.stable())return;
+        if(!enabled||failed||!StateMod.ready()||!HistoryScreen.active()||!TurnAdapter.capturable())return;
         try{
             StateMod.ensure();if(combatId.isEmpty())return;
             if(owner!=StateMod.recorder){
@@ -53,8 +53,12 @@ final class TurnRecorder {
             JsonObject entry=new JsonObject();entry.addProperty("branch_id",owner.branch);entry.addProperty("combat_id",combatId);entry.addProperty("floor",AbstractDungeon.floorNum);entry.addProperty("turn",GameActionManager.turn);entry.addProperty("phase","player_turn_ready");entry.addProperty("captured_at",System.currentTimeMillis());
             long checkpointStart=System.nanoTime();JsonObject snapshot=null;
             if(!compatible()){entry.addProperty("availability","unsupported");entry.addProperty("reason","unverified_mod_versions_or_combination");}
-            else if(!AbstractDungeon.actionManager.cardsPlayedThisTurn.isEmpty()||GameActionManager.damageReceivedThisTurn!=0||GameActionManager.totalDiscardedThisTurn!=0){entry.addProperty("availability","missing");entry.addProperty("reason","first_action_or_opening_discard_already_observed");}
-            else {long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);entry.addProperty("reason","player_turn_ready");}
+            else{
+                // A turn is captured whether or not cards were played: the played count tells a clean turn start from a mid-turn point.
+                int played=AbstractDungeon.actionManager.cardsPlayedThisTurn.size();entry.addProperty("played",played);
+                long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);
+                entry.addProperty("reason",played==0?"player_turn_ready":"mid_turn_after_"+played+"_cards");
+            }
             JsonObject ref=files.publish(entry,snapshot);lastKey=key;if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);status="recorded".equals(Recorder.string(ref,"availability"))?"Turn saved; practice ready":"Turn unavailable: "+Recorder.string(ref,"reason");
         }catch(Exception ex){DiagnosticReport.error("turn_recording",ex);failed=true;status="Turn recording stopped: "+ex.getClass().getSimpleName();System.err.println("[Spire Ledger] "+status);ex.printStackTrace();}
     }

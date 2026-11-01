@@ -37,7 +37,17 @@ final class TurnAdapter {
     static final String[] COUNTERS={"damageReceivedThisTurn","damageReceivedThisCombat","hpLossThisCombat","playerHpLastTurn","energyGainedThisCombat"};
     static final Set<String> COSMETICS=new HashSet<>(Arrays.asList("com.megacrit.cardcrawl.vfx.stance.StanceAuraEffect","com.megacrit.cardcrawl.vfx.stance.CalmParticleEffect","com.megacrit.cardcrawl.vfx.stance.WrathParticleEffect","com.megacrit.cardcrawl.vfx.stance.DivinityParticleEffect","com.megacrit.cardcrawl.vfx.combat.DarkOrbPassiveEffect","com.megacrit.cardcrawl.vfx.combat.LightningOrbPassiveEffect","com.megacrit.cardcrawl.vfx.combat.FrostOrbPassiveEffect","com.megacrit.cardcrawl.vfx.combat.PlasmaOrbPassiveEffect"));
     static boolean effects(List<AbstractGameEffect> effects){List<AbstractGameEffect> rest=new ArrayList<>();for(AbstractGameEffect e:effects)if(!COSMETICS.contains(e.getClass().getName()))rest.add(e);return Snapshot.blockingEffects(rest);}
-    static boolean stable(){return !HistoryScreen.active()&&restoreReady();}
+    /**
+     * Capture needs a settled player turn, not a restorable one: no screen, nothing queued and nothing running.
+     * The restore-only conditions (turn phase, end-turn button, empty effect queues) are transient at the start of a
+     * turn and pushed every capture past the player's first card (architecture, 2026-11-01).
+     */
+    static boolean capturable(){
+        if(!StateMod.ready())return false;
+        GameActionManager a=AbstractDungeon.actionManager;
+        if(a==null||AbstractDungeon.getCurrRoom()==null||AbstractDungeon.getCurrRoom().phase!=AbstractRoom.RoomPhase.COMBAT)return false;
+        return !AbstractDungeon.isScreenUp&&a.cardQueue.isEmpty()&&a.actions.isEmpty()&&a.preTurnActions.isEmpty()&&a.currentAction==null&&!a.turnHasEnded&&!AbstractDungeon.player.isEndingTurn;
+    }
     static boolean restoreReady(){if(!StateMod.ready())return false;GameActionManager a=AbstractDungeon.actionManager;return a!=null&&AbstractDungeon.getCurrRoom().phase==AbstractRoom.RoomPhase.COMBAT&&!AbstractDungeon.isScreenUp&&a.currentAction==null&&a.turnStartCurrentAction==null&&a.actions.isEmpty()&&a.preTurnActions.isEmpty()&&a.cardQueue.isEmpty()&&a.monsterQueue.isEmpty()&&!a.turnHasEnded&&!AbstractDungeon.player.isEndingTurn&&!effects(AbstractDungeon.effectList)&&!effects(AbstractDungeon.topLevelEffects)&&!effects(AbstractDungeon.effectsQueue)&&!effects(AbstractDungeon.topLevelEffectsQueue)&&a.phase==GameActionManager.Phase.WAITING_ON_USER&&AbstractDungeon.overlayMenu.endTurnButton.enabled;}
     static Object call(Object target,String method,Class<?>[] types,Object... args)throws Exception{return (target instanceof Class?(Class<?>)target:target.getClass()).getMethod(method,types).invoke(target instanceof Class?null:target,args);}
     static Class<?> saver()throws ClassNotFoundException{return Class.forName("savestate.SaveState");}
