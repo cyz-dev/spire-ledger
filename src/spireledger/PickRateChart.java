@@ -138,12 +138,24 @@ final class PickRateChart {
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
         Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
-    /** Images are read from local folders only, including an installed TinyCat's; nothing is downloaded or bundled. */
+    /** The player's own image folder. No other mod's folder is read, so nothing here depends on TinyCat being installed. */
+    static Path imageDir(){return StateMod.ROOT.getParent().resolve("monster-images");}
+    /** Creating the folder empty is the hint: blank tiles otherwise give no clue where the art is meant to come from. */
+    static Path ensureImageDir(){
+        Path dir=imageDir();
+        try{Files.createDirectories(dir);Path note=dir.resolve("README.txt");
+            if(!Files.exists(note))Files.write(note,(tr("把遭遇图放进这个文件夹，文件名用遭遇名即可，例如 Gremlin Nob.png。\n","Put encounter art in this folder; the file name is the encounter name, e.g. Gremlin Nob.png.\n")
+                +tr("只认 png / jpg，忽略大小写、空格、标点，以及文件名开头的人数（2 Fungi Beasts 也能对上）。\n","png / jpg only; case, spaces, punctuation, and a leading enemy count are ignored (2 Fungi Beasts matches).\n")
+                +tr("子文件夹会被递归读取。缺图的遭遇显示空白卡框，统计数字不受影响。\n","Subfolders are read too. Encounters without art show a blank frame; the numbers are unaffected.\n")
+                +tr("本 Mod 不打包、不下载任何游戏美术资源。\n","This mod bundles and downloads no game art.\n")).getBytes(StandardCharsets.UTF_8));
+        }catch(Exception ignored){}
+        return dir;}
+    /** Images come only from the mod's own folder and the player's folder; nothing is downloaded, bundled, or borrowed from another mod. */
     Map<String,Path> monsterIndex(){
         if(monsterIndex!=null)return monsterIndex;
         monsterIndex=new HashMap<>();List<Path> roots=new ArrayList<>();
-        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images","mods/TinyCat/monster-images","monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
-        roots.add(StateMod.ROOT.getParent().resolve("monster-images"));
+        roots.add(ensureImageDir());
+        for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
         for(Path root:roots){if(!Files.isDirectory(root))continue;
             try(java.util.stream.Stream<Path> walk=Files.walk(root)){
                 walk.filter(Files::isRegularFile).sorted().forEach(path->{String name=path.getFileName().toString();int dot=name.lastIndexOf('.');if(dot<=0)return;
@@ -151,8 +163,10 @@ final class PickRateChart {
                     String key=normalizeMonster(name.substring(0,dot));if(!key.isEmpty()&&!monsterIndex.containsKey(key))monsterIndex.put(key,path);});
             }catch(Exception ignored){}}
         return monsterIndex;}
-    /** TinyCat names its files with a leading count ("2 Fungi Beasts.png"), so that prefix is dropped before matching. */
+    /** The file name is the encounter name; a leading enemy count ("2 Fungi Beasts") is tolerated but never required. */
     static String normalizeMonster(String value){return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("^\\d+\\s*","").replaceAll("[^a-z0-9]","");}
+    /** True when the player has at least one encounter image, which decides whether the blank-frame hint is worth showing. */
+    boolean hasMonsterArt(){return !monsterIndex().isEmpty();}
     void dispose(){for(Texture texture:monsterTextures.values())if(texture!=null)texture.dispose();monsterTextures.clear();monsterIndex=null;}
     void image(SpriteBatch sb,Item item,float x,float y,float size){if(item.card!=null&&!item.card.isEmpty())portrait(sb,item.card,x,y,size);else if(item.relic!=null&&!item.relic.isEmpty())relic(sb,item.relic,x,y,size);else if(item.monster!=null&&!item.monster.isEmpty())monster(sb,item.monster,x,y,size);else blank(sb,x,y,size,size);}
     void drawRow(SpriteBatch sb,List<PickTiers.Entry> row,float x,float top,float width,float height,int view,List<PickTiers.Entry> source){
@@ -188,6 +202,7 @@ final class PickRateChart {
         if(kind==0)renderCards(sb,top);else renderSections(sb,top);
         String footer=message.isEmpty()?tr("滚轮翻页 · ","Scroll · ")+(kind==0?(rows.isEmpty()?0:offset+1)+"–"+Math.min(rows.size(),offset+visible(top))+" / "+rows.size()+tr(" 行"," rows"):(listLines.isEmpty()?0:offset+1)+"–"+Math.min(listLines.size(),offset+visibleList(top))+" / "+listLines.size()+tr(" 行"," rows")):message;
         text(sb,footer,Settings.WIDTH*.22f,Settings.HEIGHT*.19f,Settings.WIDTH*.71f,21*Settings.scale,HistoryScreen.MUTED);
+        if(kind==4&&!hasMonsterArt())text(sb,tr("遭遇图：把 png 放进 ~/.spire-ledger/monster-images/（文件夹已建好，缺图留白）","Encounter art: drop png files into ~/.spire-ledger/monster-images/ (folder already created; blank when absent)"),Settings.WIDTH*.22f,Settings.HEIGHT*.19f+26*Settings.scale,Settings.WIDTH*.71f,18*Settings.scale,Settings.GOLD_COLOR);
         if(exportRequested){exportRequested=false;try{export(sb);message=(message.isEmpty()?tr("图片与 CSV 已保存：","Saved images and CSV: "):message)+lastExport;}catch(Exception e){message=tr("导出失败：","Export failed: ")+e.getClass().getSimpleName();DiagnosticReport.error("pick_rate_export",e);}}
     }
     void renderCards(SpriteBatch sb,float top){
@@ -414,7 +429,9 @@ final class PickRateChart {
         Metric excluded=screen.metrics.get("reward_automation_excluded");out.addProperty("known_automation_excluded",excluded==null?0:(long)excluded.numerator);out.addProperty("solver_used",solverUsed());
         out.add("versions",new Gson().toJsonTree(versions().split(" · ")));out.addProperty("generated_at",new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));
         if(kind==4){out.addProperty("export_scope",tr("图片与 CSV 只含当前选择的幕；幕选“全部”时每幕单独成图，CSV 一表一幕。","Images and CSV cover the selected act; with All, each act gets its own image and CSV table."));
-            out.addProperty("image_source",tr("只读玩家本地 monster-images 目录的图片，缺失留白，不打包、不下载。","Only images in the player's local monster-images folder; blank when absent, nothing bundled or downloaded."));}
+            out.addProperty("image_dir","~/.spire-ledger/monster-images");
+            out.addProperty("image_source",tr("只读玩家自己的 monster-images 目录（以及本 Mod 目录下的同名文件夹），缺失留白，不打包、不下载、不读其他 Mod 的图。","Only the player's own monster-images folder (and the same folder inside this mod); blank when absent, nothing bundled, downloaded, or read from another mod."));
+            if(!hasMonsterArt())out.addProperty("image_missing",tr("没有找到任何遭遇图：空文件夹已建好，放入 png 后重新打开本页即可。","No encounter art found: the empty folder is created; add png files and reopen this page."));}
         if(kind==2||kind==3)out.addProperty("interval_note",tr("界面不显示区间；CSV 的 95% 下限/上限给出 Wilson 区间作提示。","No interval in the image; the CSV's 95% bounds hold the Wilson interval as a hint."));
         return out;
     }
