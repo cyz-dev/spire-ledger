@@ -187,6 +187,37 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 **为什么不是“给下拉加滚动”。** `DropdownMenu` 是游戏自带的类，没有滚动逻辑也没有裁剪；自己画滚动条等于重写一个控件，而且鼠标滚轮已经用于楼层详情滚动，两处会抢事件。分页条用固定数量的格子，交互是“点”，不和滚轮冲突。
 
+### 复盘底部栏：回合在左、第几次在右（2026-11-03）
+
+第一版把“尝试”下拉塞在左侧详情列表的下面，和“关闭账本”按钮挤在同一条竖直线上，右侧留出一大片空；回合条从中线开始，左边孤零零一个下拉，读不出“这条控制属于这一层”的关系。现在底部是一条统一控制带（`y≈0.150–0.178`）：左端是“回合”标签加分页回合条，右端是“第 N 次”尝试控件，两者之间用一条竖分隔线断开；状态行（“已保存 N 个回合……”）落到控制带下方的 `y≈0.116`，不再和格子抢同一行。控件间距按 `Settings.WIDTH` 的比例算，1280 与 1920 下相对位置一致。
+
+尝试数只有 2–5 个，属于“选项少、且是按顺序编号”的场景，所以**不用下拉**：右边是 `‹ 第 1 / 共 3 次 ›` 的步进控件，左右各一个热区，一次点击换一次尝试，选中的尝试立刻反映在“重打此回合/练习此回合”的目标上。下拉仍由 `makeLines()` 构造成 `attemptMenu`，但只在原始事件（raw）视图里出现，复盘视图不再画它——两套控件同时存在会让同一次点击命中两个热区。
+
+### 练习实例的血条停在 pop-in 中途（2026-11-03）
+
+练习窗口里玩家血条压在腿上、`39/73` 的 `7` 被角色挡住（截图对比正常游戏：血条整条在脚下）。原因不在坐标缩放：`AbstractCreature.renderHealth()` 用 `hb.y + hbYOffset` 定位血条，而 `hbYOffset` 只在 `updateHbPopInAnimation()` 里、且仅当 `hbShowTimer > 0` 时更新，从构造函数里的初值 `HB_Y_OFFSET_DIST*5`（1080 下 60 px）插值到 0。练习实例是先 `recreateCharacter` 再恢复，`showHealthBar()` 的 pop-in 从没跑完，`hbShowTimer` 一直是 0，于是血条永远停在“高出 60 px”的入场位置；`hbAlpha` 同样被快照里的 0 覆盖，只靠 `updateHbAlpha()` 每帧拉回 1，所以血条可见但位置错。
+
+**修法。** `TurnAdapter.readyAfterRestore()` 末尾对玩家和场上每只怪物调用 `settle(c)`：把 `hbShowTimer`、`hbYOffset` 归零，`hbAlpha`、`healthHideTimer` 置 1。恢复出来的棋盘是“已经打完这一回合”的静止状态，血条本来就该在终点位置，不该再播一次入场动画。探针 `checkRestoredBoard()` 直接读私有字段断言 `|hbYOffset| < 0.001`，并核对玩家/怪物血条中心与 `hb` 底边的距离一致。
+
+### 练习实例继承玩家的语言与录制时 Mod（2026-11-03）
+
+练习子进程是全新进程、全新 `home`/`preferences` 目录，第一版用引擎默认值打开：英文文案、默认音量、无加速，且只加载 BaseMod + StSLib + SpireLedger 三个 mod。玩家自己的游戏是中文、开了快速模式、装了别的 mod，练习窗口却和它不一样。
+
+- **语言与音量**：`copyPlayerSettings()` 把主游戏 `STSGameplaySettings`（含 `"LANGUAGE":"ZHS"`）和 `STSSound` 复制进练习实例的 `preferences/` 与 `betaPreferences/` 两处（游戏 `SaveHelper.getSaveDir()` 按 `Settings.isBeta` 二选一，两处都写最稳）。存读取玩家当前的存档位前缀：存档位 0 用无前缀文件，其余用 `<槽位>_` 前缀，找不到对应槽位时回退到最新修改的那份。
+- **录制时 Mod**：`copyRecordedMods()` 读该局 manifest 的 `mods` 列表，把录制时加载过的 jar（除 BaseMod/StSLib/SpireLedger 自身）逐个复制进练习实例，并按同样的顺序加进 `--mods`。这是**正确性必需**：快照只有在相同 mod 加载时才还原得出来，而 manifest 里的组合已经过白名单校验。测试夹具的探针 mod（`spire-ledger-*` 前缀）永不跟 manifest 进入真实练习窗口。
+
+**注意边界**：这里复制的是「录制这一局时用过的 mod」，不是「玩家此刻装的全部 mod」。后者是另一个体验增强，但任意引入录制时没有的 mod 会改变运行环境、可能让恢复失败，因此单独记为 issue（见 2026-11-03-practice-mod-set）。
+
+### S/L 世界线的去重与上限（2026-11-03）
+
+分支树保留“同一状态、不同动作、不同结果”的配对样本，这是训练数据，不能删；但一场 BOSS 战反复 S/L 会把点数推得很快（单点约 155 KB）。三层上限，优先级从内到外：
+
+1. **同板合并**：内容哈希相同（`SnapshotShape.body()`）不再写第二个 blob，manifest 里也不再新增一条点，只把已有那一点的 `attempts` 加一、更新 `last_seen_at`。以前的做法是“不写字节但仍加一条 `duplicate` 点”，一局 6 次同样的 S/L 就多出 6 条 manifest 记录，`MAX_POINTS` 也被这些点吃掉。
+2. **每回合尝试上限**：同一 `(floor, combat, turn)` 最多保留 `turnAttemptCap`（默认 8）份**不同**的板。超了之后淘汰该回合最老的那份、保留第一份（回合起点基线）和最近的若干份；界面显示“第 N 次 / 共 M 次”，被淘汰的点标 `evicted` 并保留计数，样本分布不丢。
+3. **单局预算**：`BUDGET_BYTES`（默认 512 MB，`-Dspireledger.turnBudgetMb` 可调）超了从最老的分支开始回收，正在写的分支不动。`MAX_POINTS` 仍是硬上限，到顶后拒绝新点而不是静默丢数据。
+
+人类复盘只关心“有几次尝试、哪次重打”，所以界面把同一块的重复次数折叠成一行（`duplicate` 已不占点，`attempts > 1` 时在标签后写“×N”）；机器学习侧照旧从 manifest + blob 取全部分支，按 `attempts` 还能知道哪块板被反复读到。
+
 ### 四行导出抬头与求解器标记（2026-10-31）
 
 `PickRateChart.captions()` 固定 4 行：`head()` 2 行（职业、进阶、结果、胜负口径、放弃开关；选中局数与胜率、最少出现次数）与 `rule()` 2 行（本图口径、分档说明），不再拼 `versions()` 与导出时间。日期范围、存档位、标准模式、种子局、来源与 SL 路径、未知操作来源计数、排除的已知自动化局数、口径版本和导出时间由 `remarks()` 按字段写进 `metadata.json`；实际战损另记导出范围与图片来源，涅奥与 Boss 遗物另记区间说明。抬头行数 4 与每行 60 个汉字的上限由原生探针 `StatsOptionsProbe` 断言行数与每行长度（它跑在真实游戏里，能直接读 `captions`），新增字段先过 metrics.md 第 8 节的“图片必需”表，放不下就进 `remarks`。`ascensionLabel()` 在筛选为“全部”时按选中局写出实际范围（如“全部（实际 A20）”）。胜率取 `win` 指标的分子分母，与界面一致。标题由 `solverMark()` 追加“ · 含求解器”：`Run.automation` 是 `Ledger` 在任一确认决策的 `action_source=known_automation` 时写下的 `Fact`，未关联的原版 `.run` 不写该事实，因此不会误标。
