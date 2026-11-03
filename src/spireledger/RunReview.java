@@ -23,8 +23,11 @@ final class RunReview {
     static final int TURN_PER_PAGE=10;
     final Hitbox[] turnChips=new Hitbox[TURN_PER_PAGE];
     final Hitbox turnPrev=new Hitbox(1,1),turnNext=new Hitbox(1,1);
+    /** Attempts are ordinal and few, so the right end of the band steps through them instead of opening a menu. */
+    final Hitbox attemptPrev=new Hitbox(1,1),attemptNext=new Hitbox(1,1);
     int turnPage,lastTurnSelection=-1;
     static final Color PANEL=new Color(.09f,.12f,.16f,1),GOLD=new Color(.91f,.75f,.38f,1),MUTED=HistoryScreen.MUTED;
+    static final Color BAND=new Color(.06f,.078f,.105f,.92f),EDGE=new Color(.28f,.26f,.19f,1);
     RunReview(HistoryScreen host){this.host=host;for(int i=0;i<TURN_PER_PAGE;i++)turnChips[i]=new Hitbox(1,1);}
     void reset(){model=null;document=null;branch=-1;hover=-1;scroll=0;pinned=false;showDeck=false;}
     static String tr(String cn,String en){return HistoryScreen.tr(cn,en);}
@@ -53,8 +56,6 @@ final class RunReview {
     void choose(int i){host.message="";int number=model.floors.get(i).number;int position=host.floorOrder.indexOf(number);if(position>=0){host.floorIndex=position;host.focusFloor();host.makeLines();}scroll=0;}
     void update(){
         sync();if(model==null)return;
-        if(pinned&&host.turnMenu!=null){host.turnMenu.update();if(host.turnMenu.isOpen)return;}
-        if(pinned&&host.attemptMenu!=null){host.attemptMenu.update();if(host.attemptMenu.isOpen)return;}
         int over=-1;
         for(int i=0;i<nodes.size();i++){Hitbox node=nodes.get(i);boolean clicked=host.click(node);if(node.hovered)over=i;if(clicked){pinned=true;showDeck=false;choose(i);}}
         if(over!=hover){hover=over;if(!pinned){scroll=0;if(over>=0)choose(over);}}
@@ -72,6 +73,9 @@ final class RunReview {
             }
             if(pages()>1&&host.click(turnPrev)){turnPage=Math.max(0,turnPage-1);return;}
             if(pages()>1&&host.click(turnNext)){turnPage=Math.min(pages()-1,turnPage+1);return;}
+            layoutAttempts();
+            if(host.click(attemptPrev)){host.selectAttempt(host.attemptSelection-1);return;}
+            if(host.click(attemptNext)){host.selectAttempt(host.attemptSelection+1);return;}
         }
         if(InputHelper.scrolledDown)scroll++;if(InputHelper.scrolledUp)scroll--;scroll=Math.max(0,Math.min(maxScroll(),scroll));
         List<Hitbox> controls=new ArrayList<>(nodes);if(pinned)controls.addAll(Arrays.asList(overview,choiceTab,deckTab));controls.addAll(Arrays.asList(host.prev,host.next,host.diagnostics,host.latestTab,host.historyTab,host.home,back));if(pinned&&!host.availableTurns.isEmpty())controls.add(host.replayButton);host.controller(controls);
@@ -100,12 +104,11 @@ final class RunReview {
         rect(sb,.055f,.425f,.89f,.002f,new Color(.3f,.28f,.2f,1));
         if(focus<0)renderOverview(sb,model.finalState);
         else renderFloor(sb,model.floors.get(focus));
-        if(!host.message.isEmpty())text(sb,host.fit(host.message,w(.74f)),.20f,.115f,Color.SALMON);
+        if(!host.message.isEmpty())text(sb,host.fit(host.message,w(.70f)),.234f,.120f,Color.SALMON);
         host.button(sb,back,tr("关闭账本","Close"));host.button(sb,host.prev,tr("上一层","Previous"));host.button(sb,host.next,tr("下一层","Next"));host.button(sb,host.diagnostics,tr("详细记录","Details"));
         if(pinned&&!host.availableTurns.isEmpty()){
             host.button(sb,host.replayButton,ReplayLauncher.canReplayCurrent(host.availableTurns.get(host.turnSelection))?tr("重打此回合","Restart turn"):tr("练习此回合","Practice turn"));
             renderTurns(sb);
-            if(host.attemptMenu!=null)host.attemptMenu.render(sb,w(.06f),h(.150f));
         }
     }
     int pages(){return Math.max(1,(host.availableTurns.size()+TURN_PER_PAGE-1)/TURN_PER_PAGE);}
@@ -115,24 +118,37 @@ final class RunReview {
         if(host.turnSelection!=lastTurnSelection){turnPage=host.turnSelection/TURN_PER_PAGE;lastTurnSelection=host.turnSelection;}
         turnPage=Math.max(0,Math.min(pages-1,turnPage));
         // Hitbox.move takes the centre, so every coordinate here is converted from the left/top edge first.
-        float top=h(.150f),height=h(.028f),left=w(.266f),right=w(.80f),gap=w(.004f);
+        float top=h(.152f),height=h(.026f),left=w(.290f),right=w(.588f),gap=w(.004f);
         float width=(right-left-gap*(TURN_PER_PAGE-1))/TURN_PER_PAGE;
         for(int i=0;i<TURN_PER_PAGE;i++){
             Hitbox chip=turnChips[i];
             if(turnPage*TURN_PER_PAGE+i>=host.availableTurns.size()){chip.resize(1,1);chip.move(-10000f,-10000f);continue;}
             chip.resize(width,height);chip.move(left+i*(width+gap)+width/2f,top+height/2f);
         }
-        turnPrev.resize(w(.022f),height);turnPrev.move(w(.238f)+w(.011f),top+height/2f);
-        turnNext.resize(w(.022f),height);turnNext.move(w(.806f)+w(.011f),top+height/2f);
+        turnPrev.resize(w(.020f),height);turnPrev.move(w(.262f)+w(.010f),top+height/2f);
+        turnNext.resize(w(.020f),height);turnNext.move(w(.592f)+w(.010f),top+height/2f);
     }
+    /** The attempt stepper lives at the right end of the band, where the eye looks for "which try am I on". */
+    void layoutAttempts(){
+        float centre=h(.152f)+h(.013f);
+        attemptPrev.resize(w(.022f),h(.026f));attemptPrev.move(w(.726f)+w(.011f),centre);
+        attemptNext.resize(w(.022f),h(.026f));attemptNext.move(w(.892f)+w(.011f),centre);
+    }
+    /** Newest first, so "第 1 次" is the earliest try and the stepper walks forward in time to the right. */
+    List<JsonObject> attemptsHere(){
+        if(host.availableTurns.isEmpty())return null;
+        JsonObject head=host.availableTurns.get(Math.min(Math.max(host.turnSelection,0),host.availableTurns.size()-1));
+        return host.turnAttempts.get(HistoryIndex.num(head,"turn",1));
+    }
+    int attemptCount(){List<JsonObject> list=attemptsHere();return list==null?0:list.size();}
     void renderTurns(SpriteBatch sb){
         layoutTurns();int n=host.availableTurns.size(),pages=pages();
-        rect(sb,.232f,.150f,.001f,.028f,new Color(.3f,.28f,.2f,1));
+        rect(sb,.228f,.146f,.716f,.036f,BAND);
+        rect(sb,.228f,.146f,.716f,.0016f,EDGE);
+        FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,tr("回合","Turn"),w(.245f),h(.165f),MUTED);
         if(pages>1){
-            host.box(sb,turnPrev,turnPrev.hovered?new Color(.22f,.27f,.32f,1):new Color(.12f,.16f,.20f,1));
-            host.box(sb,turnNext,turnNext.hovered?new Color(.22f,.27f,.32f,1):new Color(.12f,.16f,.20f,1));
-            FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,"<",turnPrev.cX,turnPrev.cY,Settings.CREAM_COLOR);
-            FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,">",turnNext.cX,turnNext.cY,Settings.CREAM_COLOR);
+            arrow(sb,turnPrev,"<");
+            arrow(sb,turnNext,">");
         }
         for(int i=0;i<TURN_PER_PAGE;i++){
             int index=turnPage*TURN_PER_PAGE+i;if(index>=n)continue;
@@ -141,10 +157,39 @@ final class RunReview {
             host.box(sb,chip,selected?new Color(.30f,.26f,.14f,1):chip.hovered?new Color(.20f,.24f,.29f,1):new Color(.10f,.13f,.17f,1));
             FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,String.valueOf(HistoryIndex.num(point,"turn",1)),chip.cX,chip.cY,selected?GOLD:Settings.CREAM_COLOR);
             List<JsonObject> attempts=host.turnAttempts.get(HistoryIndex.num(point,"turn",1));
-            // A dot marks a turn that was attempted more than once, so the strip still shows where the S/L pairs are.
-            if(attempts!=null&&attempts.size()>1){sb.setColor(GOLD);sb.draw(ImageMaster.WHITE_SQUARE_IMG,chip.cX+w(.004f),chip.y+h(.004f),w(.003f),h(.004f));sb.setColor(Color.WHITE);}
+            // A gold underline marks a turn tried more than once, so the strip still shows where the S/L pairs are.
+            if(attempts!=null&&attempts.size()>1){sb.setColor(GOLD);sb.draw(ImageMaster.WHITE_SQUARE_IMG,chip.x+chip.width*.22f,chip.y+h(.0028f),chip.width*.56f,h(.0032f));sb.setColor(Color.WHITE);}
         }
-        if(pages>1)FontHelper.renderFontLeftTopAligned(sb,FontHelper.cardDescFont_N,(turnPage+1)+"/"+pages,w(.834f),turnNext.cY+h(.008f),MUTED);
+        if(pages>1)FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,(turnPage+1)+"/"+pages,w(.616f)+host.measure(FontHelper.cardDescFont_N,(turnPage+1)+"/"+pages,1f)/2f,h(.165f),MUTED);
+        renderBandStatus(sb);
+        renderAttempts(sb);
+    }
+    /** The saved-turn status rides in the empty middle of the band instead of a second, floating line. */
+    void renderBandStatus(SpriteBatch sb){
+        if(!host.message.isEmpty())return;
+        String status=tr("已保存 ","Saved ")+host.availableTurns.size()+tr(" 个回合 · 重打前会停止求解器"," turns · replay stops the solver first");
+        String fitted=host.fit(status,w(.30f));
+        float width=host.measure(FontHelper.cardDescFont_N,fitted,1f);
+        FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,fitted,w(.628f)-width/2f,h(.165f),MUTED);
+    }
+    void arrow(SpriteBatch sb,Hitbox button,String glyph){
+        host.box(sb,button,button.hovered?new Color(.22f,.27f,.32f,1):new Color(.12f,.16f,.20f,1));
+        FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,glyph,button.cX,button.cY,Settings.CREAM_COLOR);
+    }
+    /**
+     * "第 2 次 / 共 5 次" with a stepper instead of a dropdown: the count is ordinal and short, and a menu opening
+     * over the buttons below was the ugliest part of the screen (2026-11-03).
+     */
+    void renderAttempts(SpriteBatch sb){
+        int total=attemptCount();if(total<1)return;
+        layoutAttempts();
+        rect(sb,.640f,.150f,.0016f,.030f,EDGE);
+        boolean multi=total>1;
+        if(multi){arrow(sb,attemptPrev,"<");arrow(sb,attemptNext,">");}
+        int index=Math.max(0,Math.min(host.attemptSelection,total-1));
+        String label=HistoryScreen.zh()?(multi?"第 "+(index+1)+" 次 / 共 "+total+" 次":"第 "+(index+1)+" 次"):(multi?"Attempt "+(index+1)+" of "+total:"Attempt "+(index+1));
+        float bandLeft=multi?attemptPrev.cX: w(.700f),bandRight=multi?attemptNext.cX:w(.900f);
+        FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,label,(bandLeft+bandRight)/2f,h(.152f)+h(.013f),multi?GOLD:Settings.CREAM_COLOR);
     }
     void renderOverview(SpriteBatch sb,JsonObject state){
         text(sb,tr("遗物","Relics")+"  "+HistoryIndex.array(state,"relics").size(),.06f,.395f,GOLD);
@@ -166,10 +211,7 @@ final class RunReview {
             text(sb,host.fit(row.label,w(.84f)),row.card==null?.06f:.10f,y,row.color);
         }
         if(rows.size()>limit)text(sb,tr("滚轮查看 ","Scroll ")+(scroll+1)+"–"+Math.min(rows.size(),scroll+limit)+" / "+rows.size(),.69f,.32f,MUTED);
-        if(pinned&&host.message.isEmpty()){
-            String status=!host.availableTurns.isEmpty()?tr("已保存 ","Saved ")+host.availableTurns.size()+tr(" 个回合。重打前会停止求解器。"," turns. Replay stops the solver first."):host.turnUnavailableText(floor.number);
-            text(sb,host.fit(status,w(.65f)),.20f,.115f,MUTED);
-        }
+        if(pinned&&host.message.isEmpty()&&host.availableTurns.isEmpty())text(sb,host.fit(host.turnUnavailableText(floor.number),w(.70f)),.234f,.120f,MUTED);
     }
     String observedResources(RunReviewModel.Floor floor){StringBuilder s=new StringBuilder();for(String key:Arrays.asList("hp","gold")){if(s.length()>0)s.append("    ");s.append(key.equals("hp")?tr("生命 ","HP "):tr("金币 ","Gold "));String before=host.value(floor.first,key),after=host.value(floor.last,key);s.append(before);if(!before.equals(after))s.append(" → ").append(after);}return s.toString();}
     static final class Entry {final String label;final JsonObject card;final Color color;Entry(String label,JsonObject card,Color color){this.label=label;this.card=card;this.color=color;}}

@@ -88,7 +88,16 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     /** The turn strip picks a row directly; it goes through the same path as the old dropdown so the attempts list follows. */
     void selectTurn(int index){
         if(index<0||index>=availableTurns.size())return;
-        turnSelection=index;attemptSelection=0;rebuildMenus();
+        turnSelection=index;attemptSelection=Integer.MAX_VALUE;rebuildMenus();
+    }
+    /** The review band's stepper; clamps instead of wrapping so the ends of the list are obvious. */
+    void selectAttempt(int index){
+        if(availableTurns.isEmpty())return;
+        JsonObject head=availableTurns.get(Math.min(Math.max(turnSelection,0),availableTurns.size()-1));
+        List<JsonObject> list=turnAttempts.get(HistoryIndex.num(head,"turn",1));
+        if(list==null||list.isEmpty())return;
+        attemptSelection=Math.max(0,Math.min(index,list.size()-1));
+        if(attemptMenu!=null)attemptMenu.setSelectedIndex(attemptSelection);
     }
     @Override public void changedSelectionTo(DropdownMenu menu,int index,String option){
         if(refreshingMenus)return;
@@ -167,13 +176,13 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         }
         bar.update();bar.parentScrolledToPercent(selected==null?(filtered.size()<=6?0:(float)offset/(filtered.size()-6)):(maxLineOffset()==0?0:(float)lineOffset/maxLineOffset()));
     }
-    /** One row per turn holding its newest point, plus every attempt of that turn newest first (architecture, 2026-11-01). */
+    /** One row per turn holding its newest point, plus every attempt of that turn oldest first ("第 1 次" = first try). */
     static void foldTurns(List<JsonObject> points,List<JsonObject> turns,Map<Integer,List<JsonObject>> attempts){
         Map<Integer,List<JsonObject>> byTurn=new TreeMap<>();
         for(JsonObject pt:points)byTurn.computeIfAbsent(HistoryIndex.num(pt,"turn",1),k->new ArrayList<>()).add(pt);
         for(Map.Entry<Integer,List<JsonObject>> group:byTurn.entrySet()){
-            List<JsonObject> list=group.getValue();list.sort((a,b)->Long.compare(capturedAt(b),capturedAt(a)));
-            attempts.put(group.getKey(),list);turns.add(list.get(0));
+            List<JsonObject> list=group.getValue();list.sort((a,b)->Long.compare(capturedAt(a),capturedAt(b)));
+            attempts.put(group.getKey(),list);turns.add(list.get(list.size()-1));
         }
     }
     static long capturedAt(JsonObject o){return o!=null&&o.has("captured_at")&&!o.get("captured_at").isJsonNull()?o.get("captured_at").getAsLong():0L;}
@@ -355,15 +364,17 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             if(turnSelection>=availableTurns.size())turnSelection=0;
             turnMenu.setSelectedIndex(turnSelection);
             int shownTurn=HistoryIndex.num(availableTurns.get(turnSelection),"turn",1);
-            if(shownTurn!=lastTurn){lastTurn=shownTurn;attemptSelection=0;}
             List<JsonObject> attempts=turnAttempts.get(shownTurn);
+            // Attempts read in time order, so the selected one defaults to the newest try rather than the first.
+            int newestAttempt=attempts==null||attempts.isEmpty()?0:attempts.size()-1;
+            if(shownTurn!=lastTurn){lastTurn=shownTurn;attemptSelection=newestAttempt;}
+            attemptSelection=Math.max(0,Math.min(attemptSelection,newestAttempt));
             if(attempts!=null&&attempts.size()>1){
                 List<String> labels=new ArrayList<>();
                 for(int i=0;i<attempts.size();i++)labels.add(tr("第 ","Attempt ")+(i+1)+tr(" 次",""));
                 attemptMenu=dropdown(labels.toArray(new String[0]));
-                if(attemptSelection>=attempts.size())attemptSelection=0;
                 attemptMenu.setSelectedIndex(attemptSelection);
-            }else{attemptMenu=null;attemptSelection=0;}
+            }else{attemptMenu=null;attemptSelection=newestAttempt;}
             boolean canCurrent=ReplayLauncher.canReplayCurrent(currentTurn());
             JsonObject picked=currentTurn();
             add(tr("回合重打：已就绪（","Turn practice: ready (")+availableTurns.size()+tr(" 个回合点）· "," snapshots) · ")+(canCurrent?tr("当前战斗可直接重打","in-combat restart"):tr("退出局可启动独立练习","launch isolated practice")),Tone.GOOD);
