@@ -34,10 +34,12 @@ import java.util.*;
 @SpireInitializer public class NativeReplayProbe implements PostUpdateSubscriber,PostRenderSubscriber {
  int stage;long started=System.currentTimeMillis(),wait;String mode=System.getProperty("spireledger.replayMode","save");JsonObject report=new JsonObject(),expected,expectedAfter;int targetTurn;
  public static void initialize(){BaseMod.subscribe(new NativeReplayProbe());}
- final Map<Path,byte[]> sourceFiles=new LinkedHashMap<>();
+ final Map<Path,byte[]> sourceFiles=new LinkedHashMap<>();final JsonArray fadeSamples=new JsonArray(),renderFade=new JsonArray();final Map<String,Float> frameLuma=new java.util.LinkedHashMap<>();
  static boolean faultArmed;static int loadCalls;
  String replayBranch;boolean superFastChecked,solverChecked,extraChecked;String shot;Object solver;long oldSolverId;
- public void receivePostRender(SpriteBatch sb){if(shot==null)return;try{sb.flush();Pixmap image=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());PixmapIO.PNG png=new PixmapIO.PNG();png.setFlipY(true);png.write(new FileHandle(shot),image);png.dispose();image.dispose();shot=null;}catch(Throwable e){finish(e);stage=99;}}
+ public void receivePostRender(SpriteBatch sb){
+  if(renderFade.size()<400&&AbstractDungeon.fadeColor!=null)renderFade.add(new com.google.gson.JsonPrimitive(Math.round(AbstractDungeon.fadeColor.a*100)/100f+","+AbstractDungeon.isFadingIn+","+AbstractDungeon.isFadingOut));
+  if(shot==null)return;try{sb.flush();Pixmap image=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());long sum=0;int samples=0;for(int y=0;y<image.getHeight();y+=16)for(int x=0;x<image.getWidth();x+=16){int c=image.getPixel(x,y);sum+=((c>>24)&255)+((c>>16)&255)+((c>>8)&255);samples++;}if(samples>0)frameLuma.put(shot,sum/(float)samples/3f);PixmapIO.PNG png=new PixmapIO.PNG();png.setFlipY(true);png.write(new FileHandle(shot),image);png.dispose();image.dispose();shot=null;}catch(Throwable e){finish(e);stage=99;}}
  void verifySuperFastMode()throws Exception{
   verifySolverCombination();
   if(superFastChecked||!Boolean.getBoolean("spireledger.superFastModeProbe"))return;
@@ -81,14 +83,35 @@ import java.util.*;
   check(StateMod.field(solver,"runAutoPlayer")==AbstractDungeon.player,"restored player does not rearm run auto");
   report.addProperty("solver_paused_during_review_and_old_plan_invalidated",true);
  }
+ static JsonObject boxJson(Hitbox hb){JsonObject o=new JsonObject();o.addProperty("x",hb.x);o.addProperty("y",hb.y);o.addProperty("w",hb.width);o.addProperty("h",hb.height);o.addProperty("screen",Settings.WIDTH+"x"+Settings.HEIGHT);o.addProperty("inside",hb.x>=0&&hb.y>=0&&hb.x+hb.width<=Settings.WIDTH+1&&hb.y+hb.height<=Settings.HEIGHT+1);return o;}
  static void clicked(Hitbox hb){hb.clicked=true;com.megacrit.cardcrawl.helpers.input.InputHelper.mX=(int)hb.cX;com.megacrit.cardcrawl.helpers.input.InputHelper.mY=(int)hb.cY;}
+ // Test fixture only: a copy of the same turn under a new branch gives the attempts dropdown a second row.
+ void addSecondAttempt()throws Exception{
+  Path dir=StateMod.recorder.directory.resolve("replay");JsonObject manifest=TurnFiles.read(dir.resolve("manifest.json"));JsonArray points=manifest.getAsJsonArray("snapshots");JsonObject source=null;
+  for(JsonElement e:points){JsonObject p=e.getAsJsonObject();if(p.get("turn").getAsInt()==2&&"recorded".equals(Recorder.string(p,"availability"))){source=p;break;}}
+  if(source==null)return;
+  String id=UUID.randomUUID().toString();Files.copy(dir.resolve(Recorder.string(source,"relative_path")),dir.resolve("turns/"+id+".json"),StandardCopyOption.REPLACE_EXISTING);
+  JsonObject clone=new JsonParser().parse(source.toString()).getAsJsonObject();clone.addProperty("snapshot_id",id);clone.addProperty("branch_id",UUID.randomUUID().toString());clone.addProperty("relative_path","turns/"+id+".json");clone.addProperty("captured_at",Recorder.string(source,"captured_at").isEmpty()?System.currentTimeMillis()-1000:Long.parseLong(Recorder.string(source,"captured_at"))-1000);clone.addProperty("branch_reason","fixture_second_attempt");points.add(clone);
+  Files.write(dir.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));
+  JsonObject event=Recorder.object("turn_snapshot");event.addProperty("snapshot_id",id);event.addProperty("branch_id",Recorder.string(clone,"branch_id"));event.addProperty("floor",Recorder.string(clone,"floor"));event.addProperty("turn",2);event.addProperty("played",0);event.addProperty("availability","recorded");StateMod.recorder.append(event);
+  report.addProperty("second_attempt_fixture",true);
+ }
  void replayHistoryUI()throws Exception{
   HistoryScreen history=HistoryScreen.instance;check(history!=null,"history remains open until native replay click");
   if(stage==62){
    if(history.indexTask!=null||history.detailTask!=null)return;
    check(history.selected!=null&&history.selected.current,"native history selected current run");
    history.review.sync();history.review.pinned=true;check(history.turnMenu!=null&&history.availableTurns.size()>=2,"native history displays captured turns");
-   clicked(history.turnMenu.getHitbox());history.update();check(history.turnMenu.isOpen,"native turn dropdown opens");stage=63;return;
+   clicked(history.turnMenu.getHitbox());history.update();check(history.turnMenu.isOpen,"native turn dropdown opens");report.addProperty("attempt_menu_present",history.attemptMenu!=null);shot="replay-turn-menu.png";wait=System.currentTimeMillis()+500;stage=66;return;
+  }
+  if(stage==65){
+   if(System.currentTimeMillis()<wait)return;
+   check(history.attemptMenu!=null,"the turn with two attempts shows an attempts dropdown");
+   JsonObject attempts=boxJson(history.attemptMenu.getHitbox());report.add("attempt_menu_box",attempts);check(attempts.get("inside").getAsBoolean(),"attempts dropdown is positioned inside the screen: "+attempts);
+   shot="replay-attempt-menu.png";stage=64;return;
+  }
+  if(stage==66){
+   if(System.currentTimeMillis()<wait)return;JsonObject box=boxJson(history.turnMenu.getHitbox());report.add("turn_menu_box",box);check(box.get("inside").getAsBoolean(),"turn dropdown stays inside the screen: "+box);stage=63;return;
   }
   if(stage==63){
    int row=-1;for(int i=0;i<history.availableTurns.size();i++)if(history.availableTurns.get(i).get("turn").getAsInt()==2){row=i;break;}
@@ -97,7 +120,7 @@ import java.util.*;
    check(!history.turnMenu.isOpen&&history.turnSelection==row,"native dropdown selects turn two");
    check(ReplayLauncher.canReplayCurrent(history.availableTurns.get(row)),"selected UI action is current combat restart");
    check(facts().equals(expectedAfter),"history selection preserves state and all RNGs");
-   shot="replay-current-ui.png";stage=64;return;
+   wait=System.currentTimeMillis()+400;stage=65;return;
   }
   if(shot!=null)return;
   armStaleSolver();clicked(history.replayButton);history.update();verifyStoppedSolver();
@@ -150,6 +173,57 @@ import java.util.*;
  static void loadOrbs(JsonArray entries,List<com.megacrit.cardcrawl.orbs.AbstractOrb> target,boolean turn){target.clear();for(JsonElement value:entries){JsonObject e=value.getAsJsonObject();int active=e.get("active_index").getAsInt(),combat=e.get("combat_index").getAsInt();target.add(active>=0?AbstractDungeon.player.orbs.get(active):turn&&combat>=0?AbstractDungeon.actionManager.orbsChanneledThisCombat.get(combat):savestate.orbs.OrbState.forJsonObject(e.getAsJsonObject("orb")).loadOrb());}}
  static void repairManager(JsonObject extra){if(!extra.has("manager"))return;JsonObject m=extra.getAsJsonObject("manager");GameActionManager a=AbstractDungeon.actionManager;a.uniqueStancesThisCombat.clear();for(Map.Entry<String,JsonElement> e:m.getAsJsonObject("unique_stances").entrySet())a.uniqueStancesThisCombat.put(e.getKey(),e.getValue().getAsInt());loadOrbs(m.getAsJsonArray("orb_combat_history"),a.orbsChanneledThisCombat,false);loadOrbs(m.getAsJsonArray("orb_turn_history"),a.orbsChanneledThisTurn,true);if(m.get("last_card").isJsonNull())a.lastCard=null;else {JsonArray list=new JsonArray();list.add(m.get("last_card"));List<AbstractCard> cards=new ArrayList<>();loadHistory(list,cards);a.lastCard=cards.get(0);}}
  static JsonObject manager(){GameActionManager a=AbstractDungeon.actionManager;JsonObject o=new JsonObject();o.add("unique_stances",new Gson().toJsonTree(a.uniqueStancesThisCombat));o.add("orb_combat_history",orbs(a.orbsChanneledThisCombat));o.add("orb_turn_history",orbs(a.orbsChanneledThisTurn));o.add("last_card",a.lastCard==null?JsonNull.INSTANCE:history(Collections.singletonList(a.lastCard)).get(0));return o;}
+ static Object hidden(Object target,String name)throws Exception{for(Class<?> c=target.getClass();c!=null;c=c.getSuperclass())try{java.lang.reflect.Field f=c.getDeclaredField(name);f.setAccessible(true);return f.get(target);}catch(NoSuchFieldException ignored){}return null;}
+ // A restore can match every number and still show an empty arena, so rendering gets its own facts.
+ static JsonObject renderFacts(){
+  JsonObject o=new JsonObject();
+  try{
+   o.addProperty("dungeon",CardCrawlGame.dungeon==null?"":CardCrawlGame.dungeon.getClass().getSimpleName());
+   o.addProperty("room",AbstractDungeon.getCurrRoom()==null?"":AbstractDungeon.getCurrRoom().getClass().getSimpleName());
+   o.addProperty("room_phase",AbstractDungeon.getCurrRoom()==null?"":String.valueOf(AbstractDungeon.getCurrRoom().phase));
+   o.addProperty("scene",AbstractDungeon.scene==null?"":AbstractDungeon.scene.getClass().getSimpleName());
+   o.addProperty("is_screen_up",AbstractDungeon.isScreenUp);
+   o.addProperty("floor_y",AbstractDungeon.floorY);
+   o.addProperty("viewport",Gdx.graphics.getWidth()+"x"+Gdx.graphics.getHeight());
+   o.addProperty("player_draw",AbstractDungeon.player==null?"":(AbstractDungeon.player.drawX+","+AbstractDungeon.player.drawY));
+   o.addProperty("player_visible_hb",AbstractDungeon.player==null?false:AbstractDungeon.player.hb.width>0&&AbstractDungeon.player.hb.height>0);
+   o.addProperty("fade_alpha",AbstractDungeon.fadeColor==null?-1:AbstractDungeon.fadeColor.a);
+   o.addProperty("fade_timer",String.valueOf(hidden(AbstractDungeon.class,"fadeTimer")));
+   o.addProperty("waiting_on_fade_out",AbstractDungeon.waitingOnFadeOut);
+   o.addProperty("dungeon_transition",CardCrawlGame.dungeonTransitionScreen!=null);
+   o.addProperty("mode",String.valueOf(CardCrawlGame.mode));
+   Object scene=AbstractDungeon.scene;Object overlay=scene==null?null:hidden(scene,"bgOverlayColor");
+   o.addProperty("scene_overlay",overlay==null?-1:((com.badlogic.gdx.graphics.Color)overlay).a);
+   JsonArray monsters=new JsonArray();
+   if(AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters!=null)for(AbstractMonster m:AbstractDungeon.getCurrRoom().monsters.monsters){
+    JsonObject n=new JsonObject();
+    n.addProperty("class",m.getClass().getSimpleName());n.addProperty("id",m.id);
+    n.addProperty("draw",m.drawX+","+m.drawY);
+    n.addProperty("hb",m.hb.width+"x"+m.hb.height);
+    n.addProperty("img",hidden(m,"img")!=null);
+    n.addProperty("atlas",hidden(m,"atlas")!=null);
+    n.addProperty("skeleton",hidden(m,"skeleton")!=null);
+    n.addProperty("state",hidden(m,"state")!=null);
+    n.addProperty("is_dead",m.isDead);n.addProperty("is_dying",m.isDying);n.addProperty("is_escaping",m.isEscaping);
+    n.addProperty("curr_hp",m.currentHealth);n.addProperty("hittable",!m.isDeadOrEscaped());
+    monsters.add(n);
+   }
+   o.add("monsters",monsters);
+   o.addProperty("same_group",AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters==AbstractDungeon.getMonsters());
+  }catch(Throwable t){o.addProperty("error",t.toString());}
+  return o;
+ }
+ // The board must be visible on the first restored frame: a room fade left over from entry used to hide it behind the HUD.
+ static void checkRestoredBoard(JsonObject facts,String where){
+  check(facts!=null,where+" has render facts");
+  check(!facts.has("error"),where+" render facts: "+facts.get("error"));
+  check(facts.get("fade_alpha").getAsFloat()==0f,where+" is not covered by the room fade, got "+facts.get("fade_alpha"));
+  for(JsonElement e:facts.getAsJsonArray("monsters")){
+   JsonObject m=e.getAsJsonObject();
+   check(m.get("atlas").getAsBoolean()&&m.get("skeleton").getAsBoolean()&&m.get("state").getAsBoolean(),where+" keeps the monster art: "+m);
+   check(!m.get("hb").getAsString().startsWith("0"),where+" keeps a clickable monster hitbox: "+m);
+  }
+ }
  static JsonObject supplement()throws Exception{JsonObject out=new JsonObject(),rng=new JsonObject();for(String name:RNGS){com.megacrit.cardcrawl.random.Random r=(com.megacrit.cardcrawl.random.Random)AbstractDungeon.class.getField(name).get(null);if(r==null)continue;JsonObject value=new JsonObject();value.addProperty("counter",r.counter);value.addProperty("state0",String.valueOf(r.random.getState(0)));value.addProperty("state1",String.valueOf(r.random.getState(1)));rng.add(name,value);}out.add("rng",rng);out.add("combat_history",history(AbstractDungeon.actionManager.cardsPlayedThisCombat));out.add("turn_history",history(AbstractDungeon.actionManager.cardsPlayedThisTurn));out.add("drawn",history(com.megacrit.cardcrawl.actions.common.DrawCardAction.drawnCards));JsonObject counters=new JsonObject();for(String name:Arrays.asList("damageReceivedThisTurn","damageReceivedThisCombat","hpLossThisCombat","playerHpLastTurn","energyGainedThisCombat"))counters.addProperty(name,GameActionManager.class.getField(name).getInt(null));out.add("counters",counters);out.add("manager",manager());return out;}
  static void loadHistory(JsonArray entries,List<AbstractCard> target){target.clear();List<AbstractCard> cards=allCards();for(JsonElement e:entries){JsonObject value=e.getAsJsonObject();int index=value.get("index").getAsInt();target.add(index>=0?cards.get(index):savestate.CardState.forJson(value.getAsJsonObject("card")).loadCard());}}
  static void repair(JsonObject extra)throws Exception{for(Map.Entry<String,JsonElement> e:extra.getAsJsonObject("rng").entrySet()){JsonObject value=e.getValue().getAsJsonObject();com.megacrit.cardcrawl.random.Random r=(com.megacrit.cardcrawl.random.Random)AbstractDungeon.class.getField(e.getKey()).get(null);r.random.setState(Long.parseLong(value.get("state0").getAsString()),Long.parseLong(value.get("state1").getAsString()));r.counter=value.get("counter").getAsInt();}loadHistory(extra.getAsJsonArray("combat_history"),AbstractDungeon.actionManager.cardsPlayedThisCombat);loadHistory(extra.getAsJsonArray("turn_history"),AbstractDungeon.actionManager.cardsPlayedThisTurn);loadHistory(extra.getAsJsonArray("drawn"),com.megacrit.cardcrawl.actions.common.DrawCardAction.drawnCards);for(Map.Entry<String,JsonElement> e:extra.getAsJsonObject("counters").entrySet())GameActionManager.class.getField(e.getKey()).setInt(null,e.getValue().getAsInt());repairManager(extra);}
@@ -183,9 +257,10 @@ import java.util.*;
  public void receivePostUpdate(){if(diagnosticRunning)return;try{
   if(System.currentTimeMillis()-started>240000)throw new AssertionError("stable point timeout stage "+stage+" turn="+GameActionManager.turn+" screen="+AbstractDungeon.screen+" manager="+AbstractDungeon.actionManager.phase+" current="+AbstractDungeon.actionManager.currentAction+" turnAction="+AbstractDungeon.actionManager.turnStartCurrentAction+" ended="+AbstractDungeon.actionManager.turnHasEnded+" enabled="+AbstractDungeon.overlayMenu.endTurnButton.enabled+" effects="+AbstractDungeon.effectList+" top="+AbstractDungeon.topLevelEffects);
   if(CardCrawlGame.mainMenuScreen!=null)verifySuperFastMode();
-  if(stage>=62&&stage<=64){replayHistoryUI();return;}
+  if(stage>=62&&stage<=66){replayHistoryUI();return;}
   if(Boolean.getBoolean("spireledger.productionPractice")){
    if(!ReplayLauncher.practiceInitialized)return;
+   if(stage>=7&&stage<=70)fadeSamples.add(new com.google.gson.JsonPrimitive(Math.round(AbstractDungeon.fadeColor.a*100)/100f+","+(System.currentTimeMillis()-started)));
    if(stage==0){
     check(CardCrawlGame.dungeon!=null,"practice dungeon created");
     expected=read(System.getProperty("spireledger.replaySource")+"/before-facts.json");
@@ -205,11 +280,14 @@ import java.util.*;
    case 3:check(!AbstractDungeon.actionManager.cardsPlayedThisCombat.isEmpty(),"native played card retained");AbstractDungeon.overlayMenu.endTurnButton.disable(true);stage=4;break;
    case 4:if(GameActionManager.turn<2)return;if(wait==0){wait=System.currentTimeMillis()+250;return;}if(System.currentTimeMillis()<wait)return;if(!System.getProperty("spireledger.replayFailure","").isEmpty()){failureCheck();return;}check(!AbstractDungeon.actionManager.cardsPlayedThisCombat.isEmpty(),"history across turn");JsonObject before=facts();write("before-facts.json",before);long t=System.nanoTime();SaveState state=Boolean.getBoolean("spireledger.replayNoCapture")?null:new SaveState();JsonObject json=state==null?new JsonObject():state.jsonEncode();write("supplement.json",supplement());report.addProperty("capture_ms",(System.nanoTime()-t)/1000000.0);check(before.equals(facts()),"capture does not mutate state/RNG");write("turn.json",json);report.addProperty("json_bytes",json.toString().getBytes(StandardCharsets.UTF_8).length);report.addProperty("history_size",AbstractDungeon.actionManager.cardsPlayedThisCombat.size());report.addProperty("capture_rng_unchanged",true);report.addProperty("without_capture_control",Boolean.getBoolean("spireledger.replayNoCapture"));postSnapshotPlay();stage=5;break;
    case 5:AbstractDungeon.overlayMenu.endTurnButton.disable(true);targetTurn=GameActionManager.turn+1;stage=6;break;
-   case 6:if(GameActionManager.turn<targetTurn)return;verifyTurnFiles();write("after-facts.json",facts());write("after-state.json",new SaveState().jsonEncode());write("after-supplement.json",supplement());if(Boolean.getBoolean("spireledger.replayCurrentProbe")){expectedAfter=facts();expected=read("before-facts.json");replayBranch=StateMod.recorder.branch;HistoryScreen.open();check(HistoryScreen.active(),"native history overlay opened");stage=62;break;}if(Boolean.getBoolean("spireledger.launchPracticeProbe")){JsonObject manifest=TurnFiles.read(StateMod.recorder.directory.resolve("replay/manifest.json"));JsonObject ref=null;for(JsonElement item:manifest.getAsJsonArray("snapshots"))if(item.getAsJsonObject().get("turn").getAsInt()==2)ref=item.getAsJsonObject();check(ref!=null,"turn two launch source");HistoryIndex.Summary summary=new HistoryIndex.Summary();summary.id=StateMod.recorder.runId;TurnRecorder.enabled=false;sourceFiles.put(StateMod.recorder.directory.resolve("run.json"),Files.readAllBytes(StateMod.recorder.directory.resolve("run.json")));try(java.util.stream.Stream<Path> paths=Files.walk(StateMod.recorder.directory.resolve("replay"))){for(Iterator<Path> it=paths.iterator();it.hasNext();){Path file=it.next();if(Files.isRegularFile(file))sourceFiles.put(file,Files.readAllBytes(file));}}Path child=ReplayLauncher.launchPracticeInstance(summary,ref,StateMod.recorder.directory);report.addProperty("launched_practice_directory",child.toAbsolutePath().toString());stage=61;break;}finish(null);stage=99;break;
+   case 6:if(GameActionManager.turn<targetTurn)return;verifyTurnFiles();write("after-facts.json",facts());write("after-state.json",new SaveState().jsonEncode());write("after-supplement.json",supplement());if(Boolean.getBoolean("spireledger.replayCurrentProbe")){expectedAfter=facts();expected=read("before-facts.json");replayBranch=StateMod.recorder.branch;addSecondAttempt();HistoryScreen.open();check(HistoryScreen.active(),"native history overlay opened");stage=62;break;}if(Boolean.getBoolean("spireledger.launchPracticeProbe")){JsonObject manifest=TurnFiles.read(StateMod.recorder.directory.resolve("replay/manifest.json"));JsonObject ref=null;for(JsonElement item:manifest.getAsJsonArray("snapshots"))if(item.getAsJsonObject().get("turn").getAsInt()==2)ref=item.getAsJsonObject();check(ref!=null,"turn two launch source");HistoryIndex.Summary summary=new HistoryIndex.Summary();summary.id=StateMod.recorder.runId;TurnRecorder.enabled=false;sourceFiles.put(StateMod.recorder.directory.resolve("run.json"),Files.readAllBytes(StateMod.recorder.directory.resolve("run.json")));try(java.util.stream.Stream<Path> paths=Files.walk(StateMod.recorder.directory.resolve("replay"))){for(Iterator<Path> it=paths.iterator();it.hasNext();){Path file=it.next();if(Files.isRegularFile(file))sourceFiles.put(file,Files.readAllBytes(file));}}Path child=ReplayLauncher.launchPracticeInstance(summary,ref,StateMod.recorder.directory);report.addProperty("launched_practice_directory",child.toAbsolutePath().toString());stage=61;break;}finish(null);stage=99;break;
    case 61:if(ReplayLauncher.launchedProcess.isAlive())return;Path child=Paths.get(report.get("launched_practice_directory").getAsString());int exit=ReplayLauncher.launchedProcess.exitValue();JsonObject process=new JsonObject();process.addProperty("exit_code",exit);Files.write(child.resolve("process-result.json"),process.toString().getBytes(StandardCharsets.UTF_8));check(exit==0,"launched practice child exits cleanly");JsonObject childReport=read(child.resolve("replay-probe-result.json").toString());check("pass".equals(childReport.get("status").getAsString()),"launched practice child same-actions check");if(Boolean.getBoolean("spireledger.superFastModeProbe"))check(childReport.has("superfastmode_multiplier")&&childReport.get("superfastmode_multiplier").getAsFloat()==10f,"launched practice child actually runs SuperFastMode at 10x");for(Map.Entry<Path,byte[]> file:sourceFiles.entrySet())check(Arrays.equals(file.getValue(),Files.readAllBytes(file.getKey())),"practice preserves parent source: "+file.getKey());report.addProperty("source_files_unchanged",true);report.addProperty("child_exit",exit);finish(null);stage=99;break;
-   case 7:if(System.currentTimeMillis()<wait)return;JsonObject actual=facts();write("restored-supplement.json",supplement());write("restored-facts.json",actual);write("restored-state.json",new SaveState().jsonEncode());report.addProperty("snapshot_facts_match",actual.equals(expected));report.addProperty("expected_history_size",expected.getAsJsonArray("history").size());report.addProperty("restored_history_size",actual.getAsJsonArray("history").size());postSnapshotPlay();stage=8;break;
+   case 7:if(System.currentTimeMillis()<wait)return;JsonObject actual=facts();write("restored-supplement.json",supplement());write("restored-facts.json",actual);write("restored-state.json",new SaveState().jsonEncode());report.add("restored_render",renderFacts());if(Boolean.getBoolean("spireledger.productionPractice"))checkRestoredBoard(report.getAsJsonObject("restored_render"),"the restored practice board");if(shot==null)shot="restored-frame.png";report.addProperty("snapshot_facts_match",actual.equals(expected));if(Boolean.getBoolean("spireledger.productionPractice")&&stage==7){stage=72;wait=System.currentTimeMillis()+900;break;}report.addProperty("expected_history_size",expected.getAsJsonArray("history").size());report.addProperty("restored_history_size",actual.getAsJsonArray("history").size());postSnapshotPlay();stage=8;break;
+   case 72:if(System.currentTimeMillis()<wait)return;report.add("mid_render",renderFacts());if(shot==null)shot="mid-frame.png";stage=70;wait=System.currentTimeMillis()+1500;break;
+   case 70:if(System.currentTimeMillis()<wait)return;report.add("frame_luminance",new Gson().toJsonTree(frameLuma));check(frameLuma.containsKey("restored-frame.png")&&frameLuma.get("restored-frame.png")>10f,"the restored board is lit, not a black frame: "+frameLuma);report.add("settled_render",renderFacts());report.add("fade_samples",fadeSamples);report.add("render_fade",renderFade);if(shot==null)shot="settled-frame.png";stage=71;break;
+   case 71:postSnapshotPlay();stage=8;break;
    case 8:endTurn();targetTurn=GameActionManager.turn+1;stage=9;break;
-   case 9:if(GameActionManager.turn<targetTurn)return;JsonObject after=facts();write("after-facts.json",after);write("after-state.json",new SaveState().jsonEncode());write("after-supplement.json",supplement());report.addProperty("same_actions_facts_match",after.equals(expectedAfter!=null?expectedAfter:read(System.getProperty("spireledger.replaySource")+"/after-facts.json")));check(report.get("snapshot_facts_match").getAsBoolean()&&report.get("same_actions_facts_match").getAsBoolean(),"cross JVM state/history and same-action results must match");if(Boolean.getBoolean("spireledger.replayCurrentProbe")){HistoryScreen history=new HistoryScreen();history.detail=StateMod.recorder.document();history.selected=HistoryIndex.summarize(history.detail,true);history.manifest=TurnFiles.read(StateMod.recorder.directory.resolve("replay/manifest.json"));history.prepareFloors();history.makeLines();boolean earlier=false;for(JsonObject point:history.availableTurns)if(point.get("turn").getAsInt()==2&&!Recorder.string(point,"branch_id").equals(StateMod.recorder.branch))earlier=true;check(earlier,"native history default replay list retains earlier ancestor turn");history.close();report.addProperty("history_ancestor_turn_available",true);}finish(null);stage=99;break;
+   case 9:if(GameActionManager.turn<targetTurn)return;JsonObject after=facts();report.add("after_turn_render",renderFacts());if(shot==null)shot="after-turn-frame.png";write("after-facts.json",after);write("after-state.json",new SaveState().jsonEncode());write("after-supplement.json",supplement());report.addProperty("same_actions_facts_match",after.equals(expectedAfter!=null?expectedAfter:read(System.getProperty("spireledger.replaySource")+"/after-facts.json")));check(report.get("snapshot_facts_match").getAsBoolean()&&report.get("same_actions_facts_match").getAsBoolean(),"cross JVM state/history and same-action results must match");if(Boolean.getBoolean("spireledger.replayCurrentProbe")){HistoryScreen history=new HistoryScreen();history.detail=StateMod.recorder.document();history.selected=HistoryIndex.summarize(history.detail,true);history.manifest=TurnFiles.read(StateMod.recorder.directory.resolve("replay/manifest.json"));history.prepareFloors();history.makeLines();boolean earlier=false;for(JsonObject point:history.availableTurns)if(point.get("turn").getAsInt()==2&&ReplayLauncher.canReplayCurrent(point))earlier=true;check(earlier,"native history keeps the turn two checkpoint replayable after a fork: "+history.availableTurns);history.close();report.addProperty("history_ancestor_turn_available",true);}finish(null);stage=99;break;
   }
  }catch(Throwable e){finish(e);stage=99;}}
 }
