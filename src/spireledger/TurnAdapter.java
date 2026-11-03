@@ -188,6 +188,26 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
         a.actions.clear();a.preTurnActions.clear();a.cardQueue.clear();a.monsterQueue.clear();a.currentAction=null;a.turnStartCurrentAction=null;a.turnHasEnded=false;a.phase=GameActionManager.Phase.WAITING_ON_USER;
         AbstractDungeon.overlayMenu.showCombatPanels();AbstractDungeon.overlayMenu.endTurnButton.enable();
         AbstractDungeon.player.isEndingTurn=false;AbstractDungeon.player.hand.refreshHandLayout();AbstractDungeon.player.hand.applyPowers();AbstractDungeon.player.hand.glowCheck();
+        settleHealthBars();
+    }
+    /**
+     * The bar sits at hb.y + hbYOffset, and hbYOffset only moves inside the pop-in animation, which runs while
+     * hbShowTimer > 0. A practice instance recreates the character and restores straight into a fight, so that
+     * animation never played: the bar kept the constructor's +60px offset and cut through the player's legs, hiding
+     * the last digit of "39/73" (2026-11-03). A restored board is a settled board, so the bar goes to its end state.
+     */
+    static void settleHealthBars(){
+        settle(AbstractDungeon.player);
+        try{if(AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters!=null)for(com.megacrit.cardcrawl.monsters.AbstractMonster m:AbstractDungeon.getCurrRoom().monsters.monsters)settle(m);}catch(RuntimeException ignored){}
+    }
+    static void settle(AbstractCreature creature){
+        if(creature==null)return;
+        setFloat(creature,"hbShowTimer",0f);setFloat(creature,"hbYOffset",0f);setFloat(creature,"hbAlpha",1f);setFloat(creature,"healthHideTimer",1f);
+    }
+    static void setFloat(Object target,String name,float value){
+        for(Class<?> type=target.getClass();type!=null;type=type.getSuperclass()){
+            try{Field field=type.getDeclaredField(name);field.setAccessible(true);field.setFloat(target,value);return;}catch(NoSuchFieldException ignored){}catch(Exception ignored){return;}
+        }
     }
     /** Shared with the on-disk hash, so "same board" cannot mean two different things (SnapshotShape). */
     static JsonElement logical(JsonElement value){return SnapshotShape.logical(value);}
