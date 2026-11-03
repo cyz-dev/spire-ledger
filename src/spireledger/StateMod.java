@@ -189,6 +189,9 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static void savePreference()throws IOException{Path p=ROOT.getParent().resolve("enabled.txt");Files.createDirectories(p.getParent());Files.write(p,String.valueOf(enabled).getBytes(StandardCharsets.UTF_8));}
     /** Point the data directory at the game folder (parent of mods/) once Gdx.files is ready; keep HOME_ROOT when it cannot be written. */
     static void resolveRoot(){
+        // The practice child runs with -Duser.home=<instance>/home and its data was copied there by the parent;
+        // resolving its own mods/ folder would point records at a path the parent never populated.
+        if(Boolean.getBoolean("spireledger.practiceMode")){ROOT=HOME_ROOT;return;}
         try{
             Path mods=com.badlogic.gdx.Gdx.files.local("mods").file().toPath().toAbsolutePath().normalize();
             if(java.nio.file.Files.isDirectory(mods)){
