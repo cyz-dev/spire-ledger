@@ -140,14 +140,15 @@ final class PickRateChart {
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
         Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
-    /** The player's own override folder; no other mod's folder is read. */
-    static Path imageDir(){return StateMod.ROOT.getParent().resolve("monster-images");}
-    /** Override pictures come only from the player's folder and the mod's own folder; nothing is downloaded, bundled, or borrowed from another mod. */
+    /** The player's own override folder next to the game; the old user-data folder is still read, but never created there. */
+    static Path imageDir(){return GamePaths.monsterImages();}
+    /** Override pictures come only from the player's folder, the mod's own folder and the old user-data folder; nothing is downloaded, bundled, or borrowed from another mod. */
     Map<String,Path> monsterIndex(){
         if(monsterIndex!=null)return monsterIndex;
         monsterIndex=new HashMap<>();List<Path> roots=new ArrayList<>();
         roots.add(imageDir());
         for(String path:new String[]{"mods/SpireLedger/monster-images","mods/spire-ledger/monster-images"})try{roots.add(Gdx.files.local(path).file().toPath());}catch(Exception ignored){}
+        roots.add(StateMod.ROOT.getParent().resolve("monster-images"));
         for(Path root:roots){if(!Files.isDirectory(root))continue;
             try(java.util.stream.Stream<Path> walk=Files.walk(root)){
                 walk.filter(Files::isRegularFile).sorted().forEach(path->{String name=path.getFileName().toString();int dot=name.lastIndexOf('.');if(dot<=0)return;
@@ -418,7 +419,7 @@ final class PickRateChart {
         Metric excluded=screen.metrics.get("reward_automation_excluded");out.addProperty("known_automation_excluded",excluded==null?0:(long)excluded.numerator);out.addProperty("solver_used",solverUsed());
         out.add("versions",new Gson().toJsonTree(versions().split(" · ")));out.addProperty("generated_at",new SimpleDateFormat("yyyy-MM-dd HH:mm z").format(new Date()));
         if(kind==4){out.addProperty("export_scope",tr("图片与 CSV 只含当前选择的幕；幕选“全部”时每幕单独成图，CSV 一表一幕。","Images and CSV cover the selected act; with All, each act gets its own image and CSV table."));
-            out.addProperty("image_dir","~/.spire-ledger/monster-images");
+            out.addProperty("image_dir",GamePaths.monsterImagesLabel());
             out.addProperty("image_source",tr("遭遇图由本机游戏的怪物资源实时绘制；monster-images 目录里与遭遇同名的图片优先。不打包、不下载、不读其他 Mod 的图。","Encounter art is drawn at runtime from the local game's monster files; a same-named picture in a monster-images folder takes precedence. Nothing is bundled, downloaded, or read from another mod."));}
         if(kind==2||kind==3)out.addProperty("interval_note",tr("界面不显示区间；CSV 的 95% 下限/上限给出 Wilson 区间作提示。","No interval in the image; the CSV's 95% bounds hold the Wilson interval as a hint."));
         return out;
@@ -444,7 +445,7 @@ final class PickRateChart {
         message="";artBudget=Integer.MAX_VALUE;
         List<Csv.Table> tables=new ArrayList<>();List<PickTiers.Entry> observedEntries=new ArrayList<>(),standardEntries=new ArrayList<>();
         List<Section> observedSections=new ArrayList<>(),standardSections=new ArrayList<>(),winSections=new ArrayList<>();List<Integer> keptActs=new ArrayList<>();
-        Path root=StateMod.ROOT.getParent().resolve("exports");Files.createDirectories(root);Path directory=Files.createDirectory(root.resolve("charts-"+new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())+"-"+UUID.randomUUID().toString().substring(0,8)));
+        Path root=GamePaths.exports();Files.createDirectories(root);Path directory=Files.createDirectory(root.resolve("charts-"+new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())+"-"+UUID.randomUUID().toString().substring(0,8)));
         List<Path> written=new ArrayList<>();Matrix4 projection=new Matrix4(sb.getProjectionMatrix()),transform=new Matrix4(sb.getTransformMatrix());
         try{
             for(int a:exportActs()){

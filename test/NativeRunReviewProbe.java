@@ -26,13 +26,16 @@ import java.nio.charset.StandardCharsets;
 /** Native controls exercised by synthetic input. Shipping JAR never contains this driver. */
 @SpireInitializer public class NativeRunReviewProbe implements PostUpdateSubscriber,PostRenderSubscriber {
     final boolean realLayout=Boolean.getBoolean("spireledger.realLayout");
-    int stage;long next,started=System.currentTimeMillis();String shot;boolean captured;MainMenuScreen.CurScreen prior;AbstractDungeon.CurrentScreen rewardScreen;int deck,gold;long rng;JsonObject report=new JsonObject(),pauseState,pauseRng;
+    int stage;long next,started=System.currentTimeMillis();String shot;boolean captured;MainMenuScreen.CurScreen prior;AbstractDungeon.CurrentScreen rewardScreen;int deck,gold;long rng;JsonObject report=new JsonObject(),pauseState,pauseRng;Path probeGameExports,probeUserExports;
     public static void initialize(){BaseMod.subscribe(new NativeRunReviewProbe());}
     @SpirePatch(clz=DistributorFactory.class,method="getEnabledDistributor") public static class Offline {@SpirePrefixPatch public static SpireReturn<PublisherIntegration> before(String distributor){return SpireReturn.Return(new GogIntegration());}}
     @SpirePatch(clz=CardCrawlGame.class,method="create") public static class NoSteam {@SpireInstrumentPatch public static ExprEditor edit(){return new ExprEditor(){public void edit(NewExpr e)throws CannotCompileException{if(e.getClassName().equals("com.codedisaster.steamworks.SteamUtils")||e.getClassName().equals("com.megacrit.cardcrawl.helpers.steamInput.SteamInputHelper"))e.replace("{ $_ = null; }");}};}}
     @SpirePatch(clz=Settings.class,method="initializeGamePref") public static class Chinese {@SpirePostfixPatch public static void lang(){Settings.setLanguage(Settings.GameLanguage.valueOf(System.getProperty("spireledger.uiLanguage","ZHS")),true);}}
     static Object fade()throws Exception{java.lang.reflect.Field f=CardCrawlGame.class.getDeclaredField("screenColor");f.setAccessible(true);return f.get(null);}
     static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
+    /** Moves an existing export folder aside before a failure test blocks its path, so a real player's exports are never deleted. */
+    static void hold(Path dir)throws Exception{Path keep=dir.resolveSibling("exports.probe-hold");if(Files.isDirectory(dir))Files.move(dir,keep,StandardCopyOption.REPLACE_EXISTING);}
+    static void release(Path dir)throws Exception{Path keep=dir.resolveSibling("exports.probe-hold");if(!Files.isDirectory(keep))return;if(Files.isDirectory(dir)){try(DirectoryStream<Path> s=Files.newDirectoryStream(dir)){if(s.iterator().hasNext())return;}Files.delete(dir);}Files.move(keep,dir,StandardCopyOption.REPLACE_EXISTING);}
     static void clicked(Hitbox h){h.clicked=true;InputHelper.mX=(int)h.cX;InputHelper.mY=(int)h.cY;}
     void dropdown(DropdownMenu d,int row)throws Exception{d.getHitbox().clicked=true;d.update();check(d.isOpen,"native dropdown opened");Object r=d.rows.get(row);Hitbox h=(Hitbox)StateMod.field(r,"hb");clicked(h);d.update();}
     void capture(String name){shot=HistoryScreen.zh()?name:name.replace("-zh","-en");captured=false;}
@@ -81,16 +84,21 @@ import java.nio.charset.StandardCharsets;
         if(h.stats.task!=null||!h.stats.requested)return;check(!h.stats.advanced,"simple filters by default");clicked(h.stats.themes[3]);h.update();check(h.stats.theme==3&&!h.stats.chart.entries.isEmpty(),"pick tiers use actual run choices");capture("navigation-pick-tiers-zh");stage=9;break;
       case 9:
         if(!captured)return;
-        Path blocked=StateMod.ROOT.getParent().resolve("exports");
-        if(!Files.exists(blocked)){Files.write(blocked,"probe-blocker".getBytes(StandardCharsets.UTF_8));clicked(h.stats.exportButton);h.update();stage=90;break;}
-        clicked(h.stats.exportButton);h.update();check(h.stats.chart.exportRequested,"native export button");stage=10;break;
+        probeGameExports=GamePaths.exports();probeUserExports=StateMod.ROOT.getParent().resolve("exports");
+        hold(probeGameExports);if(!probeGameExports.equals(probeUserExports))hold(probeUserExports);
+        Files.write(probeGameExports,"probe-blocker".getBytes(StandardCharsets.UTF_8));
+        if(!probeGameExports.equals(probeUserExports))Files.write(probeUserExports,"probe-blocker".getBytes(StandardCharsets.UTF_8));
+        clicked(h.stats.exportButton);h.update();stage=90;break;
       case 90:
         if(h.stats.chart.exportRequested)return;
-        Path blocker=StateMod.ROOT.getParent().resolve("exports");check(h.stats.chart.lastExport==null&&h.stats.chart.message.startsWith(HistoryScreen.tr("导出失败：","Export failed:")),"unwritable export path gives visible failure");check(new String(Files.readAllBytes(blocker),StandardCharsets.UTF_8).equals("probe-blocker"),"existing blocking file preserved");Files.delete(blocker);
+        check(h.stats.chart.lastExport==null&&h.stats.chart.message.startsWith(HistoryScreen.tr("导出失败：","Export failed:")),"unwritable export paths give visible failure");
+        check(new String(Files.readAllBytes(probeGameExports),StandardCharsets.UTF_8).equals("probe-blocker"),"existing blocking file preserved");
+        Files.delete(probeGameExports);if(!probeGameExports.equals(probeUserExports)&&Files.isRegularFile(probeUserExports))Files.delete(probeUserExports);
+        release(probeGameExports);release(probeUserExports);
         report.addProperty("export_failure_recovery",true);clicked(h.stats.exportButton);h.update();stage=10;break;
       case 10:
         if(h.stats.chart.exportRequested)return;check(h.stats.chart.lastExport!=null,"PNG export completed");
-        Path output=h.stats.chart.lastExport;check(output.getParent().equals(StateMod.ROOT.getParent().resolve("exports")),"exports outside run data");JsonObject meta=TurnFiles.read(output.resolve("metadata.json"));check(meta.get("act").getAsInt()==1&&meta.getAsJsonArray("entries").size()==h.stats.chart.entries.size(),"export scope and entry count match preview");
+        Path output=h.stats.chart.lastExport;check(output.getParent().equals(GamePaths.exports()),"export lands in the game folder, next to mods/");JsonObject meta=TurnFiles.read(output.resolve("metadata.json"));check(meta.get("act").getAsInt()==1&&meta.getAsJsonArray("entries").size()==h.stats.chart.entries.size(),"export scope and entry count match preview");
         for(JsonElement item:meta.getAsJsonArray("entries")){JsonObject e=item.getAsJsonObject();String card=e.get("card").getAsString();spireledger.stats.Metric metric=h.stats.metrics.get(card.equals(PickRateChart.SKIP)?"skip:1":card.equals(PickRateChart.BOWL)?"bowl:1":"pick:1:"+card);check(metric!=null&&metric.numerator==e.get("picked").getAsDouble()&&metric.denominator==e.get("offered").getAsDouble(),"export counts match screen kernel: "+card);}
         Pixmap png=new Pixmap(new FileHandle(output.resolve("act-1.png").toFile()));check(png.getWidth()==1600&&png.getHeight()>365,"readable PNG dimensions");png.dispose();
         report.addProperty("export_directory",output.toString());report.addProperty("native_latest_navigation_and_png_export",true);
