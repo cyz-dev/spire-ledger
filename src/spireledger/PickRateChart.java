@@ -139,7 +139,7 @@ final class PickRateChart {
         monsterTextures.put(id,texture);return texture;}
     Path monsterFile(String id){
         Map<String,Path> index=monsterIndex();if(index.isEmpty())return null;
-        Path path=index.get(normalizeMonster(id));if(path==null)path=index.get(normalizeMonster(screen.encounter(id)));return path;}
+        return index.get(normalizeMonster(id));}
     /** The player's own override folder next to the game; the old user-data folder is still read, but never created there. */
     static Path imageDir(){return GamePaths.monsterImages();}
     /** Override pictures come only from the player's folder, the mod's own folder and the old user-data folder; nothing is downloaded, bundled, or borrowed from another mod. */
