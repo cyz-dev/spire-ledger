@@ -143,6 +143,11 @@ public class RecorderCheck {
         resumed.close();
         Recorder other=new Recorder(samples,meta,null);assert !other.runId.equals(runId);other.close();
         Path blocked=samples.resolve("blocked-file");Files.write(blocked,new byte[0]);boolean failed=false;try{new Recorder(blocked,meta,null);}catch(java.io.IOException expected){failed=true;}assert failed;
+        Recorder floors=new Recorder(samples,meta,null);byte[] save="enter-room-save".getBytes(StandardCharsets.UTF_8),newer="reloaded-branch".getBytes(StandardCharsets.UTF_8);
+        JsonObject floorEvent=FloorSaves.store(floors,3,save);FloorSaves.store(floors,3,newer);
+        need(java.util.Arrays.equals(Files.readAllBytes(floors.directory.resolve("floors/3.autosave")),newer),"a floor keeps its newest room-entry save");
+        need("floors/3.autosave".equals(Recorder.string(floorEvent,"relative_path"))&&floorEvent.get("bytes").getAsInt()==save.length&&TurnFiles.sha256(save).equals(Recorder.string(floorEvent,"sha256"))&&floorEvent.get("floor").getAsInt()==3,"floor_save names the file, size, sha256 and floor");
+        int floorEvents=0;for(JsonElement e:floors.document().getAsJsonArray("records"))if("floor_save".equals(Recorder.string(e.getAsJsonObject(),"type")))floorEvents++;need(floorEvents==2,"each copy is logged: "+floorEvents);floors.close();
         System.out.println("RecorderCheck OK: independent anchors, current resources, dedup, same-name instances, Neow, relic-change anchors, cancellation, skip/bowl, SL branches, interrupted pending, UTF-8/64-bit seed, IO failure. Synthetic test only.");
     }
 }

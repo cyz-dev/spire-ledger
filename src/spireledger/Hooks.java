@@ -30,6 +30,13 @@ public final class Hooks {
     @SpirePatch(clz=AbstractPlayer.class,method="preBattlePrep") public static class CombatIdentity {
         @SpirePrefixPatch public static void before(){TurnRecorder.battle();}
     }
+    // Floor saves: remember which SaveFile is being written, then copy the exact string handed to the async writer.
+    @SpirePatch(clz=com.megacrit.cardcrawl.saveAndContinue.SaveAndContinue.class,method="save") public static class FloorSave {
+        @SpirePrefixPatch public static void before(SaveFile save){FloorSaves.saving(save);}
+    }
+    @SpirePatch(clz=com.megacrit.cardcrawl.helpers.AsyncSaver.class,method="save") public static class FloorSaveWrite {
+        @SpirePrefixPatch public static void before(String path,String data){FloorSaves.writing(path,data);}
+    }
     @SpirePatch(clz=AbstractPlayer.class,method="updateInput") public static class TurnReady {
         @SpirePrefixPatch public static void before(){TurnRecorder.observe();}
     }

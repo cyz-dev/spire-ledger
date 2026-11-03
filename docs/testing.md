@@ -23,6 +23,7 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 2026-11-01 接手 PR #20：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和 1920×1080 下 32 个阶段均通过，实际战损导出 20/20 个遭遇由游戏资源画出，生成小鬼群前后两个地牢随机数的计数不变。PR 原版的探针第 28 阶段仍按 6 个卡牌页取 Boss 遗物页，接手时改为第 5 页。
 - 2026-11-02 发布 0.6.0-beta.2 前在发布提交上复跑：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0），实际战损导出 20/20 个遭遇由游戏资源画出。
 - 2026-11-03 练习环境与输入告警（P1）：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 中文 1024×768 的 32 个阶段通过（含 2/3 只虱虫的标签断言）；`integration-replay.ps1 -LaunchPractice -SuperFastMode -ExperimentalTurns -Scenario ordinary` 通过，再加 `-ExtraMods` Colored Map 2.4.1、Colored Powertips 2.3.0、Highlight Path 0.0.3 后也通过，练习子进程加载了这三个 Mod，`practice-startup.json` 为 `interactive: true`；`-ReplayCurrent` 当前战斗重打通过。点击截获告警没有原生探针，靠离线断言和 W18 手测。
+- 2026-11-03 楼层存档（P2）：`RecorderCheck` 断言同一层留最新一份、每份记 `floor_save` 事件；`integration.ps1` 原生探针通过，记录目录下的 `floors/41.autosave` 与游戏写出的 `saves/IRONCLAD.autosave` sha256 一致（27,988 字节）。
 
 ## 0.6.0-beta.1 与 beta.2 改动（先测这一节）
 
