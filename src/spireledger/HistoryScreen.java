@@ -27,6 +27,11 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     static boolean zh(){return Settings.language==Settings.GameLanguage.ZHS||Settings.language==Settings.GameLanguage.ZHT;}
     static String tr(String cn,String en){return zh()?cn:en;}
     static void open(){if(active()||CardCrawlGame.cardPopup.isOpen||CardCrawlGame.relicPopup.isOpen)return;instance=new HistoryScreen();instance.refresh();consume();}
+    static boolean mouseDown;static int lostClicks;
+    /** The game sets justClickedLeft only on the frame the left button goes down; a press that arrives cleared means another mod took the click first. */
+    static void watchClicks(boolean down,boolean clicked){if(down&&!mouseDown&&!clicked)lostClicks++;mouseDown=down;}
+    static String clickWarning(){if(lostClicks<2)return "";List<String> mods=ReplayEnvironment.unreviewed();
+        return tr("其他 Mod 截获了鼠标点击，账本的下拉和按钮可能点不开","Another mod is taking mouse clicks; Ledger dropdowns and buttons may not respond")+(mods.isEmpty()?"":tr("。可能相关："," — possibly: ")+String.join(tr("、",", "),mods))+tr("。按 Ctrl+Shift+R 生成诊断报告。",". Press Ctrl+Shift+R for a diagnostic report.");}
     static void consume(){InputHelper.justClickedLeft=false;InputHelper.justReleasedClickLeft=false;InputHelper.justClickedRight=false;InputHelper.pressedEscape=false;com.megacrit.cardcrawl.helpers.controller.CInputActionSet.cancel.unpress();com.megacrit.cardcrawl.helpers.controller.CInputActionSet.select.unpress();com.megacrit.cardcrawl.helpers.controller.CInputActionSet.proceed.unpress();}
     final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"spire-ledger-history-read");t.setDaemon(true);return t;});
     Future<HistoryIndex.Index> indexTask;Future<JsonObject> detailTask;
@@ -61,6 +66,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void styledText(SpriteBatch sb,String value,float x,float y,Tone tone){BitmapFont font=tone==Tone.HEADER?FontHelper.buttonLabelFont:FontHelper.cardDescFont_N;float oldX=font.getData().scaleX,oldY=font.getData().scaleY;Color old=font.getColor().cpy();try{float scale=tone==Tone.HEADER?1:1.12f;font.getData().setScale(oldX*scale,oldY*scale);FontHelper.renderFontLeftTopAligned(sb,font,value,x,y,color(tone));}finally{font.getData().setScale(oldX,oldY);font.setColor(old);}}
     String fit(String value,float width){return HistoryLayout.fit(value,width,t->measure(FontHelper.cardDescFont_N,t,1));}
     HistoryScreen(){
+        mouseDown=com.badlogic.gdx.Gdx.input.isButtonPressed(com.badlogic.gdx.Input.Buttons.LEFT);
         cancel.show(tr("关闭账本","Close"));latestTab.move(Settings.WIDTH*.55f,Settings.HEIGHT*.95f);historyTab.move(Settings.WIDTH*.72f,Settings.HEIGHT*.95f);home.resize(Settings.WIDTH*.14f,36*Settings.scale);home.move(Settings.WIDTH*.89f,Settings.HEIGHT*.95f);historyMode=true;currentRequested=true;stats=new StatsScreen(this);
         for(int i=0;i<sections.length;i++){sections[i]=new Hitbox(Settings.WIDTH*.17f,40*Settings.scale);sections[i].move(Settings.WIDTH*(.15f+i*.21f),Settings.HEIGHT*.735f);}
         filters[0]=dropdown(new String[]{tr("职业：全部","Class: all"),tr("战士","Ironclad"),tr("猎人","Silent"),tr("机器人","Defect"),tr("观者","Watcher")});
@@ -118,10 +124,11 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(click(historyTab)){showHistory();return true;}
         if(click(home)){showStats();return true;}return false;
     }
-    void navigation(SpriteBatch sb){HistoryIndex.Summary newest=HistoryIndex.latest(index.runs,CardCrawlGame.saveSlot,Boolean.getBoolean("spireledger.fixture"));boolean latest=historyMode&&selected!=null&&newest!=null&&selected.id.equals(newest.id);tab(sb,latestTab,tr("最近一局","Latest run"),latest);tab(sb,historyTab,tr("历史对局","Run history"),historyMode&&!latest);tab(sb,home,tr("个人统计","Statistics"),!historyMode);}
+    void navigation(SpriteBatch sb){HistoryIndex.Summary newest=HistoryIndex.latest(index.runs,CardCrawlGame.saveSlot,Boolean.getBoolean("spireledger.fixture"));boolean latest=historyMode&&selected!=null&&newest!=null&&selected.id.equals(newest.id);tab(sb,latestTab,tr("最近一局","Latest run"),latest);tab(sb,historyTab,tr("历史对局","Run history"),historyMode&&!latest);tab(sb,home,tr("个人统计","Statistics"),!historyMode);String warning=clickWarning();if(!warning.isEmpty())text(sb,fit(warning,Settings.WIDTH*.88f),Settings.WIDTH*.06f,Settings.HEIGHT*.995f,Color.SALMON);}
     void tab(SpriteBatch sb,Hitbox hitbox,String label,boolean active){if(!active){button(sb,hitbox,label);return;}box(sb,hitbox,new Color(.27f,.24f,.15f,1));FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,label,hitbox.cX,hitbox.cY,Settings.GOLD_COLOR);}
 
     void update(){
+        if(!Settings.isTouchScreen)watchClicks(com.badlogic.gdx.Gdx.input.isButtonPressed(com.badlogic.gdx.Input.Buttons.LEFT),InputHelper.justClickedLeft);
 
         if(indexTask!=null&&indexTask.isDone()){try{index=indexTask.get();for(HistoryIndex.Summary s:index.runs){StringBuilder names=new StringBuilder();for(String id:s.cardIds)names.append(' ').append(cardName(id));for(String id:s.relicIds)names.append(' ').append(relicName(id));s.localizedSearch=names.toString().toLowerCase(Locale.ROOT);}message="";setMonths();filter();if(currentRequested){currentRequested=false;showLatest();}}catch(Exception e){message=tr("读取失败：","Read failed: ")+e.getClass().getSimpleName();}indexTask=null;}
         if(detailTask!=null&&detailTask.isDone()){try{detail=detailTask.get();for(JsonElement e:HistoryIndex.array(detail,"records"))if(e.isJsonObject()){JsonObject o=e.getAsJsonObject();String t=HistoryIndex.str(o,"type");if(Arrays.asList("decision","build_change","load","floor","ending","coverage","turn_snapshot","turn_rollback").contains(t))events.add(o);}message="";prepareFloors();makeLines();}catch(Exception e){message=tr("此局文件无法读取：","Cannot read run: ")+e.getClass().getSimpleName();}detailTask=null;}

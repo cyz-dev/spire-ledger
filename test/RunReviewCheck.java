@@ -48,6 +48,10 @@ public final class RunReviewCheck {
         check(ReplayEnvironment.carried("coloredmap","2.4.1")&&ReplayEnvironment.carried("CardImageReplacer","2.0"),"practice carries reviewed mods at their exact version");
         check(!ReplayEnvironment.carried("coloredmap","2.4.0")&&!ReplayEnvironment.carried("loadout","1.2.4"),"practice leaves other versions and unreviewed mods out");
         check(!ReplayEnvironment.carried("sts1solver","0.9.7")&&!ReplayEnvironment.carried("superfastmode","1.0.8"),"the solver stays out of practice and SuperFastMode is copied separately");
+        HistoryScreen.mouseDown=false;HistoryScreen.lostClicks=0;HistoryScreen.watchClicks(true,true);HistoryScreen.watchClicks(true,false);HistoryScreen.watchClicks(false,false);
+        check(HistoryScreen.lostClicks==0,"a click the game reported, then held and released, is not lost");
+        HistoryScreen.watchClicks(true,false);HistoryScreen.watchClicks(false,false);HistoryScreen.watchClicks(true,false);check(HistoryScreen.lostClicks==2,"two presses with no click flag count as taken by another mod");
+        HistoryScreen.lostClicks=0;
         JsonObject size=new JsonObject();size.addProperty("screen_w",1920);size.addProperty("screen_h",1080);
         check(TurnAdapter.windowScale(size,480,1920,1080)==null,"same window, no rescale");
         float[] half=TurnAdapter.windowScale(size,480,960,540);check(half!=null&&Math.abs(half[0]-.5f)<1e-6&&Math.abs(half[1]-.5f)<1e-6,"1920x1080 capture in a 960x540 window halves positions");

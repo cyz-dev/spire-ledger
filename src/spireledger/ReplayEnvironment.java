@@ -47,6 +47,9 @@ final class ReplayEnvironment {
         for(int i=0;i<Math.max(min.length,have.length);i++){long a=i<have.length?Long.parseLong(have[i]):0,b=i<min.length?Long.parseLong(min[i]):0;if(a!=b)return a>b;}
         return true;
     }
+    /** Loaded mods outside the reviewed set, by display name, for warnings. */
+    static List<String> unreviewed(){List<String> out=new ArrayList<>();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){String id=info.ID;
+        if(Arrays.asList("basemod","stslib","spire-ledger").contains(id)||id.startsWith("spire-ledger-")||OPTIONAL.containsKey(id)&&matches(OPTIONAL.get(id),String.valueOf(info.ModVersion)))continue;out.add(info.Name==null||info.Name.isEmpty()?id:info.Name);}return out;}
     static boolean loaded() {
         if(Loader.MODINFOS==null||!"12-18-2022".equals(Loader.STS_VERSION))return false;
         JsonArray mods=new JsonArray();
