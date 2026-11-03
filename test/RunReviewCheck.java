@@ -45,6 +45,13 @@ public final class RunReviewCheck {
         for(String v:new String[]{"0.9.6","0.9.7","0.10.0","1.0"}){solver.addProperty("version",v);check(ReplayEnvironment.accepts(mods),"solver "+v+" accepted as 0.9.6 or later");}
         for(String v:new String[]{"0.9.5","0.9.4-test","0.9.7-rc1",""}){solver.addProperty("version",v);check(!ReplayEnvironment.accepts(mods),"solver "+v+" rejected");}
         solver.addProperty("version","0.9.6");
+        check(ReplayEnvironment.carried("coloredmap","2.4.1")&&ReplayEnvironment.carried("CardImageReplacer","2.0"),"practice carries reviewed mods at their exact version");
+        check(!ReplayEnvironment.carried("coloredmap","2.4.0")&&!ReplayEnvironment.carried("loadout","1.2.4"),"practice leaves other versions and unreviewed mods out");
+        check(!ReplayEnvironment.carried("sts1solver","0.9.7")&&!ReplayEnvironment.carried("superfastmode","1.0.8"),"the solver stays out of practice and SuperFastMode is copied separately");
+        JsonObject size=new JsonObject();size.addProperty("screen_w",1920);size.addProperty("screen_h",1080);
+        check(TurnAdapter.windowScale(size,480,1920,1080)==null,"same window, no rescale");
+        float[] half=TurnAdapter.windowScale(size,480,960,540);check(half!=null&&Math.abs(half[0]-.5f)<1e-6&&Math.abs(half[1]-.5f)<1e-6,"1920x1080 capture in a 960x540 window halves positions");
+        float[] legacy=TurnAdapter.windowScale(new JsonObject(),480,1024,768);check(legacy!=null&&Math.abs(legacy[0]-1024f/1920)<1e-6&&Math.abs(legacy[1]-768f/1440)<1e-6,"an old snapshot reads its width back from the player's x at WIDTH*0.25");
         mods.get(4).getAsJsonObject().addProperty("version","unknown");check(!ReplayEnvironment.accepts(mods),"unverified version rejected");
         check(!ReplayEnvironment.accepts(new JsonArray()),"missing requirements rejected");
         System.out.println("RunReviewCheck PASS: read-only floor projection, choice conflicts, deck grouping and version boundary");

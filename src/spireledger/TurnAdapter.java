@@ -21,6 +21,8 @@ final class TurnAdapter {
         JsonObject out=new JsonObject();out.addProperty("dungeon_id",AbstractDungeon.id);out.addProperty("act",AbstractDungeon.actNum);
         out.addProperty("class",AbstractDungeon.player.chosenClass.name());out.addProperty("seed",String.valueOf(Settings.seed));
         out.addProperty("ascension",AbstractDungeon.ascensionLevel);out.addProperty("ascension_mode",AbstractDungeon.isAscensionMode);
+        // Positions in the state are absolute for the window they were taken in, so the size travels with them.
+        out.addProperty("screen_w",Settings.WIDTH);out.addProperty("screen_h",Settings.HEIGHT);
         JsonObject pools=new JsonObject();Class<?> type=Class.forName("savestate.CardState");
         for(String name:POOLS){JsonArray cards=new JsonArray();CardGroup group=(CardGroup)AbstractDungeon.class.getField(name).get(null);
             for(AbstractCard card:group.group)cards.add(encode(call(type,"forCard",new Class<?>[]{AbstractCard.class},card)));pools.add(name,cards);}
@@ -174,6 +176,21 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
         a.actions.clear();a.preTurnActions.clear();a.cardQueue.clear();a.monsterQueue.clear();a.currentAction=null;a.turnStartCurrentAction=null;a.turnHasEnded=false;a.phase=GameActionManager.Phase.WAITING_ON_USER;
         AbstractDungeon.overlayMenu.showCombatPanels();AbstractDungeon.overlayMenu.endTurnButton.enable();
         AbstractDungeon.player.isEndingTurn=false;AbstractDungeon.player.hand.refreshHandLayout();AbstractDungeon.player.hand.applyPowers();AbstractDungeon.player.hand.glowCheck();
+        // The health bar only reaches its place through the combat-start pop-in, which a restored board never plays; without this it sits 60px up across the player's legs.
+        settle(AbstractDungeon.player);for(AbstractCreature m:monsters())settle(m);
+    }
+    static List<AbstractCreature> monsters(){List<AbstractCreature> out=new ArrayList<>();if(AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters!=null)out.addAll(AbstractDungeon.getCurrRoom().monsters.monsters);return out;}
+    static void settle(AbstractCreature c){for(String[] f:new String[][]{{"hbShowTimer","0"},{"hbYOffset","0"},{"hbAlpha","1"},{"healthHideTimer","1"}})try{Field field=AbstractCreature.class.getDeclaredField(f[0]);field.setAccessible(true);field.setFloat(c,Float.parseFloat(f[1]));}catch(ReflectiveOperationException ignored){}}
+    /** Null when the window matches the capture; snapshots without the size are read back from the player's x, which the game puts at WIDTH*0.25. */
+    static float[] windowScale(JsonObject environment,float playerX,int width,int height){
+        int w=environment!=null&&environment.has("screen_w")?environment.get("screen_w").getAsInt():Math.round(playerX/0.25f),h=environment!=null&&environment.has("screen_h")?environment.get("screen_h").getAsInt():Math.round(w*(float)height/Math.max(1,width));
+        if(w<=0||h<=0||w==width&&h==height)return null;return new float[]{(float)width/w,(float)height/h};
+    }
+    static void rescale(JsonObject environment){
+        float[] s=windowScale(environment,AbstractDungeon.player.drawX,Settings.WIDTH,Settings.HEIGHT);if(s==null)return;
+        List<AbstractCreature> all=monsters();all.add(AbstractDungeon.player);
+        for(AbstractCreature c:all){c.drawX*=s[0];c.drawY*=s[1];c.dialogX*=s[0];c.dialogY*=s[1];
+            for(com.megacrit.cardcrawl.helpers.Hitbox hb:new com.megacrit.cardcrawl.helpers.Hitbox[]{c.hb,c.healthHb,c instanceof com.megacrit.cardcrawl.monsters.AbstractMonster?((com.megacrit.cardcrawl.monsters.AbstractMonster)c).intentHb:null})if(hb!=null)hb.move((hb.x+hb.width/2)*s[0],(hb.y+hb.height/2)*s[1]);}
     }
     static final Set<String> VISUAL_FIELDS=new HashSet<>(Arrays.asList("inspect_hb","hb","health_hb","intent_hb","hb_x","hb_y","hb_w","hb_h","hb_alpha","draw_x","draw_y","dialog_x","dialog_y","anim_x","anim_y","reticle_alpha","reticle_rendered","intent_alpha","intent_alpha_target","intent_offset_x","previous_screen_name"));
     static JsonElement logical(JsonElement value){
@@ -187,7 +204,7 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
     }
     static void load(JsonObject snapshot)throws Exception{
         Object saved=saver().getConstructor(JsonObject.class).newInstance(snapshot.getAsJsonObject("state"));
-        call(saved,"loadState",new Class<?>[0]);restoreEnvironment(snapshot.getAsJsonObject("environment"));repair(snapshot.getAsJsonObject("supplement"));readyAfterRestore();
+        call(saved,"loadState",new Class<?>[0]);restoreEnvironment(snapshot.getAsJsonObject("environment"));repair(snapshot.getAsJsonObject("supplement"));rescale(snapshot.getAsJsonObject("environment"));readyAfterRestore();
     }
     static void restore(JsonObject snapshot)throws Exception{
         if(ReplaySafety.quarantined)throw new IllegalStateException("Game is frozen after a failed restore; restart this process");

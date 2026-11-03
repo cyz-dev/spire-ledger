@@ -23,6 +23,8 @@ final class ReplayEnvironment {
         mods.put("CardImageReplacer","2.0");
         OPTIONAL=Collections.unmodifiableMap(mods);
     }
+    /** Practice opens with the player's loaded reviewed mods; the solver never follows a run into practice, and SuperFastMode is copied with its config. */
+    static boolean carried(String id,String version){String v=OPTIONAL.get(id);return v!=null&&!"sts1solver".equals(id)&&!StateMod.SPEED_MOD.equals(id)&&matches(v,version);}
     static boolean accepts(JsonArray mods) {
         if(mods==null)return false;
         Map<String,String> remaining=new HashMap<>(OPTIONAL);
