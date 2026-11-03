@@ -28,7 +28,10 @@ import java.util.*;
 @SpireInitializer
 public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscriber,StartGameSubscriber,CustomSavable<JsonObject> {
     static final StateMod INSTANCE=new StateMod();
-    static final Path ROOT=Paths.get(System.getProperty("user.home"),".spire-ledger","runs");
+    /** Fallback when the game folder cannot be found or written: the user's own data directory. */
+    static final Path HOME_ROOT=Paths.get(System.getProperty("user.home"),".spire-ledger","runs");
+    /** Where runs live. The game folder (parent of mods/) when it exists, otherwise HOME_ROOT; resolved lazily because Gdx.files is not ready at class-load time. */
+    static volatile Path ROOT=HOME_ROOT;
     // State Notes 0.4.0 records stay where the player left them; read-only.
     static final Path LEGACY_ROOT=Paths.get(System.getProperty("user.home"),".sts1-state-notes","runs");
     static Recorder recorder;
@@ -184,7 +187,23 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     }
     static void toggle(boolean value){if(value==enabled)return;if(failed&&value)failed=false;safely(()->{if(recorder!=null){JsonObject e=Recorder.object("coverage");e.addProperty("status",value?"enabled":"disabled");recorder.append(e);recorder.interrupt("recording_disabled");recorder.export();}enabled=value;if(value){last=null;mutationBefore=null;}status=value?HistoryScreen.tr("就绪 · 记录已开启","Ready — recording enabled"):HistoryScreen.tr("记录已关闭","Recording disabled");savePreference();});}
     static void savePreference()throws IOException{Path p=ROOT.getParent().resolve("enabled.txt");Files.createDirectories(p.getParent());Files.write(p,String.valueOf(enabled).getBytes(StandardCharsets.UTF_8));}
+    /** Point the data directory at the game folder (parent of mods/) once Gdx.files is ready; keep HOME_ROOT when it cannot be written. */
+    static void resolveRoot(){
+        try{
+            Path mods=com.badlogic.gdx.Gdx.files.local("mods").file().toPath().toAbsolutePath().normalize();
+            if(java.nio.file.Files.isDirectory(mods)){
+                Path runs=mods.getParent().resolve("spire-ledger").resolve("runs");
+                java.nio.file.Files.createDirectories(runs);
+                ROOT=runs;
+                return;
+            }
+        }catch(Throwable ignored){}
+        try{java.nio.file.Files.createDirectories(HOME_ROOT);}catch(Throwable ignored){}
+        ROOT=HOME_ROOT;
+    }
+
     @Override public void receivePostInitialize(){
+        resolveRoot();
         boolean preferenceFailed=false;
         try{Path p=ROOT.getParent().resolve("enabled.txt");if(Files.exists(p))enabled=Boolean.parseBoolean(new String(Files.readAllBytes(p),StandardCharsets.UTF_8).trim());}catch(IOException ex){preferenceFailed=true;enabled=false;}
         status=preferenceFailed?HistoryScreen.tr("偏好读取失败，记录已关闭","Preference read failed; recording disabled"):enabled?HistoryScreen.tr("就绪 · 本地记录已开启","Ready — local recording"):HistoryScreen.tr("记录已关闭","Recording disabled");
