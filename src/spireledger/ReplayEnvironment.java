@@ -19,8 +19,12 @@ final class ReplayEnvironment {
         mods.put("HideInfo","0.0.1");
         mods.put("justclick","0.1.1");
         mods.put("lolifontmod","0.2");
+        // Card art and font replacers change no combat state and draw nothing the capture reads.
+        mods.put("CardImageReplacer","2.0");
         OPTIONAL=Collections.unmodifiableMap(mods);
     }
+    /** Practice opens with the player's loaded reviewed mods; the solver never follows a run into practice, and SuperFastMode is copied with its config. */
+    static boolean carried(String id,String version){String v=OPTIONAL.get(id);return v!=null&&!"sts1solver".equals(id)&&!StateMod.SPEED_MOD.equals(id)&&matches(v,version);}
     static boolean accepts(JsonArray mods) {
         if(mods==null)return false;
         Map<String,String> remaining=new HashMap<>(OPTIONAL);
@@ -43,6 +47,9 @@ final class ReplayEnvironment {
         for(int i=0;i<Math.max(min.length,have.length);i++){long a=i<have.length?Long.parseLong(have[i]):0,b=i<min.length?Long.parseLong(min[i]):0;if(a!=b)return a>b;}
         return true;
     }
+    /** Loaded mods outside the reviewed set, by display name, for warnings. */
+    static List<String> unreviewed(){List<String> out=new ArrayList<>();if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS){String id=info.ID;
+        if(Arrays.asList("basemod","stslib","spire-ledger").contains(id)||id.startsWith("spire-ledger-")||OPTIONAL.containsKey(id)&&matches(OPTIONAL.get(id),String.valueOf(info.ModVersion)))continue;out.add(info.Name==null||info.Name.isEmpty()?id:info.Name);}return out;}
     static boolean loaded() {
         if(Loader.MODINFOS==null||!"12-18-2022".equals(Loader.STS_VERSION))return false;
         JsonArray mods=new JsonArray();

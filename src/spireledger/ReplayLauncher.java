@@ -206,6 +206,13 @@ final class ReplayLauncher {
         return -1;
     }
 
+    /** The child runs save slot 0, so the player's slot-prefixed gameplay (language) and sound settings are copied unprefixed. */
+    static void copyPlayerSettings(Path instanceDir)throws IOException{
+        String prefix=CardCrawlGame.saveSlot==0?"":CardCrawlGame.saveSlot+"_";
+        for(String name:new String[]{"STSGameplaySettings","STSSound"}){Path source=Paths.get("preferences",prefix+name);if(!Files.isRegularFile(source))continue;
+            for(String dir:new String[]{"preferences","betaPreferences"})Files.copy(source,instanceDir.resolve(dir).resolve(name),StandardCopyOption.REPLACE_EXISTING);}
+    }
+
     static Path launchPracticeInstance(HistoryIndex.Summary summary, JsonObject ref, Path runDir) throws Exception {
         if (!TurnRecorder.compatible()) {
             throw new IllegalStateException("Environment not compatible for practice instance");
@@ -221,8 +228,8 @@ final class ReplayLauncher {
         Path baseModJar = findModJar("basemod");
         Path stslibJar = findModJar("stslib");
         Path stateNotesJar = findStateNotesJar();
-        Path speedModJar=null;
-        for(ModInfo mod:Loader.MODINFOS)if(StateMod.SPEED_MOD.equals(mod.ID))speedModJar=findModJar(StateMod.SPEED_MOD);
+        Path speedModJar=null;Map<String,Path> carried=new LinkedHashMap<>();
+        for(ModInfo mod:Loader.MODINFOS){if(StateMod.SPEED_MOD.equals(mod.ID))speedModJar=findModJar(StateMod.SPEED_MOD);else if(ReplayEnvironment.carried(mod.ID,String.valueOf(mod.ModVersion)))carried.put(mod.ID,findModJar(mod.ID));}
 
         Path turnFile = resolveTurnPath(runDir, Recorder.string(ref, "relative_path"));
         readTarget(runDir,summary.id,ref);
@@ -237,8 +244,11 @@ final class ReplayLauncher {
         Files.createDirectories(instanceDir.resolve("betaPreferences"));
         Files.createDirectories(instanceDir.resolve("temp"));
 
-        // Copy display config and dummy slot prefs to ensure isolated launch
-        Files.write(instanceDir.resolve("info.displayconfig"), "1024\n768\n60\nfalse\nfalse\ntrue\n".getBytes(StandardCharsets.UTF_8));
+        // The practice window opens at the player's own size, language and volume; the snapshot's positions are rescaled on restore if sizes still differ.
+        Path display=Paths.get("info.displayconfig");
+        if(Files.isRegularFile(display))Files.copy(display,instanceDir.resolve("info.displayconfig"),StandardCopyOption.REPLACE_EXISTING);
+        else Files.write(instanceDir.resolve("info.displayconfig"), "1024\n768\n60\nfalse\nfalse\ntrue\n".getBytes(StandardCharsets.UTF_8));
+        copyPlayerSettings(instanceDir);
         Files.write(instanceDir.resolve("betaPreferences/STSSaveSlots"), "{\"DEFAULT_SLOT\":\"0\",\"PROFILE_NAME\":\"Practice\"}".getBytes(StandardCharsets.UTF_8));
 
         // Mute SaveStateMod UI and keybindings in isolated practice instance
@@ -268,8 +278,9 @@ final class ReplayLauncher {
         Files.copy(baseModJar, instanceDir.resolve("mods/BaseMod.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stslibJar, instanceDir.resolve("mods/StSLib.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stateNotesJar, instanceDir.resolve("mods/SpireLedger.jar"), StandardCopyOption.REPLACE_EXISTING);
+        for(Map.Entry<String,Path> mod:carried.entrySet())Files.copy(mod.getValue(),instanceDir.resolve("mods").resolve(mod.getKey()+".jar"),StandardCopyOption.REPLACE_EXISTING);
         if(speedModJar!=null){
-            Files.copy(speedModJar,instanceDir.resolve("mods/SuperFastMode.jar"));
+            Files.copy(speedModJar,instanceDir.resolve("mods/SuperFastMode.jar"),StandardCopyOption.REPLACE_EXISTING);
             Path config=Paths.get(com.evacipated.cardcrawl.modthespire.lib.ConfigUtils.CONFIG_DIR,"SuperFastMode","SuperFastModeConfig.properties");
             if(Files.isRegularFile(config)){
                 String os=System.getProperty("os.name","").toLowerCase(Locale.ROOT);
@@ -292,10 +303,10 @@ final class ReplayLauncher {
         cmd.add("--skip-launcher");
         cmd.add("--skip-intro");
         cmd.add("--mods");
-        cmd.add("basemod,stslib,spire-ledger"+(speedModJar==null?"":","+StateMod.SPEED_MOD));
+        cmd.add("basemod,stslib,spire-ledger"+(speedModJar==null?"":","+StateMod.SPEED_MOD)+(carried.isEmpty()?"":","+String.join(",",carried.keySet())));
         // A fixture observes the actual child launch; it never prepares the child's battle.
         if(Boolean.getBoolean("spireledger.fixture")&&Boolean.getBoolean("spireledger.launchPracticeProbe")){
-            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"));
+            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"),StandardCopyOption.REPLACE_EXISTING);
             cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",spire-ledger-replay-probe");
             cmd.add(1,"-Dspireledger.fixture=true");cmd.add(1,"-Dspireledger.productionPractice=true");cmd.add(1,"-Dspireledger.replayMode=restore");
             if(Boolean.getBoolean("spireledger.superFastModeProbe"))cmd.add(1,"-Dspireledger.superFastModeProbe=true");
@@ -393,7 +404,8 @@ final class ReplayLauncher {
                         node.room = new EmptyRoom();
                         AbstractDungeon.currMapNode = node;
                     }
-                    if (StateMod.ready()) {
+                    // Restoring during the room-entry fade leaves that veil over the board, so wait for it to clear.
+                    if (StateMod.ready() && (AbstractDungeon.fadeColor == null || AbstractDungeon.fadeColor.a <= 0f)) {
                         practiceStep = 2;
                     }
                 }

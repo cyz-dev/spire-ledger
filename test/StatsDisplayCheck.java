@@ -21,6 +21,8 @@ public final class StatsDisplayCheck {
   check(filter.days==0&&filter.from==c.getTimeInMillis(),"Absolute inclusive start replaces rolling days");c.set(2026,Calendar.NOVEMBER,1);
   check(filter.to==c.getTimeInMillis(),"End month includes its entire final day");
   StatsScreen.dateRange(filter,0,months,2,1);check(filter.days==0&&filter.from==0&&filter.to==0,"All dates clears prior range");
+  check(StatsScreen.withCount("2","虱虫").equals("2 只虱虫")||StatsScreen.withCount("2","虱虫").equals("2 虱虫"),"the enemy count stays in the label so 2- and 3-Louse differ");
+  check(StatsScreen.withCount("3","三哨卫").equals("三哨卫")&&StatsScreen.withCount("3","3 Shapes").equals("3 Shapes"),"a name that already carries the count is not prefixed again");
   StatsScreen.dateRange(filter,1,months,0,0);check(filter.from==0&&filter.to==0,"Unbounded month endpoints");
   StatsScreen.dateRange(filter,1,months,1,2);check(filter.from>=filter.to,"Reversed months remain detectable");
   check(PickTiers.tier(90,100)==0&&PickTiers.tier(89,100)==1&&PickTiers.tier(75,100)==1&&PickTiers.tier(60,100)==2&&PickTiers.tier(45,100)==3&&PickTiers.tier(30,100)==4&&PickTiers.tier(15,100)==5&&PickTiers.tier(1,100)==6&&PickTiers.tier(0,100)==7,"observed tier boundary counts");
