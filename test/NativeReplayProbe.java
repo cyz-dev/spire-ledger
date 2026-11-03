@@ -108,8 +108,17 @@ import java.util.*;
   }
   if(stage==65){
    if(System.currentTimeMillis()<wait)return;
-   check(history.attemptMenu!=null,"the turn with two attempts shows an attempts dropdown");
-   JsonObject attempts=boxJson(history.attemptMenu.getHitbox());report.add("attempt_menu_box",attempts);check(attempts.get("inside").getAsBoolean(),"attempts dropdown is positioned inside the screen: "+attempts);
+   check(history.attemptMenu!=null,"the turn with two attempts still builds the attempts list");
+   history.review.layoutAttempts();
+   JsonObject prev=boxJson(history.review.attemptPrev),next=boxJson(history.review.attemptNext);
+   report.add("attempt_stepper",prev);
+   check(prev.get("inside").getAsBoolean()&&next.get("inside").getAsBoolean(),"the attempt stepper stays inside the screen: "+prev+" "+next);
+   check(prev.get("x").getAsFloat()>Settings.WIDTH*.65f,"the attempt stepper sits on the right end of the band, not over the floor list: "+prev);
+   int before=history.attemptSelection;
+   history.selectAttempt(before>0?before-1:0);
+   check(history.attemptSelection==Math.max(0,before-1),"the stepper moves to the previous attempt: "+history.attemptSelection);
+   history.selectAttempt(before);
+   check(history.attemptSelection==before,"the stepper moves back to the newest attempt: "+history.attemptSelection);
    shot="replay-attempt-menu.png";stage=64;return;
   }
   if(stage==66){
@@ -190,6 +199,8 @@ import java.util.*;
    o.addProperty("viewport",Gdx.graphics.getWidth()+"x"+Gdx.graphics.getHeight());
    o.addProperty("player_draw",AbstractDungeon.player==null?"":(AbstractDungeon.player.drawX+","+AbstractDungeon.player.drawY));
    o.addProperty("player_visible_hb",AbstractDungeon.player==null?false:AbstractDungeon.player.hb.width>0&&AbstractDungeon.player.hb.height>0);
+   // The bar is drawn at hb.y + hbYOffset; a pop-in left half-way puts it across the player's legs.
+   o.add("player_bar",barFacts(AbstractDungeon.player));
    o.addProperty("fade_alpha",AbstractDungeon.fadeColor==null?-1:AbstractDungeon.fadeColor.a);
    o.addProperty("fade_timer",String.valueOf(hidden(AbstractDungeon.class,"fadeTimer")));
    o.addProperty("waiting_on_fade_out",AbstractDungeon.waitingOnFadeOut);
@@ -209,10 +220,43 @@ import java.util.*;
     n.addProperty("state",hidden(m,"state")!=null);
     n.addProperty("is_dead",m.isDead);n.addProperty("is_dying",m.isDying);n.addProperty("is_escaping",m.isEscaping);
     n.addProperty("curr_hp",m.currentHealth);n.addProperty("hittable",!m.isDeadOrEscaped());
+    n.add("bar",barFacts(m));
     monsters.add(n);
    }
    o.add("monsters",monsters);
    o.addProperty("same_group",AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters==AbstractDungeon.getMonsters());
+  }catch(Throwable t){o.addProperty("error",t.toString());}
+  return o;
+ }
+ // The practice child is a separate process with its own preferences folder, so it has to be given the player's settings.
+ void verifyPracticeEnvironment(){
+  String expected="";
+  try{
+   java.io.File file=new java.io.File("preferences/STSGameplaySettings");
+   if(file.isFile()){
+    JsonObject prefs=new JsonParser().parse(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8)).getAsJsonObject();
+    expected=Recorder.string(prefs,"LANGUAGE");
+   }
+  }catch(Throwable ignored){}
+  String language=Settings.language==null?"":Settings.language.name();
+  report.addProperty("practice_language",language);report.addProperty("practice_settings_language",expected);
+  check(!expected.isEmpty(),"the practice instance inherits the player's gameplay settings file");
+  check(expected.equalsIgnoreCase(language),"the practice instance runs in the player's language: "+expected+" vs "+language);
+  JsonArray mods=new JsonArray();
+  for(ModInfo info:com.evacipated.cardcrawl.modthespire.Loader.MODINFOS)mods.add(info.ID);
+  report.add("practice_mods",mods);
+  check(mods.size()>=3,"the practice instance loaded its mod set: "+mods);
+ }
+ static JsonObject barFacts(com.megacrit.cardcrawl.core.AbstractCreature c){
+  JsonObject o=new JsonObject();if(c==null)return o;
+  try{
+   Object offset=hidden(c,"hbYOffset"),timer=hidden(c,"hbShowTimer"),alpha=hidden(c,"hbAlpha");
+   o.addProperty("hbar_offset",offset==null?-999f:((Number)offset).floatValue());
+   o.addProperty("hbar_timer",timer==null?-999f:((Number)timer).floatValue());
+   o.addProperty("hbar_alpha",alpha==null?-1f:((Number)alpha).floatValue());
+   o.addProperty("hb_bottom",c.hb.y);
+   o.addProperty("bar_bottom",offset==null?-999f:c.hb.y+((Number)offset).floatValue());
+   o.addProperty("draw_y",c.drawY);
   }catch(Throwable t){o.addProperty("error",t.toString());}
   return o;
  }
@@ -221,8 +265,14 @@ import java.util.*;
   check(facts!=null,where+" has render facts");
   check(!facts.has("error"),where+" render facts: "+facts.get("error"));
   check(facts.get("fade_alpha").getAsFloat()==0f,where+" is not covered by the room fade, got "+facts.get("fade_alpha"));
+  JsonObject playerBar=facts.getAsJsonObject("player_bar");
+  check(playerBar!=null&&Math.abs(playerBar.get("hbar_offset").getAsFloat())<0.001f,where+" puts the player's health bar at rest instead of mid pop-in: "+playerBar);
+  check(playerBar!=null&&playerBar.get("hbar_alpha").getAsFloat()>0.99f,where+" keeps the player's health bar visible: "+playerBar);
+  check(playerBar!=null&&playerBar.get("bar_bottom").getAsFloat()<=playerBar.get("draw_y").getAsFloat(),where+" draws the player's health bar at or below the sprite root: "+playerBar);
   for(JsonElement e:facts.getAsJsonArray("monsters")){
    JsonObject m=e.getAsJsonObject();
+   JsonObject bar=m.getAsJsonObject("bar");
+   check(bar!=null&&Math.abs(bar.get("hbar_offset").getAsFloat())<0.001f,where+" puts every monster's health bar at rest: "+m);
    check(m.get("atlas").getAsBoolean()&&m.get("skeleton").getAsBoolean()&&m.get("state").getAsBoolean(),where+" keeps the monster art: "+m);
    check(!m.get("hb").getAsString().startsWith("0"),where+" keeps a clickable monster hitbox: "+m);
    check(m.get("x").getAsFloat()>=0f&&m.get("x").getAsFloat()<=Settings.WIDTH,where+" keeps the monster on screen: "+m);
@@ -286,7 +336,7 @@ import java.util.*;
    case 5:AbstractDungeon.overlayMenu.endTurnButton.disable(true);targetTurn=GameActionManager.turn+1;stage=6;break;
    case 6:if(GameActionManager.turn<targetTurn)return;verifyTurnFiles();write("after-facts.json",facts());write("after-state.json",new SaveState().jsonEncode());write("after-supplement.json",supplement());if(Boolean.getBoolean("spireledger.replayCurrentProbe")){expectedAfter=facts();expected=read("before-facts.json");replayBranch=StateMod.recorder.branch;addSecondAttempt();HistoryScreen.open();check(HistoryScreen.active(),"native history overlay opened");stage=62;break;}if(Boolean.getBoolean("spireledger.launchPracticeProbe")){JsonObject manifest=TurnFiles.read(StateMod.recorder.directory.resolve("replay/manifest.json"));JsonObject ref=null;for(JsonElement item:manifest.getAsJsonArray("snapshots"))if(item.getAsJsonObject().get("turn").getAsInt()==2)ref=item.getAsJsonObject();check(ref!=null,"turn two launch source");HistoryIndex.Summary summary=new HistoryIndex.Summary();summary.id=StateMod.recorder.runId;TurnRecorder.enabled=false;sourceFiles.put(StateMod.recorder.directory.resolve("run.json"),Files.readAllBytes(StateMod.recorder.directory.resolve("run.json")));try(java.util.stream.Stream<Path> paths=Files.walk(StateMod.recorder.directory.resolve("replay"))){for(Iterator<Path> it=paths.iterator();it.hasNext();){Path file=it.next();if(Files.isRegularFile(file))sourceFiles.put(file,Files.readAllBytes(file));}}Path child=ReplayLauncher.launchPracticeInstance(summary,ref,StateMod.recorder.directory);report.addProperty("launched_practice_directory",child.toAbsolutePath().toString());stage=61;break;}finish(null);stage=99;break;
    case 61:if(ReplayLauncher.launchedProcess.isAlive())return;Path child=Paths.get(report.get("launched_practice_directory").getAsString());int exit=ReplayLauncher.launchedProcess.exitValue();JsonObject process=new JsonObject();process.addProperty("exit_code",exit);Files.write(child.resolve("process-result.json"),process.toString().getBytes(StandardCharsets.UTF_8));check(exit==0,"launched practice child exits cleanly");Path parentConfig=Paths.get(System.getProperty("user.dir","."),"info.displayconfig"),childConfig=child.resolve("info.displayconfig");check(Files.isRegularFile(childConfig)&&Arrays.equals(Files.readAllBytes(parentConfig),Files.readAllBytes(childConfig)),"the practice window copies the player's display config instead of a default");JsonObject childReport=read(child.resolve("replay-probe-result.json").toString());check("pass".equals(childReport.get("status").getAsString()),"launched practice child same-actions check");if(Boolean.getBoolean("spireledger.superFastModeProbe"))check(childReport.has("superfastmode_multiplier")&&childReport.get("superfastmode_multiplier").getAsFloat()==10f,"launched practice child actually runs SuperFastMode at 10x");for(Map.Entry<Path,byte[]> file:sourceFiles.entrySet())check(Arrays.equals(file.getValue(),Files.readAllBytes(file.getKey())),"practice preserves parent source: "+file.getKey());report.addProperty("source_files_unchanged",true);report.addProperty("child_exit",exit);finish(null);stage=99;break;
-   case 7:if(System.currentTimeMillis()<wait)return;JsonObject actual=facts();write("restored-supplement.json",supplement());write("restored-facts.json",actual);write("restored-state.json",new SaveState().jsonEncode());report.add("restored_render",renderFacts());if(Boolean.getBoolean("spireledger.productionPractice"))checkRestoredBoard(report.getAsJsonObject("restored_render"),"the restored practice board");if(shot==null)shot="restored-frame.png";report.addProperty("snapshot_facts_match",actual.equals(expected));if(Boolean.getBoolean("spireledger.productionPractice")&&stage==7){stage=72;wait=System.currentTimeMillis()+900;break;}report.addProperty("expected_history_size",expected.getAsJsonArray("history").size());report.addProperty("restored_history_size",actual.getAsJsonArray("history").size());postSnapshotPlay();stage=8;break;
+   case 7:if(System.currentTimeMillis()<wait)return;JsonObject actual=facts();write("restored-supplement.json",supplement());write("restored-facts.json",actual);write("restored-state.json",new SaveState().jsonEncode());report.add("restored_render",renderFacts());if(Boolean.getBoolean("spireledger.productionPractice")){verifyPracticeEnvironment();checkRestoredBoard(report.getAsJsonObject("restored_render"),"the restored practice board");}if(shot==null)shot="restored-frame.png";report.addProperty("snapshot_facts_match",actual.equals(expected));if(Boolean.getBoolean("spireledger.productionPractice")&&stage==7){stage=72;wait=System.currentTimeMillis()+900;break;}report.addProperty("expected_history_size",expected.getAsJsonArray("history").size());report.addProperty("restored_history_size",actual.getAsJsonArray("history").size());postSnapshotPlay();stage=8;break;
    case 72:if(System.currentTimeMillis()<wait)return;report.add("mid_render",renderFacts());if(shot==null)shot="mid-frame.png";stage=70;wait=System.currentTimeMillis()+1500;break;
    case 70:if(System.currentTimeMillis()<wait)return;report.add("frame_luminance",new Gson().toJsonTree(frameLuma));check(frameLuma.containsKey("restored-frame.png")&&frameLuma.get("restored-frame.png")>10f,"the restored board is lit, not a black frame: "+frameLuma);report.add("settled_render",renderFacts());report.add("fade_samples",fadeSamples);report.add("render_fade",renderFade);if(shot==null)shot="settled-frame.png";stage=71;break;
    case 71:postSnapshotPlay();stage=8;break;
