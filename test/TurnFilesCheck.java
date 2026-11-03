@@ -28,7 +28,31 @@ JsonObject board=new JsonParser().parse("{\"hp\":30,\"deck\":[{\"uuid\":\"a\",\"
   check(Recorder.string(secondCopy,"duplicate_of").equals(Recorder.string(firstCopy,"snapshot_id")),"the repeat keeps its own id and names the original");
   long stored;try(java.util.stream.Stream<Path> list=Files.list(dedupe.resolve("replay").resolve("turns"))){stored=list.count();}
   check(stored==1,"two identical points leave one file on disk: "+stored);
-  check(TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST).getAsJsonArray("snapshots").size()==2,"both attempts stay in the manifest");
+  JsonObject dedupeManifest=TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST);
+  check(dedupeManifest.getAsJsonArray("snapshots").size()==1,"a repeated board reuses the point instead of adding a row: "+dedupeManifest.getAsJsonArray("snapshots").size());
+  JsonObject survivor=dedupeManifest.getAsJsonArray("snapshots").get(0).getAsJsonObject();
+  check(Recorder.intOf(survivor,"attempts",0)==2,"the surviving point counts both attempts: "+survivor);
+  check(Recorder.string(secondCopy,"duplicate_of").equals(Recorder.string(survivor,"snapshot_id")),"the repeat still names the stored point");
+  // A turn that is S/L'd far past the cap keeps its first board and the newest ones, so the sample set stays bounded.
+  Path capped=directory.resolve("capped");Files.createDirectories(capped);
+  TurnFiles cappedFiles=new TurnFiles(capped,"cap-run",new JsonObject());
+  for(int i=0;i<TurnFiles.TURN_ATTEMPTS+4;i++){
+    JsonObject attempt=new JsonObject();attempt.addProperty("combat_id","boss");attempt.addProperty("floor",16);attempt.addProperty("turn",3);
+    attempt.addProperty("captured_at",100L+i);attempt.addProperty("branch_id","branch-"+i);
+    JsonObject attemptBoard=new JsonParser().parse("{\"state\":{\"hp\":"+(30-i)+",\"deck\":[]}}").getAsJsonObject();
+    cappedFiles.publish(attempt,attemptBoard);
+  }
+  JsonObject cappedManifest=TurnFiles.read(capped.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST);
+  int recorded=0,evicted=0;long oldestAt=Long.MAX_VALUE,newestAt=Long.MIN_VALUE;
+  for(JsonElement item:cappedManifest.getAsJsonArray("snapshots")){JsonObject e=item.getAsJsonObject();String availability=Recorder.string(e,"availability");
+    if("recorded".equals(availability)){recorded++;long at=e.get("captured_at").getAsLong();oldestAt=Math.min(oldestAt,at);newestAt=Math.max(newestAt,at);}
+    if("evicted".equals(availability))evicted++;}
+  check(recorded==TurnFiles.TURN_ATTEMPTS,"a turn keeps at most the configured number of boards: "+recorded);
+  check(oldestAt==100L,"the turn-start baseline always survives the cap");
+  check(newestAt==100L+TurnFiles.TURN_ATTEMPTS+3,"the newest attempt always survives the cap");
+  check(evicted==4,"the boards in between are marked evicted: "+evicted);
+  long cappedFilesOnDisk;try(java.util.stream.Stream<Path> list=Files.list(capped.resolve("replay").resolve("turns"))){cappedFilesOnDisk=list.count();}
+  check(cappedFilesOnDisk==TurnFiles.TURN_ATTEMPTS,"evicted boards free their files: "+cappedFilesOnDisk);
 String[] allowed={"basemod|5.56.0","RunHistoryPlus|1.8.3","superfastmode|1.0.8","stslib|2.12.0","spire-ledger|0.6.0-beta.1","HideInfo|0.0.1","lolifontmod|0.2","CardImageReplacer|2.0"};
   JsonArray combination=new JsonArray();
   for(String pair:allowed){String[] parts=pair.split("\\|");JsonObject mod=new JsonObject();mod.addProperty("id",parts[0]);mod.addProperty("version",parts[1]);combination.add(mod);}

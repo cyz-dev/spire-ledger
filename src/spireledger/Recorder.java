@@ -81,6 +81,8 @@ public final class Recorder implements AutoCloseable {
     }
     public static JsonObject copy(JsonObject value){return new JsonParser().parse(value.toString()).getAsJsonObject();}
     public static String string(JsonObject o,String key){return o.has(key)&&!o.get(key).isJsonNull()?o.get(key).getAsString():"";}
+    /** Missing keys and non-numbers fall back instead of throwing: old manifests predate most counters. */
+    public static int intOf(JsonObject o,String key,int fallback){try{return o!=null&&o.has(key)&&o.get(key).isJsonPrimitive()?o.get(key).getAsInt():fallback;}catch(RuntimeException ignored){return fallback;}}
     public static JsonObject object(String type){JsonObject o=new JsonObject();o.addProperty("type",type);return o;}
     private void line(JsonObject value)throws IOException{journal.write((value+"\n").getBytes(StandardCharsets.UTF_8));journal.flush();journal.getFD().sync();}
     public void append(JsonObject record)throws IOException {
