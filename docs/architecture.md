@@ -145,11 +145,19 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 ### S/L 分支、内容去重与存储配额（2026-11-01）
 
-`Recorder` 每次进程启动都新建 `branch`，`lastKey` 只在内存里，于是每次 S/L 都换分支、把整场重记一遍；单点约 155 KB，`MAX_POINTS=10000` 折合每局约 1.5 GB。S/L 的每一次尝试都是“同一状态、不同动作、不同结果”的配对样本，属于训练数据，不能用“清空重记”糊掉，所以改三件事：
+`Recorder` 每次进程启动都新建 `branch`，`lastKey` 只在内存里，于是每次 S/L 都换分支、把整场重记一遍；单点约 155 KB，`MAX_POINTS=10000` 折合每局约 1.5 GB。S/L 的每一次尝试都是“同一状态、不同动作、不同结果”的配对样本，属于训练数据，不能用“清空重记”糊掉，所以改四件事：
 
-- **分支树**：`Recorder` 新增 `branchParent`、`branchParentSnapshot`、`branchReason`。构造时读 `replay/manifest.json` 最后一条快照当父节点，理由 `process_restart`；`forkBranch()`（回合重打）理由 `in_combat_turn_rollback`。条目带 `branch_parent` / `branch_parent_snapshot` / `branch_reason`。
-- **S/L 判定**：`Hooks` 给 `SaveAndContinue.loadSaveFile` 打前置补丁，`battle()` 据此区分 SaveState 恢复（沿用 `combat_id`）、读档回同一楼层（沿用 `combat_id`，理由 `native_load`）、新战斗（新 `combat_id`）。
-- **内容去重**：写入前对快照状态主体算 SHA-256（剔除 `identity`、`captured_at`、`snapshot_id` 与瞬态表现字段，保留 `run_id`/`branch_id`/`combat_id`/`floor`/`turn`）。manifest 的 `blobs` 表按内容寻址；内容已存在就复用同一个 `turns/<uuid>.json`，条目记 `availability="duplicate"` + `duplicate_of`，`snapshot_id` 仍每点唯一。
+- **分支树**：`Recorder` 新增 `branchParent`、`branchParentSnapshot`、`branchReason`。构造时读 `replay/manifest.json` 里最后一条 `availability="recorded"` 的快照当父节点，理由 `process_restart`；`forkBranch()`（回合重打）理由 `in_combat_turn_rollback`。条目带 `branch_parent` / `branch_parent_snapshot` / `branch_reason`。父指针指向**最近一份真正落盘的**快照，不指向 `duplicate` 条目（那种条目没有文件，指过去就断了链）。
+- **S/L 判定**：`Hooks` 给 `SaveAndContinue.loadSaveFile` 打前置补丁置 `pendingLoad`，`battle()` 据此决定身份：
+  - 恢复（SaveState 回放）沿用快照里的 `combat_id`；
+  - 同进程读档、楼层没变 → 沿用内存里的 `combat_id`；
+  - **跨进程**读档（退出游戏再进）：内存全清，从 manifest 的 `last_combat: {combat_id, floor}` 取回；楼层一致就沿用，楼层变了就新开。这张表跟着每次写盘一起落，不额外加文件。
+  - 新战斗（没有读档）一律新 `combat_id`。
+  - 已知局限：同一楼层打两场（只有 Mod 才可能）会被当成同一场，因为判据只有楼层。
+- **内容去重**：写入前对快照状态主体算 SHA-256，规则只有一份，在 `SnapshotShape` 里——它同时是“恢复后是否还原成了同一局面”的比对面。剔除 `identity` 与表现类字段（`hb` 系列、`draw_x/draw_y`、`dialog_x/dialog_y`、`anim_x/anim_y`、`intent_alpha`/`intent_alpha_target`/`intent_offset_x`、`reticle_alpha`/`reticle_rendered`、`previous_screen_name`、`uuid`、`wait_timer`、`hovered`、`just_hovered`），死亡怪物的 `death_timer` 夹到 0。**`cur_map_node_state.taken` 故意保留**：首次进入是 `false`、读档回来是 `true`，这是地图状态不是表现，按它分开存才不会把地图节点还原成未访问。
+  - 两张表以前各写一份、已经漂移：`reticle_rendered` 只在比对面被当成表现字段，于是第 20 层第 1 回合的 6 份快照被算成 2 个 blob，白占 155 KB。现在编译期只有一张 `SnapshotShape.VISUAL`，`TurnFilesCheck` 逐个字段断言“只差这个字段的两块板必须同哈希”。
+  - 规则收紧后哈希值会变：升级前写入的 `content_sha256` 按旧规则算，升级后同一局面会重新落一份（每局最多一次），旧 blob 仍可正常读取。
+  - manifest 的 `blobs` 表按内容寻址；内容已存在就复用同一个 `turns/<uuid>.json`，条目记 `availability="duplicate"` + `duplicate_of`，`snapshot_id` 仍每点唯一。
 - **配额**：单局 `BUDGET_BYTES = 512 MB`（可用 `-Dspireledger.turnBudgetMb` 覆盖）。超预算按 `captured_at` 从旧到新淘汰**最老的分支**，当前分支不动；条目改 `availability="evicted"` 并清空 `relative_path`，随后删除不再被引用的 blob。淘汰不删记录，训练侧能看出“这里曾有数据、内容已回收”，界面只列 `recorded`。
 
 ### 恢复后的可见性与历史页的两个下拉（2026-11-03）
