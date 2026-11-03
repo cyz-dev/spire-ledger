@@ -154,7 +154,9 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 ### 恢复后的可见性与历史页的两个下拉（2026-11-03）
 
-**黑幕遮住战场。** 练习实例进入战斗后立刻恢复，而 `AbstractDungeon.isFadingIn` 仍在跑房间淡入；`readyAfterRestore()` 清空了特效队列，淡入黑幕于是留在 `fadeColor` 上。黑幕盖的是世界层，HUD、手牌和结束回合按钮画在它上面，玩家看到的是“场地是空的、敌人没显示，但可以操作”。现在 `readyAfterRestore()` 同时把 `isFadingIn` 置假、`waitingOnFadeOut` 置假、`fadeColor.a` 归零，恢复后的第一帧就能看到战场。实测同一快照恢复：修复前首帧 `fade_alpha≈0.99`（整屏黑），修复后为 0。
+**黑幕遮住战场。** 练习实例进入战斗后立刻恢复，而此时房间还在跑入场淡入；`readyAfterRestore()` 清空了特效队列，淡入于是被截断在中间，世界层带着一层黑幕继续渲染，而 HUD、手牌、结束回合按钮画在它上面。玩家看到的就是“场地是空的、敌人没显示，但能操作”。
+
+改两处：`ReplayLauncher.checkPracticeStartup()` 在第 1 步到第 2 步之间等 `AbstractDungeon.fadeColor.a` 归零再恢复，不再在淡入中途动手；`readyAfterRestore()` 兜底把 `isFadingIn`、`waitingOnFadeOut` 置假并把 `fadeColor.a` 归零。实测同一快照：修复前恢复后 0.6 s 的截图整屏黑（亮度 0），1.5 s 时世界层仍是暗的；修复后 0.6 s 的截图就是完整战场。探针按截图采样平均亮度，要求恢复后的首帧亮度大于 10/255（整屏黑接近 0，正常战斗画面约 22）。
 
 **“尝试”下拉画不出来。** `RunReview.render()` 只画了 `turnMenu`，`attemptMenu` 只在 `update()` 里更新、从未渲染；`DropdownMenu` 的位置是在 `render()` 里算出来的，所以“尝试”下拉既看不见也点不中。现在两个下拉并排画在 y=0.27 一行（`turnMenu` 在 x=0.70，`attemptMenu` 在 x=0.53），打开的那个最后画，列表不再压住“重打此回合”按钮。
 
