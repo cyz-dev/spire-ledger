@@ -55,6 +55,8 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     final Hitbox[] sections=new Hitbox[4];final int[] sectionRows=new int[4];
     final Hitbox replayButton=new Hitbox(180*Settings.scale,40*Settings.scale);
     DropdownMenu turnMenu;int turnSelection;List<JsonObject> availableTurns=new ArrayList<>();JsonObject manifest;
+    // The selected floor's stored room-entry save, when it matches the path being viewed.
+    JsonObject floorSave;final Hitbox continueButton=new Hitbox(180*Settings.scale,40*Settings.scale);
     List<Integer> floorOrder=new ArrayList<>();int floorIndex;boolean expandedDeck;List<JsonObject> viewRecords=new ArrayList<>();DropdownMenu branchMenu;int branchSelection;List<JsonObject> events=new ArrayList<>();List<Row> lines=new ArrayList<>();
     float rowHeight(){return Math.max(FontHelper.cardDescFont_N.getLineHeight()*1.12f*1.35f,Settings.HEIGHT*.033f);}
     int visibleRows(){return Math.max(1,(int)(Settings.HEIGHT*.495f/rowHeight()));}
@@ -177,13 +179,20 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
                     }
                 }else{
                     try{
-                        ReplayLauncher.launchPracticeInstance(selected,targetTurn,runDir);
+                        // A turn whose fight starts on entering its floor plays on to the map from that floor's save.
+                        JsonArray all=HistoryIndex.array(detail,"records");JsonObject start=FloorSaves.usable(all,all,HistoryIndex.num(targetTurn,"floor",-1),Recorder.string(targetTurn,"snapshot_id"));
+                        ReplayLauncher.launchPracticeInstance(selected,targetTurn,runDir,FloorSaves.fightOnEntry(start)?start:null);
                         message=tr("已启动独立练习实例","Launched isolated practice instance");
                     }catch(Exception ex){
                         DiagnosticReport.error("history_replay",ex);
                         message=tr("启动练习失败：","Launch practice failed: ")+ex.getMessage();
                     }
                 }
+    }
+    void continueFloor(){
+        Path runDir=selected.file!=null?selected.file.getParent():StateMod.ROOT.resolve(selected.id);
+        try{ReplayLauncher.launchPracticeInstance(selected,null,runDir,floorSave);message=tr("已从本层存档启动练习","Launched practice from this floor's save");}
+        catch(Exception ex){DiagnosticReport.error("history_replay",ex);message=tr("启动练习失败：","Launch practice failed: ")+ex.getMessage();}
     }
     @Override public void scrolledUsingBar(float p){if(selected==null)offset=Math.round(p*Math.max(0,filtered.size()-6));else lineOffset=Math.round(p*maxLineOffset());}
     void text(SpriteBatch sb,String value,float x,float y,Color color){FontHelper.renderFontLeftTopAligned(sb,FontHelper.cardDescFont_N,value,x,y,color);}
@@ -297,7 +306,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         List<JsonObject> finalPath=spireledger.stats.Ledger.finalPath(HistoryIndex.array(detail,"records")).records;viewRecords.clear();events.clear();for(JsonElement item:HistoryIndex.array(detail,"records"))if(item.isJsonObject()){JsonObject e=item.getAsJsonObject();boolean include=branchSelection==0?finalPath.contains(e):branchSelection==1||branchSelection-2<branches.size()&&branches.get(branchSelection-2).equals(HistoryIndex.str(e,"branch_id"));if(!include)continue;viewRecords.add(e);if(Arrays.asList("decision","build_change","load","floor","ending","coverage","turn_snapshot","turn_rollback").contains(HistoryIndex.str(e,"type")))events.add(e);}
         TreeSet<Integer> floors=new TreeSet<>();for(JsonObject e:events)floors.add(floor(e));floorOrder=new ArrayList<>(floors);floorIndex=selected.current?Math.max(0,floorOrder.size()-1):0;focusFloor();
     }
-    void makeLines(){if(events.isEmpty()){lines.clear();add(tr("该尝试没有可查看的楼层记录。","No floor records in this attempt."));return;}int selectedFloor=floor(events.get(eventIndex));floorIndex=Math.max(0,floorOrder.indexOf(selectedFloor));if(expandedDeck){makeDetailLines();return;}lines.clear();lineOffset=0;Arrays.fill(sectionRows,0);section(0,tr("第 ","Floor ")+selectedFloor+tr(" 层 · 选择与构筑"," · Choices and build"));
+    void makeLines(){floorSave=null;if(events.isEmpty()){lines.clear();add(tr("该尝试没有可查看的楼层记录。","No floor records in this attempt."));return;}int selectedFloor=floor(events.get(eventIndex));floorIndex=Math.max(0,floorOrder.indexOf(selectedFloor));if(expandedDeck){makeDetailLines();return;}lines.clear();lineOffset=0;Arrays.fill(sectionRows,0);section(0,tr("第 ","Floor ")+selectedFloor+tr(" 层 · 选择与构筑"," · Choices and build"));
         JsonObject context=HistoryIndex.obj(events.get(eventIndex),"before");if(context.entrySet().size()==0)context=HistoryIndex.obj(events.get(eventIndex),"state");if(context.entrySet().size()>0){add(resources(context));if(context.has("room"))add(friendly(HistoryIndex.str(context,"room")),Tone.MUTED);}
         boolean choices=false;for(JsonObject e:events)if(floor(e)==selectedFloor&&"decision".equals(HistoryIndex.str(e,"type"))){choices=true;String id=HistoryIndex.str(e,"decision_id");JsonObject result=null;boolean conflict=false;String signature="";for(JsonObject r:viewRecords)if(id.equals(HistoryIndex.str(r,"decision_id"))){String type=HistoryIndex.str(r,"type");if(type.equals("decision")&&!HistoryIndex.signature(r).equals(HistoryIndex.signature(e)))conflict=true;if(type.equals("result")){String sig=HistoryIndex.signature(r);if(result!=null&&!signature.equals(sig))conflict=true;result=r;signature=sig;}}
             boolean confirmed=!conflict&&result!=null&&"confirmed".equals(HistoryIndex.str(result,"status"));add(tr("选牌 · ","Choice · ")+friendly(HistoryIndex.str(e,"source")),Tone.HEADER);if(!confirmed)add(conflict?tr("记录冲突，结果不计完成。","Conflicting records; result not completed."):tr("该选择没有已确认结算。","No confirmed settlement for this choice."),conflict?Tone.REMOVED:Tone.WARN);
@@ -307,7 +316,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(!choices)add(tr("本层没有选牌记录。","No card choices recorded on this floor."),Tone.MUTED);sectionRows[2]=lines.size();for(JsonObject e:events)if(floor(e)==selectedFloor&&"build_change".equals(HistoryIndex.str(e,"type"))&&"settled".equals(HistoryIndex.str(e,"status")))compactChanges(HistoryIndex.obj(e,"before"),HistoryIndex.obj(e,"after"));
         for(JsonObject e:events)if(floor(e)==selectedFloor&&"ending".equals(HistoryIndex.str(e,"type")))add(tr("本局结局：","Result: ")+friendly(HistoryIndex.str(e,"outcome")),Tone.HEADER);
         sectionRows[1]=sectionRows[3]=0;add(tr("完整当时牌组：点击“选牌前状态”或“结算结果”。","Full observed decks: choose Before or Result."),Tone.MUTED);
-        availableTurns.clear();
+        availableTurns.clear();floorSave=ReplaySafety.practice()?null:FloorSaves.usable(HistoryIndex.array(detail,"records"),viewRecords,selectedFloor,null);
         boolean restoreAllowed = manifest != null && manifest.has("restore_available") && manifest.get("restore_available").getAsBoolean() && TurnAdapter.ID.equals(Recorder.string(manifest,"adapter"));
         if(restoreAllowed && manifest.has("snapshots")){
             List<String> branches = selected != null ? new ArrayList<>(selected.branches) : Collections.emptyList();

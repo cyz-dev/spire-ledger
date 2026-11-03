@@ -144,10 +144,19 @@ public class RecorderCheck {
         Recorder other=new Recorder(samples,meta,null);assert !other.runId.equals(runId);other.close();
         Path blocked=samples.resolve("blocked-file");Files.write(blocked,new byte[0]);boolean failed=false;try{new Recorder(blocked,meta,null);}catch(java.io.IOException expected){failed=true;}assert failed;
         Recorder floors=new Recorder(samples,meta,null);byte[] save="enter-room-save".getBytes(StandardCharsets.UTF_8),newer="reloaded-branch".getBytes(StandardCharsets.UTF_8);
-        JsonObject floorEvent=FloorSaves.store(floors,3,save);FloorSaves.store(floors,3,newer);
+        JsonObject facts=Recorder.object("floor_save");facts.addProperty("floor",3);facts.addProperty("room_x",2);facts.addProperty("room_y",2);facts.addProperty("current_room","com.megacrit.cardcrawl.rooms.MonsterRoom");facts.addProperty("class","IRONCLAD");
+        JsonObject floorEvent=FloorSaves.store(floors,facts,save);FloorSaves.store(floors,facts,newer);
         need(java.util.Arrays.equals(Files.readAllBytes(floors.directory.resolve("floors/3.autosave")),newer),"a floor keeps its newest room-entry save");
         need("floors/3.autosave".equals(Recorder.string(floorEvent,"relative_path"))&&floorEvent.get("bytes").getAsInt()==save.length&&TurnFiles.sha256(save).equals(Recorder.string(floorEvent,"sha256"))&&floorEvent.get("floor").getAsInt()==3,"floor_save names the file, size, sha256 and floor");
         int floorEvents=0;for(JsonElement e:floors.document().getAsJsonArray("records"))if("floor_save".equals(Recorder.string(e.getAsJsonObject(),"type")))floorEvents++;need(floorEvents==2,"each copy is logged: "+floorEvents);floors.close();
+        JsonArray path=new JsonArray();JsonObject enter=Recorder.object("floor_enter");enter.addProperty("floor",3);enter.addProperty("x",2);enter.addProperty("y",2);path.add(enter);
+        JsonObject snap=Recorder.object("turn_snapshot");snap.addProperty("snapshot_id","s1");path.add(snap);JsonObject elsewhere=Recorder.copy(enter);elsewhere.addProperty("x",4);path.add(elsewhere);
+        JsonObject stored=Recorder.copy(floorEvent);java.util.List<JsonObject> all=java.util.Arrays.asList(stored);
+        need(FloorSaves.usable(all,path,3,"s1")==stored,"a turn continues from the floor save taken at the node it entered");
+        need(FloorSaves.usable(all,path,3,null)==null,"a later entry at another node no longer matches the stored save");
+        need(FloorSaves.usable(all,path,3,"missing")==null&&FloorSaves.usable(all,path,4,"s1")==null,"an unknown snapshot or floor has no floor save");
+        JsonObject legacy=Recorder.copy(stored);legacy.remove("room_x");need(FloorSaves.usable(java.util.Arrays.asList(legacy),path,3,"s1")==null,"a floor save without its node is never matched");
+        need(FloorSaves.fightOnEntry(stored)&&!FloorSaves.fightOnEntry(null),"a monster room starts its fight on entry");
         System.out.println("RecorderCheck OK: independent anchors, current resources, dedup, same-name instances, Neow, relic-change anchors, cancellation, skip/bowl, SL branches, interrupted pending, UTF-8/64-bit seed, IO failure. Synthetic test only.");
     }
 }
