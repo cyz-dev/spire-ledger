@@ -135,22 +135,19 @@ final class ReplayLauncher {
         throw new FileNotFoundException("Cannot locate java runtime executable");
     }
 
+    /** ModTheSpire may hand out a bare file name, so every jar path is normalised the same way. */
+    static Path jarPath(ModInfo info) {
+        if (info == null || info.jarURL == null) return null;
+        try { Path p = Paths.get(info.jarURL.toURI()); if (Files.exists(p)) return p; } catch (Exception ignored) {}
+        try { Path p = Paths.get(info.jarURL.getPath()); if (Files.exists(p)) return p; } catch (Exception ignored) {}
+        return null;
+    }
     static Path findModJar(String modId) throws FileNotFoundException {
         if (Loader.MODINFOS != null) {
             for (ModInfo info : Loader.MODINFOS) {
                 if (modId.equalsIgnoreCase(info.ID)) {
-                    URL url = info.jarURL;
-                    if (url != null) {
-                        try {
-                            Path p = Paths.get(url.toURI());
-                            if (Files.exists(p)) return p;
-                        } catch (Exception ignored) {
-                            try {
-                                Path p = Paths.get(url.getPath());
-                                if (Files.exists(p)) return p;
-                            } catch (Exception ignored2) {}
-                        }
-                    }
+                    Path p = jarPath(info);
+                    if (p != null) return p;
                 }
             }
         }
@@ -206,6 +203,63 @@ final class ReplayLauncher {
         return -1;
     }
 
+    static final String LEDGER_ID="spire-ledger";
+    /**
+     * Practice used to open with engine defaults — English text, default volume and no fast mode — while the player's
+     * own game is in Chinese. The child runs save slot 0, so the file it reads is the unprefixed one; copying the
+     * player's gameplay and sound settings into it makes the practice window look like the game they came from.
+     */
+    static void copyPlayerSettings(Path instanceDir){
+        try{
+            java.io.File prefs=com.badlogic.gdx.Gdx.files.local("preferences").file();
+            if(prefs==null||!prefs.isDirectory())return;
+            String prefix=CardCrawlGame.saveSlot==0?"":CardCrawlGame.saveSlot+"_";
+            java.io.File settings=new java.io.File(prefs,prefix+"STSGameplaySettings");
+            if(!settings.isFile()){
+                java.io.File[] found=prefs.listFiles((dir,name)->name.endsWith("STSGameplaySettings"));
+                if(found!=null&&found.length>0){Arrays.sort(found,(a,b)->Long.compare(b.lastModified(),a.lastModified()));settings=found[0];}
+                else settings=null;
+            }
+            if(settings!=null){
+                Files.copy(settings.toPath(),instanceDir.resolve("preferences/STSGameplaySettings"),StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(settings.toPath(),instanceDir.resolve("betaPreferences/STSGameplaySettings"),StandardCopyOption.REPLACE_EXISTING);
+            }
+            java.io.File sound=new java.io.File(prefs,prefix+"STSSound");
+            if(sound.isFile())Files.copy(sound.toPath(),instanceDir.resolve("preferences/STSSound"),StandardCopyOption.REPLACE_EXISTING);
+        }catch(Throwable ignored){}
+    }
+    /**
+     * A snapshot is only the board it was captured on when the same mods are loaded. The run's manifest records that
+     * set, and everything in it is already whitelisted (otherwise the snapshot could not be restored at all), so the
+     * practice instance copies exactly those jars instead of always starting from BaseMod + StSLib only.
+     */
+    /** The manifest's own mod list, in recorded order, without duplicates. Pure so the offline check can cover it. */
+    static List<String> recordedModIds(JsonObject manifest){
+        List<String> ids=new ArrayList<>();
+        JsonArray recorded=manifest!=null&&manifest.has("mods")&&manifest.get("mods").isJsonArray()?manifest.getAsJsonArray("mods"):null;
+        if(recorded!=null)for(JsonElement item:recorded)if(item.isJsonObject()){
+            String id=Recorder.string(item.getAsJsonObject(),"id");
+            if(!id.isEmpty()&&!ids.contains(id))ids.add(id);
+        }
+        return ids;
+    }
+    static List<String> copyRecordedMods(Path instanceDir,Path runDir)throws Exception {
+        List<String> ids=recordedModIds(TurnFiles.read(runDir.resolve("replay/manifest.json")));
+        List<String> copied=new ArrayList<>();
+        if(Loader.MODINFOS==null)return copied;
+        for(ModInfo info:Loader.MODINFOS){
+            String id=info.ID;
+            if(!ids.contains(id))continue;
+            if("basemod".equalsIgnoreCase(id)||"stslib".equalsIgnoreCase(id)||LEDGER_ID.equalsIgnoreCase(id))continue;
+            // Test fixtures record their own probe mod; it must never follow a manifest into a real practice window.
+            if(id.toLowerCase(Locale.ROOT).startsWith("spire-ledger-"))continue;
+            Path jar=jarPath(info);
+            if(jar==null||!Files.isRegularFile(jar))continue;
+            Files.copy(jar,instanceDir.resolve("mods").resolve(jar.getFileName().toString()),StandardCopyOption.REPLACE_EXISTING);
+            copied.add(id);
+        }
+        return copied;
+    }
     static Path launchPracticeInstance(HistoryIndex.Summary summary, JsonObject ref, Path runDir) throws Exception {
         if (!TurnRecorder.compatible()) {
             throw new IllegalStateException("Environment not compatible for practice instance");
@@ -236,6 +290,9 @@ final class ReplayLauncher {
         Files.createDirectories(instanceDir.resolve("preferences"));
         Files.createDirectories(instanceDir.resolve("betaPreferences"));
         Files.createDirectories(instanceDir.resolve("temp"));
+        copyPlayerSettings(instanceDir);
+        List<String> recordedMods;
+        try{recordedMods=copyRecordedMods(instanceDir,runDir);}catch(Exception unreadableManifest){recordedMods=new ArrayList<>();}
 
         // The snapshot stores absolute positions from the window it was taken in (player at WIDTH*0.25), so the
         // practice window has to be that same size; a hardcoded 1024x768 put the player in the middle and the
@@ -304,11 +361,15 @@ final class ReplayLauncher {
         cmd.add(instanceDir.resolve("ModTheSpire.jar").toAbsolutePath().toString());
         cmd.add("--skip-launcher");
         cmd.add("--skip-intro");
+        // BaseMod and StSLib first (dependency order), then the rest of the recording's own mod set.
+        StringBuilder modList=new StringBuilder("basemod,stslib,").append(LEDGER_ID);
+        if(speedModJar!=null&&!recordedMods.contains(StateMod.SPEED_MOD))modList.append(',').append(StateMod.SPEED_MOD);
+        for(String id:recordedMods)if(!modList.toString().toLowerCase(Locale.ROOT).contains(","+id.toLowerCase(Locale.ROOT)))modList.append(',').append(id);
         cmd.add("--mods");
-        cmd.add("basemod,stslib,spire-ledger"+(speedModJar==null?"":","+StateMod.SPEED_MOD));
+        cmd.add(modList.toString());
         // A fixture observes the actual child launch; it never prepares the child's battle.
         if(Boolean.getBoolean("spireledger.fixture")&&Boolean.getBoolean("spireledger.launchPracticeProbe")){
-            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"));
+            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"),StandardCopyOption.REPLACE_EXISTING);
             cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",spire-ledger-replay-probe");
             cmd.add(1,"-Dspireledger.fixture=true");cmd.add(1,"-Dspireledger.productionPractice=true");cmd.add(1,"-Dspireledger.replayMode=restore");
             if(Boolean.getBoolean("spireledger.superFastModeProbe"))cmd.add(1,"-Dspireledger.superFastModeProbe=true");

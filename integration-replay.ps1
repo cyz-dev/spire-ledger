@@ -7,6 +7,9 @@ $instance=Resolve-RunPath $Instance
 $workshop=Join-Path (Split-Path (Split-Path $Game -Parent) -Parent) 'workshop\content\646570'
 New-Item -ItemType Directory -Force "$instance\mods","$instance\home","$instance\preferences","$instance\temp","$instance\probe-classes" | Out-Null
 Set-MutedPreferences $instance
+# A language the fixture can prove was inherited: the practice child gets its own preferences folder.
+[IO.File]::WriteAllText("$instance\preferences\STSGameplaySettings",'{"LANGUAGE":"ZHS","Fast Mode":"true"}',$utf8)
+[IO.File]::WriteAllText("$instance\betaPreferences\STSGameplaySettings",'{"LANGUAGE":"ZHS","Fast Mode":"true"}',$utf8)
 if(-not(Test-Path "$instance\desktop-1.0.jar")){Copy-Item "$Game\desktop-1.0.jar" $instance}
 Copy-Item "$workshop\1605060445\ModTheSpire.jar" $instance
 Copy-Item "$workshop\1605833019\BaseMod.jar" "$instance\mods"
