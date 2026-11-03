@@ -10,10 +10,16 @@ $cp="$Game\desktop-1.0.jar;$workshop\1605060445\ModTheSpire.jar;$workshop\160583
 $out=Join-Path $PSScriptRoot 'build'
 $classes=Join-Path $out ('classes-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $classes | Out-Null
+# JDK 8 predates --release, so the flag list is chosen once and splatted into every javac call.
+$javacRelease=@('--release','8')
+$javacVersion=''
+$strict=$ErrorActionPreference;$ErrorActionPreference='Continue'
+try{$javacVersion=(& javac -version 2>&1 | Out-String)}catch{}finally{$ErrorActionPreference=$strict}
+if($javacVersion -match 'javac 1\.8'){$javacRelease=@('-source','1.8','-target','1.8')}
 $sources=@(Get-ChildItem "$PSScriptRoot\src" -Recurse -Filter *.java)
 $list=Join-Path $out 'sources.txt'
 [IO.File]::WriteAllLines($list,@($sources | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'}),$utf8)
-& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp $cp -d $classes "@$list"
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 @javacRelease -proc:none -cp $cp -d $classes "@$list"
 if($LASTEXITCODE -ne 0){throw 'javac failed'}
 # spireledger.stats reads only the record schema: compile it alone against the game's own Gson, so any game or mod class reference fails the build.
 $gson=Join-Path $out 'gson'
@@ -21,10 +27,10 @@ New-Item -ItemType Directory -Force $gson | Out-Null;Push-Location $gson;try{& j
 if(-not(Test-Path "$gson\com\google\gson\JsonObject.class")){throw 'Gson not found in desktop-1.0.jar'}
 # The same classes run the offline TinyCat export: java -cp "build\gson;build\stats-classes" spireledger.stats.Export <runs> <out.json> <slot> [run-list.json]
 $statsClasses=Join-Path $out 'stats-classes';if(Test-Path $statsClasses){Remove-Item -Recurse -Force $statsClasses};New-Item -ItemType Directory -Force $statsClasses | Out-Null;Copy-Item "$PSScriptRoot\ModTheSpire.json" $statsClasses
-& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -implicit:none -cp $gson -d $statsClasses @(Get-ChildItem "$PSScriptRoot\src\spireledger\stats" -Filter *.java | ForEach-Object FullName)
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 @javacRelease -proc:none -implicit:none -cp $gson -d $statsClasses @(Get-ChildItem "$PSScriptRoot\src\spireledger\stats" -Filter *.java | ForEach-Object FullName)
 if($LASTEXITCODE -ne 0){throw 'spireledger.stats must compile with Gson alone'}
 & "$PSScriptRoot/adapt-savestate.ps1" -Source $(if([IO.Path]::IsPathRooted($SaveStateSource)){$SaveStateSource}else{Join-Path $PSScriptRoot $SaveStateSource}) -Output 'build/SaveStateMod.jar' -Game $Game
-& javac -encoding UTF-8 --release 8 -cp "$workshop/1605060445/ModTheSpire.jar" -d "$out/adapter-tool" "$PSScriptRoot/tools/BundleSaveState.java"
+& javac -encoding UTF-8 @javacRelease -cp "$workshop/1605060445/ModTheSpire.jar" -d "$out/adapter-tool" "$PSScriptRoot/tools/BundleSaveState.java"
 if($LASTEXITCODE -ne 0){throw 'Bundle tool compile failed'}
 & java '-Dfile.encoding=UTF-8' -cp "$out/adapter-tool;$workshop/1605060445/ModTheSpire.jar" BundleSaveState "$out/SaveStateMod.jar" $classes "$Game/desktop-1.0.jar" "$workshop/1605060445/ModTheSpire.jar" "$workshop/1605833019/BaseMod.jar"
 if($LASTEXITCODE -ne 0){throw 'Bundle failed'}
@@ -41,7 +47,7 @@ if($shipped.Count -gt 0){throw "The jar must not ship images or a monster-images
 if($Check){
   $tests=@(Get-ChildItem "$PSScriptRoot\test" -Filter *.java | Where-Object Name -ne "NativeReplayProbe.java")
   [IO.File]::WriteAllLines($list,@($tests | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'}),$utf8)
-  & javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp "$classes;$cp" -d $classes "@$list"
+  & javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 @javacRelease -proc:none -cp "$classes;$cp" -d $classes "@$list"
   if($LASTEXITCODE -ne 0){throw 'test compile failed'}
   & java '-Dfile.encoding=UTF-8' -ea -cp "$classes;$cp" spireledger.RecorderCheck (Join-Path $out ('recorder-checks-'+[Guid]::NewGuid().ToString('N')))
   if($LASTEXITCODE -ne 0){throw 'RecorderCheck failed'}

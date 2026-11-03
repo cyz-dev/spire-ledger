@@ -43,7 +43,13 @@ if($Mode -eq "restore"){
 }
 Copy-Item "$PSScriptRoot\build\SpireLedger.jar" "$instance\mods"
 $cp="$instance\desktop-1.0.jar;$instance\ModTheSpire.jar;$instance\mods\*"
-& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 --release 8 -proc:none -cp $cp -d "$instance\probe-classes" "$PSScriptRoot\test\NativeReplayProbe.java"
+# JDK 8 predates --release, so the probe follows the compiler that is actually on PATH.
+$javacRelease=@('--release','8')
+$javacVersion=''
+$strict=$ErrorActionPreference;$ErrorActionPreference='Continue'
+try{$javacVersion=(& javac -version 2>&1 | Out-String)}catch{}finally{$ErrorActionPreference=$strict}
+if($javacVersion -match 'javac 1\.8'){$javacRelease=@('-source','1.8','-target','1.8')}
+& javac '-J-Dfile.encoding=UTF-8' -encoding UTF-8 @javacRelease -proc:none -cp $cp -d "$instance\probe-classes" "$PSScriptRoot\test\NativeReplayProbe.java"
 if($LASTEXITCODE -ne 0){throw 'NativeReplayProbe compile failed'}
 [IO.File]::WriteAllText("$instance\probe-classes\ModTheSpire.json",'{"modid":"spire-ledger-replay-probe","name":"Isolated Native Replay Probe","version":"0.1.0","dependencies":["spire-ledger"]}',$utf8)
 & jar cf "$instance\mods\NativeReplayProbe.jar" -C "$instance\probe-classes" .
