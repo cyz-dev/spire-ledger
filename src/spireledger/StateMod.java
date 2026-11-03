@@ -55,9 +55,12 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     static void safely(Action a){if(failed)return;try{a.run();}catch(Exception ex){DiagnosticReport.error("recording",ex);failed=true;status=HistoryScreen.tr("记录已停止：","Recording stopped: ")+ex.getClass().getSimpleName()+HistoryScreen.tr("（见日志）"," (see log)");System.err.println("[Spire Ledger] "+status);ex.printStackTrace();if(recorder!=null)try{recorder.close();}catch(Exception ignored){System.err.println("[Spire Ledger] Last export failed; recover events.jsonl");}recorder=null;}}
     static boolean ready(){return enabled&&!failed&&!ReplaySafety.quarantined&&!CardCrawlGame.loadingSave&&CardCrawlGame.mode==CardCrawlGame.GameMode.GAMEPLAY&&AbstractDungeon.player!=null&&AbstractDungeon.player.masterDeck!=null&&AbstractDungeon.getCurrMapNode()!=null&&AbstractDungeon.getCurrMapNode().getRoom()!=null;}
     static final String SPEED_MOD="superfastmode",SPEED_VERSION="1.0.8";
-    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id)||SPEED_MOD.equals(id)&&SPEED_VERSION.equals(version);}
+    static final String SOLVER_MOD="sts1solver";
+    static boolean reviewedMod(String id,String version){return "basemod".equals(id)||"stslib".equals(id)||"spire-ledger".equals(id)||SPEED_MOD.equals(id)&&SPEED_VERSION.equals(version)||SOLVER_MOD.equals(id);}
     static String actor(){
         if(automation!=null)return "known_automation";
+        // The solver marks its own driving state (auto || runAuto); when it is driving, a pick is automation.
+        if(Boolean.TRUE.equals(SolverReplay.driving()))return "known_automation";
         // Unreviewed mods leave the action source unknown, even on a native UI path.
         if(Loader.MODINFOS!=null)for(ModInfo info:Loader.MODINFOS)if(!reviewedMod(info.ID,String.valueOf(info.ModVersion)))return "unknown";
         // Direct mod calls cannot be identified as human actions. Only native UI commit call chains qualify.

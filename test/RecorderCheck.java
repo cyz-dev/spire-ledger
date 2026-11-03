@@ -109,6 +109,7 @@ public class RecorderCheck {
         if(args.length>1){replay(samples,Paths.get(args[1]));return;}
         replay(samples,samples.toAbsolutePath().getParent().getParent().resolve("samples").resolve("native-run.json")); // build.ps1 passes <repo>/build/<dir>
         if(!StateMod.reviewedMod("basemod","5.56.0")||!StateMod.reviewedMod("stslib","2.12.0")||StateMod.reviewedMod("RunHistoryPlus","1.8.3"))throw new AssertionError("only BaseMod + StSLib keep the human source label");
+        if(!StateMod.reviewedMod("sts1solver","0.9.7"))throw new AssertionError("the solver is a reviewed mod and must not mark every pick unknown");
         JsonObject meta=parse("{\"game_version\":\"test\",\"mod_version\":\"0.1.0\",\"seed\":\"-9223372036854775808\",\"play_id\":\"synthetic-contract-check\",\"coverage\":\"synthetic; not a real played run\"}");
         lockedRunJson(samples,meta);
         asyncWrites(samples,meta);

@@ -67,7 +67,14 @@ import java.util.*;
   solver=Class.forName("sts1solver.SolverMod").getField("instance").get(null);
   check(solver!=null,"real solver initialized");set(solver,"runAutoEnabled",false);set(solver,"autoPotionRewards",false);
   String version="";for(com.evacipated.cardcrawl.modthespire.ModInfo info:com.evacipated.cardcrawl.modthespire.Loader.MODINFOS)if("sts1solver".equals(info.ID))version=String.valueOf(info.ModVersion);
-  report.addProperty("solver_version",version);report.addProperty("player_eight_mod_combination",true);solverChecked=true;
+  report.addProperty("solver_version",version);report.addProperty("player_eight_mod_combination",true);
+  // The solver's own driving flag must mark its picks as automation, so the export header can say "含求解器".
+  check(!Boolean.TRUE.equals(SolverReplay.driving()),"the solver is not driving before automation starts");
+  set(solver,"auto",true);set(solver,"runAuto",true);
+  check(Boolean.TRUE.equals(SolverReplay.driving()),"solverDriving() reflects the solver's auto state");
+  check("known_automation".equals(StateMod.actor()),"a solver-driven pick records as known automation, not human or unknown");
+  set(solver,"auto",false);set(solver,"runAuto",false);
+  solverChecked=true;
  }
  void armStaleSolver()throws Exception{
   if(solver==null)return;

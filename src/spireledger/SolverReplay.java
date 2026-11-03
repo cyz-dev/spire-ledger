@@ -11,7 +11,8 @@ public final class SolverReplay {
     static synchronized boolean contract(){
         if(contract==null)try{Class<?> type=Class.forName("sts1solver.SolverMod");
             type.getField("instance");type.getDeclaredMethod("cancel",boolean.class);type.getDeclaredMethod("stopAll");type.getDeclaredField("runAutoPlayer");
-            type.getDeclaredMethod("receivePostUpdate");type.getDeclaredMethod("receivePostRender",com.badlogic.gdx.graphics.g2d.SpriteBatch.class);contract=true;
+            type.getDeclaredMethod("receivePostUpdate");type.getDeclaredMethod("receivePostRender",com.badlogic.gdx.graphics.g2d.SpriteBatch.class);
+            type.getDeclaredMethod("solverDriving");contract=true;
         }catch(ReflectiveOperationException|LinkageError ex){System.err.println("[Spire Ledger] Solver replay contract missing: "+ex);contract=false;}
         return contract;
     }
@@ -27,6 +28,15 @@ public final class SolverReplay {
         if(!Loader.isModLoaded("sts1solver"))return;
         Class<?> type=Class.forName("sts1solver.SolverMod");Object solver=type.getField("instance").get(null);
         java.lang.reflect.Field player=type.getDeclaredField("runAutoPlayer");player.setAccessible(true);player.set(solver,com.megacrit.cardcrawl.dungeons.AbstractDungeon.player);
+    }
+    /** Whether the solver is currently driving picks (its own solverDriving() reflects auto || runAuto). Null when the mod is absent. */
+    static Boolean driving(){
+        if(!Loader.isModLoaded("sts1solver"))return null;
+        try{
+            Class<?> type=Class.forName("sts1solver.SolverMod");
+            Method m=type.getDeclaredMethod("solverDriving");m.setAccessible(true);
+            return (Boolean)m.invoke(null);
+        }catch(ReflectiveOperationException|LinkageError ex){return null;}
     }
     @SpirePatch(cls="sts1solver.SolverMod",method="receivePostUpdate",requiredModId="sts1solver",optional=true)
     public static class Pause {
