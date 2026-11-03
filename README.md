@@ -2,7 +2,7 @@
 
 《杀戮尖塔 1》的本地记录与复盘 Mod。打开账本就能看当前局或当前存档位的最近一局，悬停楼层查看选择和资源变化，也可以查看个人统计与标准化率、导出统计长图，或重打已保存的回合。数据保存在本机，不上传。
 
-当前发布版：**[v0.6.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.2)**（内测版，2026-11-02）。在 beta.1 之上，卡牌抓率计入全部选牌屏，商店和事件按幕分组、显示中文名，实际战损的遭遇图由本机游戏资源画出，来自 haotiangod 的 [PR #20](https://github.com/cyz-dev/spire-ledger/pull/20)；手动测试项见 [docs/testing.md](docs/testing.md) 的 W9–W16。上一个正式版是 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0)（2026-10-30）。
+当前发布版：**[v0.6.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.3)**（内测版，2026-11-03）。在 beta.2 之上，练习可以“从此层继续”并打完后沿地图往下打，练习窗口沿用你的语言、音量、窗口大小和已审核 Mod，点击被其他 Mod 截获时会告警，来自 haotiangod 的 issue #24–#26 和 PR #22、#23；手动测试项见 [docs/testing.md](docs/testing.md) 的 W17–W20。上一个正式版是 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0)（2026-10-30）。
 
 ## 安装与升级
 
@@ -60,6 +60,16 @@
 个人统计读取游戏目录 `runs/` 下的原版 `.run` 和账本记录，按对局关联，避免重复计算。原版 `.run` 先按严格 UTF-8 解码，失败时回退 GBK（中文 Windows 的默认编码与 TinyCat 一致），并去掉 UTF-8 BOM；两种编码的旧局都能读取。逐层复盘页目前只展示账本记录；仅有原版 `.run` 的旧局可参与统计，但没有账本的完整决策详情与回合快照。缺少存档位信息的旧账本记录单独放在“旧记录：存档未知”。
 
 “操作来源未核实”表示无法确认动作来自人还是自动化，不表示幕数或奖励来源丢失。原版 `.run` 没有这项信息；与求解器同装也不等于已识别每个自动化动作。未知来源默认可参与统计，已知自动化选择会排除。
+
+## v0.6.0-beta.3 更新（内测）
+
+相对 beta.2 的改动，来自 haotiangod 的 issue [#24](https://github.com/cyz-dev/spire-ledger/issues/24)、[#25](https://github.com/cyz-dev/spire-ledger/issues/25)、[#26](https://github.com/cyz-dev/spire-ledger/issues/26) 和 PR [#22](https://github.com/cyz-dev/spire-ledger/pull/22)、[#23](https://github.com/cyz-dev/spire-ledger/pull/23)，维护者分批重做：
+
+- **从此层继续**：每进入一层，账本保存一份游戏自身格式的楼层存档。复盘里点一层的“从此层继续”，练习窗口从这一层的进入存档开始，之后可以一直往下打。“练习此回合”在进房即开战的楼层也先读这份存档，恢复到所选回合，打完有奖励，能在地图上选下一个节点。事件里的战斗和旧局仍只练这一场。
+- **练习环境**：练习窗口沿用你的语言、音量和窗口大小，带上你当前启用、且版本与白名单一致的已审核 Mod；求解器不带进练习。恢复后血条回到角色脚下，窗口尺寸不同时按比例换算位置。CardImageReplacer 2.0 进入回合恢复白名单。
+- **点击告警**：另一个 Mod 截获鼠标点击、导致账本下拉点不开时，账本顶部显示红色告警，列出未审核的 Mod，并提示 Ctrl+Shift+R。
+- **遭遇名保留人数**：“2 只虱虫”和“3 只虱虫”分两行显示。
+- 记录、导出和替换图仍放在 `~/.spire-ledger/`，不迁到游戏目录。
 
 ## v0.6.0-beta.2 更新（内测）
 
