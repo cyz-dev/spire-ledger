@@ -19,8 +19,13 @@ final class RunReview {
     final Hitbox back=new Hitbox(1,1);
     final Hitbox overview=new Hitbox(1,1),deckTab=new Hitbox(1,1),choiceTab=new Hitbox(1,1);
     boolean showDeck;
+    /** A dropdown cannot scroll, so a long fight lost its later turns off the bottom edge; the strip pages instead. */
+    static final int TURN_PER_PAGE=10;
+    final Hitbox[] turnChips=new Hitbox[TURN_PER_PAGE];
+    final Hitbox turnPrev=new Hitbox(1,1),turnNext=new Hitbox(1,1);
+    int turnPage,lastTurnSelection=-1;
     static final Color PANEL=new Color(.09f,.12f,.16f,1),GOLD=new Color(.91f,.75f,.38f,1),MUTED=HistoryScreen.MUTED;
-    RunReview(HistoryScreen host){this.host=host;}
+    RunReview(HistoryScreen host){this.host=host;for(int i=0;i<TURN_PER_PAGE;i++)turnChips[i]=new Hitbox(1,1);}
     void reset(){model=null;document=null;branch=-1;hover=-1;scroll=0;pinned=false;showDeck=false;}
     static String tr(String cn,String en){return HistoryScreen.tr(cn,en);}
     void sync(){
@@ -60,6 +65,14 @@ final class RunReview {
         if(host.click(host.next)&&!model.floors.isEmpty()){int i=Math.min(model.floors.size()-1,indexForFloor()+1);pinned=true;choose(i);}
         if(host.click(host.diagnostics)){host.raw=true;host.makeLines();return;}
         if(pinned&&!host.availableTurns.isEmpty()&&host.click(host.replayButton))host.replaySelected();
+        if(pinned&&!host.availableTurns.isEmpty()){
+            layoutTurns();
+            for(int i=0;i<TURN_PER_PAGE;i++)if(host.click(turnChips[i])){
+                int index=turnPage*TURN_PER_PAGE+i;if(index<host.availableTurns.size()){host.selectTurn(index);lastTurnSelection=index;turnPage=index/TURN_PER_PAGE;}return;
+            }
+            if(pages()>1&&host.click(turnPrev)){turnPage=Math.max(0,turnPage-1);return;}
+            if(pages()>1&&host.click(turnNext)){turnPage=Math.min(pages()-1,turnPage+1);return;}
+        }
         if(InputHelper.scrolledDown)scroll++;if(InputHelper.scrolledUp)scroll--;scroll=Math.max(0,Math.min(maxScroll(),scroll));
         List<Hitbox> controls=new ArrayList<>(nodes);if(pinned)controls.addAll(Arrays.asList(overview,choiceTab,deckTab));controls.addAll(Arrays.asList(host.prev,host.next,host.diagnostics,host.latestTab,host.historyTab,host.home,back));if(pinned&&!host.availableTurns.isEmpty())controls.add(host.replayButton);host.controller(controls);
     }
@@ -91,12 +104,47 @@ final class RunReview {
         host.button(sb,back,tr("关闭账本","Close"));host.button(sb,host.prev,tr("上一层","Previous"));host.button(sb,host.next,tr("下一层","Next"));host.button(sb,host.diagnostics,tr("详细记录","Details"));
         if(pinned&&!host.availableTurns.isEmpty()){
             host.button(sb,host.replayButton,ReplayLauncher.canReplayCurrent(host.availableTurns.get(host.turnSelection))?tr("重打此回合","Restart turn"):tr("练习此回合","Practice turn"));
-            // Above the action row, and open lists last, so the attempts list stays readable instead of covering the button.
-            if(host.attemptMenu!=null&&!host.attemptMenu.isOpen)host.attemptMenu.render(sb,w(.53f),h(.27f));
-            if(!host.turnMenu.isOpen)host.turnMenu.render(sb,w(.70f),h(.27f));
-            if(host.turnMenu.isOpen)host.turnMenu.render(sb,w(.70f),h(.27f));
-            if(host.attemptMenu!=null&&host.attemptMenu.isOpen)host.attemptMenu.render(sb,w(.53f),h(.27f));
+            renderTurns(sb);
+            if(host.attemptMenu!=null)host.attemptMenu.render(sb,w(.06f),h(.150f));
         }
+    }
+    int pages(){return Math.max(1,(host.availableTurns.size()+TURN_PER_PAGE-1)/TURN_PER_PAGE);}
+    /** One fixed-height row, so twenty turns look the same as three and never push anything off-screen. */
+    void layoutTurns(){
+        int pages=pages();
+        if(host.turnSelection!=lastTurnSelection){turnPage=host.turnSelection/TURN_PER_PAGE;lastTurnSelection=host.turnSelection;}
+        turnPage=Math.max(0,Math.min(pages-1,turnPage));
+        // Hitbox.move takes the centre, so every coordinate here is converted from the left/top edge first.
+        float top=h(.150f),height=h(.028f),left=w(.266f),right=w(.80f),gap=w(.004f);
+        float width=(right-left-gap*(TURN_PER_PAGE-1))/TURN_PER_PAGE;
+        for(int i=0;i<TURN_PER_PAGE;i++){
+            Hitbox chip=turnChips[i];
+            if(turnPage*TURN_PER_PAGE+i>=host.availableTurns.size()){chip.resize(1,1);chip.move(-10000f,-10000f);continue;}
+            chip.resize(width,height);chip.move(left+i*(width+gap)+width/2f,top+height/2f);
+        }
+        turnPrev.resize(w(.022f),height);turnPrev.move(w(.238f)+w(.011f),top+height/2f);
+        turnNext.resize(w(.022f),height);turnNext.move(w(.806f)+w(.011f),top+height/2f);
+    }
+    void renderTurns(SpriteBatch sb){
+        layoutTurns();int n=host.availableTurns.size(),pages=pages();
+        rect(sb,.232f,.150f,.001f,.028f,new Color(.3f,.28f,.2f,1));
+        if(pages>1){
+            host.box(sb,turnPrev,turnPrev.hovered?new Color(.22f,.27f,.32f,1):new Color(.12f,.16f,.20f,1));
+            host.box(sb,turnNext,turnNext.hovered?new Color(.22f,.27f,.32f,1):new Color(.12f,.16f,.20f,1));
+            FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,"<",turnPrev.cX,turnPrev.cY,Settings.CREAM_COLOR);
+            FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,">",turnNext.cX,turnNext.cY,Settings.CREAM_COLOR);
+        }
+        for(int i=0;i<TURN_PER_PAGE;i++){
+            int index=turnPage*TURN_PER_PAGE+i;if(index>=n)continue;
+            Hitbox chip=turnChips[i];JsonObject point=host.availableTurns.get(index);
+            boolean selected=index==host.turnSelection;
+            host.box(sb,chip,selected?new Color(.30f,.26f,.14f,1):chip.hovered?new Color(.20f,.24f,.29f,1):new Color(.10f,.13f,.17f,1));
+            FontHelper.renderFontCentered(sb,FontHelper.cardDescFont_N,String.valueOf(HistoryIndex.num(point,"turn",1)),chip.cX,chip.cY,selected?GOLD:Settings.CREAM_COLOR);
+            List<JsonObject> attempts=host.turnAttempts.get(HistoryIndex.num(point,"turn",1));
+            // A dot marks a turn that was attempted more than once, so the strip still shows where the S/L pairs are.
+            if(attempts!=null&&attempts.size()>1){sb.setColor(GOLD);sb.draw(ImageMaster.WHITE_SQUARE_IMG,chip.cX+w(.004f),chip.y+h(.004f),w(.003f),h(.004f));sb.setColor(Color.WHITE);}
+        }
+        if(pages>1)FontHelper.renderFontLeftTopAligned(sb,FontHelper.cardDescFont_N,(turnPage+1)+"/"+pages,w(.834f),turnNext.cY+h(.008f),MUTED);
     }
     void renderOverview(SpriteBatch sb,JsonObject state){
         text(sb,tr("遗物","Relics")+"  "+HistoryIndex.array(state,"relics").size(),.06f,.395f,GOLD);

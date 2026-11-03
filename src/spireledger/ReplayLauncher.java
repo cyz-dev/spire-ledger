@@ -237,8 +237,21 @@ final class ReplayLauncher {
         Files.createDirectories(instanceDir.resolve("betaPreferences"));
         Files.createDirectories(instanceDir.resolve("temp"));
 
-        // Copy display config and dummy slot prefs to ensure isolated launch
-        Files.write(instanceDir.resolve("info.displayconfig"), "1024\n768\n60\nfalse\nfalse\ntrue\n".getBytes(StandardCharsets.UTF_8));
+        // The snapshot stores absolute positions from the window it was taken in (player at WIDTH*0.25), so the
+        // practice window has to be that same size; a hardcoded 1024x768 put the player in the middle and the
+        // monsters off the right edge.
+        // ModTheSpire may report the jar as a bare file name, so it has to be made absolute before its folder is used.
+        Path gameDir = desktopJar.toAbsolutePath().getParent();
+        Path displayConfig = gameDir == null ? null : gameDir.resolve("info.displayconfig");
+        if (displayConfig == null || !Files.isRegularFile(displayConfig)) {
+            // The game's working directory is its install folder, which is the most reliable way to find this file.
+            try { java.io.File local = com.badlogic.gdx.Gdx.files.local("info.displayconfig").file(); if (local.isFile()) displayConfig = local.toPath(); } catch (Throwable ignored) {}
+        }
+        if (displayConfig != null && Files.isRegularFile(displayConfig)) {
+            Files.copy(displayConfig, instanceDir.resolve("info.displayconfig"), StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            Files.write(instanceDir.resolve("info.displayconfig"), "1280\n720\n60\nfalse\nfalse\ntrue\n".getBytes(StandardCharsets.UTF_8));
+        }
         Files.write(instanceDir.resolve("betaPreferences/STSSaveSlots"), "{\"DEFAULT_SLOT\":\"0\",\"PROFILE_NAME\":\"Practice\"}".getBytes(StandardCharsets.UTF_8));
 
         // Mute SaveStateMod UI and keybindings in isolated practice instance

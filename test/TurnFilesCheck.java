@@ -81,5 +81,14 @@ String[] allowed={"basemod|5.56.0","RunHistoryPlus|1.8.3","superfastmode|1.0.8",
   JsonObject manifestAfter=TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST);
   JsonObject lastCombat=manifestAfter.getAsJsonObject("last_combat");
   check(lastCombat!=null&&"c".equals(Recorder.string(lastCombat,"combat_id")),"the manifest remembers which fight the run is in: "+lastCombat);
+  // Absolute positions only mean something in the window they were captured in (practice window used to be 1024x768).
+  check(TurnAdapter.windowScale(1920,1080,1920,1080)==null,"a snapshot restored at the same size is left alone");
+  float[] shrink=TurnAdapter.windowScale(1920,1080,1024,768);
+  check(shrink!=null&&Math.abs(shrink[0]-0.533333f)<0.001f&&Math.abs(shrink[1]-0.711111f)<0.001f,"a smaller window scales positions by the size ratio: "+java.util.Arrays.toString(shrink));
+  check(TurnAdapter.windowScale(0,0,1024,768)==null,"an unknown capture size is never guessed");
+  JsonObject legacy=new JsonParser().parse("{\"state\":{\"player_state\":{\"creature\":{\"draw_x\":480.0}}}}").getAsJsonObject();
+  check(TurnAdapter.capturedWidth(legacy)==1920,"a snapshot without screen_w is read back from the player's x: "+TurnAdapter.capturedWidth(legacy));
+  JsonObject modern=new JsonParser().parse("{\"environment\":{\"screen_w\":1600,\"screen_h\":900},\"state\":{\"player_state\":{\"creature\":{\"draw_x\":400.0}}}}").getAsJsonObject();
+  check(TurnAdapter.capturedWidth(modern)==1600&&TurnAdapter.capturedHeight(modern,1600)==900,"a snapshot records its own window size");
 System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures, one copy per board");}
 }

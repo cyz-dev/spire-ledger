@@ -85,6 +85,11 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void filter(){long from=StatsScreen.month(months,selections[3],false),to=StatsScreen.month(months,selections[5],true);filtered=HistoryIndex.filter(index.runs,characters[selections[0]],selections[1]-1,outcomes[selections[2]],0,query,selections[4]==1,System.currentTimeMillis(),selections[6]==0?Integer.valueOf(CardCrawlGame.saveSlot):null,from,to);offset=0;}
     DropdownMenu focusMenu;List<Integer> focusEvents=new ArrayList<>();
     boolean refreshingMenus;
+    /** The turn strip picks a row directly; it goes through the same path as the old dropdown so the attempts list follows. */
+    void selectTurn(int index){
+        if(index<0||index>=availableTurns.size())return;
+        turnSelection=index;attemptSelection=0;rebuildMenus();
+    }
     @Override public void changedSelectionTo(DropdownMenu menu,int index,String option){
         if(refreshingMenus)return;
         if(menu==focusMenu){eventIndex=focusEvents.get(index);rebuildMenus();return;}

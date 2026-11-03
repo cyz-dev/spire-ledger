@@ -21,6 +21,8 @@ final class TurnAdapter {
         JsonObject out=new JsonObject();out.addProperty("dungeon_id",AbstractDungeon.id);out.addProperty("act",AbstractDungeon.actNum);
         out.addProperty("class",AbstractDungeon.player.chosenClass.name());out.addProperty("seed",String.valueOf(Settings.seed));
         out.addProperty("ascension",AbstractDungeon.ascensionLevel);out.addProperty("ascension_mode",AbstractDungeon.isAscensionMode);
+        // Absolute positions in the state depend on the window they were taken in, so the size travels with them.
+        out.addProperty("screen_w",Settings.WIDTH);out.addProperty("screen_h",Settings.HEIGHT);
         JsonObject pools=new JsonObject();Class<?> type=Class.forName("savestate.CardState");
         for(String name:POOLS){JsonArray cards=new JsonArray();CardGroup group=(CardGroup)AbstractDungeon.class.getField(name).get(null);
             for(AbstractCard card:group.group)cards.add(encode(call(type,"forCard",new Class<?>[]{AbstractCard.class},card)));pools.add(name,cards);}
@@ -191,7 +193,55 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
     static JsonElement logical(JsonElement value){return SnapshotShape.logical(value);}
     static void load(JsonObject snapshot)throws Exception{
         Object saved=saver().getConstructor(JsonObject.class).newInstance(snapshot.getAsJsonObject("state"));
-        call(saved,"loadState",new Class<?>[0]);restoreEnvironment(snapshot.getAsJsonObject("environment"));repair(snapshot.getAsJsonObject("supplement"));readyAfterRestore();
+        call(saved,"loadState",new Class<?>[0]);restoreEnvironment(snapshot.getAsJsonObject("environment"));repair(snapshot.getAsJsonObject("supplement"));rescaleToWindow(snapshot);readyAfterRestore();
+    }
+    /**
+     * Absolute positions only mean something in the window they were captured in. A practice window of another size
+     * would drop the player in the middle and push the monsters off the right edge, which is what the 1024x768
+     * practice instance did with snapshots taken at 1920x1080 (architecture, 2026-11-03).
+     */
+    static void rescaleToWindow(JsonObject snapshot){
+        int w=capturedWidth(snapshot),h=capturedHeight(snapshot,w);
+        float[] scale=windowScale(w,h,Settings.WIDTH,Settings.HEIGHT);
+        if(scale==null)return;
+        try{
+            rescale(AbstractDungeon.player,scale[0],scale[1]);
+            if(AbstractDungeon.getCurrRoom()!=null&&AbstractDungeon.getCurrRoom().monsters!=null)
+                for(com.megacrit.cardcrawl.monsters.AbstractMonster m:AbstractDungeon.getCurrRoom().monsters.monsters)rescale(m,scale[0],scale[1]);
+        }catch(RuntimeException ignored){}
+    }
+    /** Null when nothing has to be rescaled; kept separate so the offline check can cover the arithmetic. */
+    static float[] windowScale(int capturedW,int capturedH,int currentW,int currentH){
+        if(capturedW<=0||capturedH<=0)return null;
+        float rx=(float)currentW/capturedW,ry=(float)currentH/capturedH;
+        if(Math.abs(rx-1f)<0.001f&&Math.abs(ry-1f)<0.001f)return null;
+        return new float[]{rx,ry};
+    }
+    static int capturedWidth(JsonObject snapshot){
+        try{JsonObject env=snapshot.getAsJsonObject("environment");if(env!=null&&env.has("screen_w")&&env.get("screen_w").getAsInt()>0)return env.get("screen_w").getAsInt();}catch(RuntimeException ignored){}
+        // Older snapshots predate the field; the player's own x is WIDTH*0.25, so the width can be read back from it.
+        try{JsonObject creature=snapshot.getAsJsonObject("state").getAsJsonObject("player_state").getAsJsonObject("creature");
+            if(creature.has("draw_x")){double x=creature.get("draw_x").getAsDouble();if(x>0)return (int)Math.round(x/0.25);}
+        }catch(RuntimeException ignored){}
+        return 0;
+    }
+    static int capturedHeight(JsonObject snapshot,int width){
+        try{JsonObject env=snapshot.getAsJsonObject("environment");if(env!=null&&env.has("screen_h")&&env.get("screen_h").getAsInt()>0)return env.get("screen_h").getAsInt();}catch(RuntimeException ignored){}
+        return width<=0?0:Math.round(width*(float)Settings.HEIGHT/Settings.WIDTH);
+    }
+    static void rescale(AbstractCreature c,float rx,float ry){
+        if(c==null)return;
+        c.drawX*=rx;c.drawY*=ry;c.dialogX*=rx;c.dialogY*=ry;
+        move(c.hb,rx,ry);
+        if(c.healthHb!=null)move(c.healthHb,rx,ry);
+        if(c instanceof com.megacrit.cardcrawl.monsters.AbstractMonster){
+            com.megacrit.cardcrawl.monsters.AbstractMonster m=(com.megacrit.cardcrawl.monsters.AbstractMonster)c;
+            move(m.intentHb,rx,ry);
+        }
+    }
+    static void move(com.megacrit.cardcrawl.helpers.Hitbox hb,float rx,float ry){
+        if(hb==null)return;
+        hb.x*=rx;hb.y*=ry;hb.cX=hb.x+hb.width/2f;hb.cY=hb.y+hb.height/2f;
     }
     static void restore(JsonObject snapshot)throws Exception{
         if(ReplaySafety.quarantined)throw new IllegalStateException("Game is frozen after a failed restore; restart this process");

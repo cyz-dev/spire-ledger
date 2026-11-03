@@ -48,7 +48,8 @@ if($LASTEXITCODE -ne 0){throw 'NativeReplayProbe compile failed'}
 [IO.File]::WriteAllText("$instance\probe-classes\ModTheSpire.json",'{"modid":"spire-ledger-replay-probe","name":"Isolated Native Replay Probe","version":"0.1.0","dependencies":["spire-ledger"]}',$utf8)
 & jar cf "$instance\mods\NativeReplayProbe.jar" -C "$instance\probe-classes" .
 if($LASTEXITCODE -ne 0){throw 'NativeReplayProbe package failed'}
-[IO.File]::WriteAllText("$instance\info.displayconfig","1024`n768`n60`nfalse`nfalse`ntrue`n",$utf8)
+# Deliberately not 1024x768: the practice window must copy this value, and a hardcoded default would then fail the check.
+[IO.File]::WriteAllText("$instance\info.displayconfig","1280`n720`n60`nfalse`nfalse`ntrue`n",$utf8)
 New-Item -ItemType Directory -Force "$instance\betaPreferences" | Out-Null
 [IO.File]::WriteAllText("$instance\betaPreferences\STSSaveSlots",'{"DEFAULT_SLOT":"0","PROFILE_NAME":"UI fixture"}',$utf8)
 if($PrepareOnly){Write-Output "Prepared isolated instance: $instance";return}
