@@ -132,6 +132,32 @@ State Notes 仓库在 M0 完成后冻结为历史，不再发布。
 
 事件页另有一个口径下拉 `eventRateMenu`（次数 / 胜率），与涅奥、Boss 遗物的 `choiceRateMenu` 同构但只有两档（事件没有标准化拟合）。`mode()` 在事件页返回 `eventMode==1?2:0`，`rebuild()` 据此二选一地往 `prefixes` 里放 `event:` 或 `related:event:`——两种单位不同（事件次数 / 局）的行因此不会同时出现。`visibleMenus()` 与 `layout()` 把下拉放在第 1 行中间那格（分类在左、幕在右），`changedSelectionTo()` 收到该菜单时重置分页并重建。
 
+### 回合快照的抓取时机（2026-11-01）
+
+`TurnRecorder.observe()` 原本用 `TurnAdapter.stable()` 判断“能不能抓”，而 `stable()` = `!HistoryScreen.active() && restoreReady()`，那 15 项条件是为**恢复**服务的（`phase==WAITING_ON_USER`、`endTurnButton.enabled`、四类特效队列全空等）。抓取需要的条件比恢复少得多，用恢复的条件去等，就等到了玩家已经出完牌的时刻；`lastKey` 一旦落盘（无论 `recorded` 还是 `missing`）又锁死该回合，不再重试。
+
+现在拆成两套：
+
+- `restoreReady()` 原样保留，只给 `TurnAdapter.restore()` 用——恢复前必须完全静止。
+- `TurnAdapter.capturable()` 给抓取用：战斗房间、无屏幕、`cardQueue` / `actions` / `preTurnActions` 为空、`currentAction` 为空、`turnHasEnded` 为假、`player.isEndingTurn` 为假。去掉 `phase`、`endTurnButton.enabled` 和特效清空这三项瞬态条件，它们正是把抓取拖到出牌之后的原因。
+
+`observe()` 改用 `capturable()`，并且不再因为“本回合已经出过牌”就放弃：只要 `compatible()` 就抓一份，`played` 记 `cardsPlayedThisTurn.size()`（0 = 干净的回合起点，N = 已出 N 张）。原来的 `damageReceivedThisTurn` / `totalDiscardedThisTurn` 判据删除——回合开始结算的中毒、荆棘伤害和开局弃牌会把它们置位，但与“玩家是否出牌”无关。没有抓到时的原因由 `TurnRecorder.blocker` 上报，历史页在提示后附加“当前停在：…”。
+
+### S/L 分支、内容去重与存储配额（2026-11-01）
+
+`Recorder` 每次进程启动都新建 `branch`，`lastKey` 只在内存里，于是每次 S/L 都换分支、把整场重记一遍；单点约 155 KB，`MAX_POINTS=10000` 折合每局约 1.5 GB。S/L 的每一次尝试都是“同一状态、不同动作、不同结果”的配对样本，属于训练数据，不能用“清空重记”糊掉，所以改三件事：
+
+- **分支树**：`Recorder` 新增 `branchParent`、`branchParentSnapshot`、`branchReason`。构造时读 `replay/manifest.json` 最后一条快照当父节点，理由 `process_restart`；`forkBranch()`（回合重打）理由 `in_combat_turn_rollback`。条目带 `branch_parent` / `branch_parent_snapshot` / `branch_reason`。
+- **S/L 判定**：`Hooks` 给 `SaveAndContinue.loadSaveFile` 打前置补丁，`battle()` 据此区分 SaveState 恢复（沿用 `combat_id`）、读档回同一楼层（沿用 `combat_id`，理由 `native_load`）、新战斗（新 `combat_id`）。
+- **内容去重**：写入前对快照状态主体算 SHA-256（剔除 `identity`、`captured_at`、`snapshot_id` 与瞬态表现字段，保留 `run_id`/`branch_id`/`combat_id`/`floor`/`turn`）。manifest 的 `blobs` 表按内容寻址；内容已存在就复用同一个 `turns/<uuid>.json`，条目记 `availability="duplicate"` + `duplicate_of`，`snapshot_id` 仍每点唯一。
+- **配额**：单局 `BUDGET_BYTES = 512 MB`（可用 `-Dspireledger.turnBudgetMb` 覆盖）。超预算按 `captured_at` 从旧到新淘汰**最老的分支**，当前分支不动；条目改 `availability="evicted"` 并清空 `relative_path`，随后删除不再被引用的 blob。淘汰不删记录，训练侧能看出“这里曾有数据、内容已回收”，界面只列 `recorded`。
+
+### 恢复后的可见性与历史页的两个下拉（2026-11-03）
+
+**黑幕遮住战场。** 练习实例进入战斗后立刻恢复，而 `AbstractDungeon.isFadingIn` 仍在跑房间淡入；`readyAfterRestore()` 清空了特效队列，淡入黑幕于是留在 `fadeColor` 上。黑幕盖的是世界层，HUD、手牌和结束回合按钮画在它上面，玩家看到的是“场地是空的、敌人没显示，但可以操作”。现在 `readyAfterRestore()` 同时把 `isFadingIn` 置假、`waitingOnFadeOut` 置假、`fadeColor.a` 归零，恢复后的第一帧就能看到战场。实测同一快照恢复：修复前首帧 `fade_alpha≈0.99`（整屏黑），修复后为 0。
+
+**“尝试”下拉画不出来。** `RunReview.render()` 只画了 `turnMenu`，`attemptMenu` 只在 `update()` 里更新、从未渲染；`DropdownMenu` 的位置是在 `render()` 里算出来的，所以“尝试”下拉既看不见也点不中。现在两个下拉并排画在 y=0.27 一行（`turnMenu` 在 x=0.70，`attemptMenu` 在 x=0.53），打开的那个最后画，列表不再压住“重打此回合”按钮。
+
 ### 四行导出抬头与求解器标记（2026-10-31）
 
 `PickRateChart.captions()` 固定 4 行：`head()` 2 行（职业、进阶、结果、胜负口径、放弃开关；选中局数与胜率、最少出现次数）与 `rule()` 2 行（本图口径、分档说明），不再拼 `versions()` 与导出时间。日期范围、存档位、标准模式、种子局、来源与 SL 路径、未知操作来源计数、排除的已知自动化局数、口径版本和导出时间由 `remarks()` 按字段写进 `metadata.json`；实际战损另记导出范围与图片来源，涅奥与 Boss 遗物另记区间说明。抬头行数 4 与每行 60 个汉字的上限由原生探针 `StatsOptionsProbe` 断言行数与每行长度（它跑在真实游戏里，能直接读 `captions`），新增字段先过 metrics.md 第 8 节的“图片必需”表，放不下就进 `remarks`。`ascensionLabel()` 在筛选为“全部”时按选中局写出实际范围（如“全部（实际 A20）”）。胜率取 `win` 指标的分子分母，与界面一致。标题由 `solverMark()` 追加“ · 含求解器”：`Run.automation` 是 `Ledger` 在任一确认决策的 `action_source=known_automation` 时写下的 `Fact`，未关联的原版 `.run` 不写该事实，因此不会误标。
