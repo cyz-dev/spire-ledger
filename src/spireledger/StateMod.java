@@ -78,7 +78,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         if(Boolean.getBoolean("spireledger.practiceMode")){meta.addProperty("session_kind","practice");meta.addProperty("parent_run_id",ReplayLauncher.practiceTargetRunId);meta.addProperty("parent_snapshot_id",ReplayLauncher.practiceTargetSnapshotId);}
         if(Boolean.getBoolean("spireledger.fixture"))meta.addProperty("dataset_origin","test_fixture");
         String restore=loading==null?null:Recorder.string(loading,"run_id");
-        if(restore!=null&&!restore.matches("[a-fA-F0-9-]{36}"))restore=null;
+        // A practice child that loaded a floor save records its own run, never the parent's identity.
+        if(restore!=null&&!restore.matches("[a-fA-F0-9-]{36}")||ReplaySafety.practice())restore=null;
         recorder=new Recorder(ROOT,meta,restore);
         if(loading!=null&&loading.has("deck"))Snapshot.restoreIdentities(loading.getAsJsonArray("deck"));
         JsonObject state=Snapshot.capture();JsonObject e=Recorder.object("coverage");e.addProperty("status",loadingExpected?"loaded":"started");e.addProperty("floor_start",AbstractDungeon.floorNum);e.add("state",state);recorder.append(e);

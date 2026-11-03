@@ -29,6 +29,7 @@ final class ReplayLauncher {
     // Attachments are keyed by snapshot schema, TurnAdapter.ID and save_state identity, not by our jar version.
     static String practiceTargetRunId = System.getProperty("spireledger.practiceRunId", "");
     static String practiceTargetSnapshotId = System.getProperty("spireledger.practiceSnapshotId", "");
+    static final boolean practiceFromFloor = Boolean.getBoolean("spireledger.practiceFloorSave");
     static boolean practiceInitialized = false;
     static int practiceStep = 0;
     static Process launchedProcess;
@@ -213,13 +214,21 @@ final class ReplayLauncher {
             for(String dir:new String[]{"preferences","betaPreferences"})Files.copy(source,instanceDir.resolve(dir).resolve(name),StandardCopyOption.REPLACE_EXISTING);}
     }
 
-    static Path launchPracticeInstance(HistoryIndex.Summary summary, JsonObject ref, Path runDir) throws Exception {
+    /** ref is the turn to restore and floorSave the floor_save record to start from; either may be null, not both. */
+    static Path launchPracticeInstance(HistoryIndex.Summary summary, JsonObject ref, Path runDir, JsonObject floorSave) throws Exception {
         if (!TurnRecorder.compatible()) {
             throw new IllegalStateException("Environment not compatible for practice instance");
         }
-        String snapshotId = Recorder.string(ref, "snapshot_id");
-        if (snapshotId.isEmpty()) {
+        String snapshotId = ref==null?"":Recorder.string(ref, "snapshot_id");
+        if (snapshotId.isEmpty()&&floorSave==null) {
             throw new IllegalArgumentException("No snapshot ID");
+        }
+        byte[] save=null;
+        if(floorSave!=null){
+            String name=Recorder.string(floorSave,"relative_path");if(!name.matches("floors/[0-9]+[.]autosave")||!Recorder.string(floorSave,"class").matches("[A-Z_]+"))throw new IOException("Invalid floor save record");
+            save=Files.readAllBytes(runDir.resolve(name));
+            // A later S/L or another attempt may have replaced the file after the record was read.
+            if(!TurnFiles.sha256(save).equals(Recorder.string(floorSave,"sha256")))throw new IOException("Floor save changed since it was recorded");
         }
 
         Path desktopJar = findDesktopJar();
@@ -231,10 +240,12 @@ final class ReplayLauncher {
         Path speedModJar=null;Map<String,Path> carried=new LinkedHashMap<>();
         for(ModInfo mod:Loader.MODINFOS){if(StateMod.SPEED_MOD.equals(mod.ID))speedModJar=findModJar(StateMod.SPEED_MOD);else if(ReplayEnvironment.carried(mod.ID,String.valueOf(mod.ModVersion)))carried.put(mod.ID,findModJar(mod.ID));}
 
-        Path turnFile = resolveTurnPath(runDir, Recorder.string(ref, "relative_path"));
-        readTarget(runDir,summary.id,ref);
-        if (!Files.exists(turnFile)) {
-            throw new FileNotFoundException("Snapshot turn file missing: " + turnFile);
+        Path turnFile = ref==null?null:resolveTurnPath(runDir, Recorder.string(ref, "relative_path"));
+        if(ref!=null){
+            readTarget(runDir,summary.id,ref);
+            if (!Files.exists(turnFile)) {
+                throw new FileNotFoundException("Snapshot turn file missing: " + turnFile);
+            }
         }
 
         Path instanceDir = StateMod.ROOT.getParent().resolve("practice-instances").resolve("inst-" + UUID.randomUUID().toString().substring(0, 8));
@@ -263,9 +274,13 @@ final class ReplayLauncher {
         if (Files.exists(manifestSrc)) {
             Files.copy(manifestSrc, targetRunHome.resolve("replay/manifest.json"), StandardCopyOption.REPLACE_EXISTING);
         }
-        Path targetTurn = resolveTurnPath(targetRunHome, Recorder.string(ref, "relative_path"));
-        Files.createDirectories(targetTurn.getParent());
-        Files.copy(turnFile, targetTurn, StandardCopyOption.REPLACE_EXISTING);
+        if(ref!=null){
+            Path targetTurn = resolveTurnPath(targetRunHome, Recorder.string(ref, "relative_path"));
+            Files.createDirectories(targetTurn.getParent());
+            Files.copy(turnFile, targetTurn, StandardCopyOption.REPLACE_EXISTING);
+        }
+        // The child plays save slot 0, whose autosave path has no slot prefix.
+        if(save!=null){Files.createDirectories(instanceDir.resolve("saves"));Files.write(instanceDir.resolve("saves").resolve(Recorder.string(floorSave,"class")+".autosave"),save);}
 
         Path runJsonSrc = runDir.resolve("run.json");
         if (Files.exists(runJsonSrc)) {
@@ -296,6 +311,7 @@ final class ReplayLauncher {
         cmd.add("-Dspireledger.practiceMode=true");
         cmd.add("-Dspireledger.practiceRunId=" + summary.id);
         cmd.add("-Dspireledger.practiceSnapshotId=" + snapshotId);
+        if(save!=null)cmd.add("-Dspireledger.practiceFloorSave=true");
         cmd.add("-Duser.home=" + instanceDir.resolve("home").toAbsolutePath().toString());
         cmd.add("-Djava.io.tmpdir=" + instanceDir.resolve("temp").toAbsolutePath().toString());
         cmd.add("-jar");
@@ -313,6 +329,11 @@ final class ReplayLauncher {
             cmd.add(1,"-Dspireledger.replaySource="+System.getProperty("user.dir"));cmd.add(1,"-Dspireledger.replayCharacter="+System.getProperty("spireledger.replayCharacter","IRONCLAD"));cmd.add(1,"-Dspireledger.replayScenario="+System.getProperty("spireledger.replayScenario","ordinary"));
         }
 
+        // The floor-save fixture drives the child through its fight to the next floor.
+        if(Boolean.getBoolean("spireledger.fixture")&&Boolean.getBoolean("spireledger.floorSaveProbe")){
+            Files.copy(findModJar("spire-ledger-replay-probe"),instanceDir.resolve("mods/NativeReplayProbe.jar"),StandardCopyOption.REPLACE_EXISTING);
+            cmd.set(cmd.size()-1,cmd.get(cmd.size()-1)+",spire-ledger-replay-probe");cmd.add(1,"-Dspireledger.fixture=true");cmd.add(1,"-Dspireledger.floorSaveChild=true");
+        }
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(instanceDir.toFile());
         pb.redirectOutput(instanceDir.resolve("stdout.log").toFile());
@@ -328,25 +349,51 @@ final class ReplayLauncher {
         return instanceDir;
     }
 
+    static void practiceReady(String mode)throws IOException{
+        JsonObject receipt=new JsonObject();receipt.addProperty("status","ready");receipt.addProperty("mode",mode);receipt.addProperty("run_id",practiceTargetRunId);receipt.addProperty("snapshot_id",practiceTargetSnapshotId);receipt.addProperty("floor",AbstractDungeon.floorNum);receipt.addProperty("interactive",practiceTargetSnapshotId.isEmpty()?StateMod.ready():TurnAdapter.stable());
+        Files.write(Paths.get("practice-startup.json"),receipt.toString().getBytes(StandardCharsets.UTF_8));
+    }
+    /** Presses the vanilla Continue button on the copied floor save, so map, room and fight load as the game saved them; a named turn is then restored inside that fight. */
+    static void floorStartup(JsonObject targetSnapshot)throws Exception{
+        if(practiceStep==0){
+            if(CardCrawlGame.mainMenuScreen==null||CardCrawlGame.characterManager==null)return;
+            if(!TurnRecorder.compatible())throw new IllegalStateException("Unsupported practice dependencies");
+            AbstractPlayer saved=CardCrawlGame.characterManager.loadChosenCharacter();if(saved==null)throw new FileNotFoundException("Practice floor save missing");
+            TipTracker.disableAllFtues();AbstractDungeon.ftue=null;
+            CardCrawlGame.loadingSave=true;CardCrawlGame.chosenCharacter=saved.chosenClass;CardCrawlGame.mainMenuScreen.isFadingOut=true;CardCrawlGame.mainMenuScreen.fadeOutMusic();Settings.isDailyRun=false;Settings.isTrial=false;com.megacrit.cardcrawl.helpers.ModHelper.setModsFalse();
+            practiceStep=1;return;
+        }
+        if(!StateMod.ready()||AbstractDungeon.fadeColor!=null&&AbstractDungeon.fadeColor.a>0f)return;
+        if(targetSnapshot==null){practiceInitialized=true;practiceReady("floor_save");return;}
+        if(!TurnAdapter.restoreReady())return;
+        String expected=Recorder.string(targetSnapshot.getAsJsonObject("state"),"lastCombatMetricKey");
+        if(!expected.equals(AbstractDungeon.lastCombatMetricKey))throw new IllegalStateException("Floor save starts "+AbstractDungeon.lastCombatMetricKey+", not "+expected);
+        AbstractDungeon.ftue=null;TurnAdapter.restore(targetSnapshot);practiceInitialized=true;practiceReady("floor_save_turn");
+    }
+
     static void checkPracticeStartup() {
-        if (practiceInitialized || practiceTargetRunId.isEmpty() || practiceTargetSnapshotId.isEmpty()) return;
+        if (practiceInitialized || practiceTargetRunId.isEmpty() || practiceTargetSnapshotId.isEmpty()&&!practiceFromFloor) return;
         try {
             Path runHome = StateMod.ROOT.resolve(practiceTargetRunId);
             Path manifestPath = runHome.resolve("replay/manifest.json");
-            if (!Files.exists(manifestPath)) throw new FileNotFoundException("Practice manifest missing");
-            JsonObject manifest = TurnFiles.read(manifestPath);
             JsonObject targetSnapshot = null;
-            for (JsonElement item : manifest.getAsJsonArray("snapshots")) {
-                JsonObject point = item.getAsJsonObject();
-                if (practiceTargetSnapshotId.equals(Recorder.string(point, "snapshot_id"))) {
-                    Path pointPath = resolveTurnPath(runHome, Recorder.string(point, "relative_path"));
-                    targetSnapshot = readTarget(runHome,practiceTargetRunId,point);
-                    break;
+            // A floor alone needs no snapshot attachments.
+            if(!practiceTargetSnapshotId.isEmpty()){
+                if (!Files.exists(manifestPath)) throw new FileNotFoundException("Practice manifest missing");
+                JsonObject manifest = TurnFiles.read(manifestPath);
+                for (JsonElement item : manifest.getAsJsonArray("snapshots")) {
+                    JsonObject point = item.getAsJsonObject();
+                    if (practiceTargetSnapshotId.equals(Recorder.string(point, "snapshot_id"))) {
+                        Path pointPath = resolveTurnPath(runHome, Recorder.string(point, "relative_path"));
+                        targetSnapshot = readTarget(runHome,practiceTargetRunId,point);
+                        break;
+                    }
+                }
+                if (targetSnapshot == null) {
+                    throw new FileNotFoundException("Target snapshot not found in manifest: " + practiceTargetSnapshotId);
                 }
             }
-            if (targetSnapshot == null) {
-                throw new FileNotFoundException("Target snapshot not found in manifest: " + practiceTargetSnapshotId);
-            }
+            if(practiceFromFloor){floorStartup(targetSnapshot);return;}
 
             if (practiceStep == 0) {
                 if (CardCrawlGame.mainMenuScreen == null) return;
@@ -419,8 +466,7 @@ final class ReplayLauncher {
                 TurnAdapter.restore(targetSnapshot);
                 practiceInitialized = true;
                 System.out.println("[Spire Ledger] Practice snapshot successfully restored: " + practiceTargetSnapshotId);
-                JsonObject receipt=new JsonObject();receipt.addProperty("status","ready");receipt.addProperty("run_id",practiceTargetRunId);receipt.addProperty("snapshot_id",practiceTargetSnapshotId);receipt.addProperty("interactive",TurnAdapter.stable());
-                Files.write(Paths.get("practice-startup.json"),receipt.toString().getBytes(StandardCharsets.UTF_8));
+                practiceReady("snapshot");
             }
         } catch (Exception ex) {
             System.err.println("[Spire Ledger] Failed to restore practice snapshot: " + ex.getMessage());

@@ -23,6 +23,8 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 2026-11-01 接手 PR #20：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和 1920×1080 下 32 个阶段均通过，实际战损导出 20/20 个遭遇由游戏资源画出，生成小鬼群前后两个地牢随机数的计数不变。PR 原版的探针第 28 阶段仍按 6 个卡牌页取 Boss 遗物页，接手时改为第 5 页。
 - 2026-11-02 发布 0.6.0-beta.2 前在发布提交上复跑：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0），实际战损导出 20/20 个遭遇由游戏资源画出。
 - 2026-11-03 练习环境与输入告警（P1）：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 中文 1024×768 的 32 个阶段通过（含 2/3 只虱虫的标签断言）；`integration-replay.ps1 -LaunchPractice -SuperFastMode -ExperimentalTurns -Scenario ordinary` 通过，再加 `-ExtraMods` Colored Map 2.4.1、Colored Powertips 2.3.0、Highlight Path 0.0.3 后也通过，练习子进程加载了这三个 Mod，`practice-startup.json` 为 `interactive: true`；`-ReplayCurrent` 当前战斗重打通过。点击截获告警没有原生探针，靠离线断言和 W18 手测。
+- 2026-11-03 楼层存档（P2）：`RecorderCheck` 断言同一层留最新一份、每份记 `floor_save` 事件；`integration.ps1` 原生探针通过，记录目录下的 `floors/41.autosave` 与游戏写出的 `saves/IRONCLAD.autosave` sha256 一致（27,988 字节）。
+- 2026-11-03 从此层继续（P3）：`RecorderCheck` 断言回合只匹配它进入该层时的节点、之后从别的节点再进该层就不再匹配、缺坐标的旧记录不匹配；`integration-replay.ps1 -FloorSave -SuperFastMode -ExperimentalTurns` 通过：父进程在真实地图上点第 1 层节点，`floors/1.autosave` 与游戏自动存档逐字节相同；练习子进程两次都从这份存档按“继续游戏”读档，一次在 Cultist 第 1 回合恢复快照（`floor_save_turn`），一次只从楼层开始（`floor_save`），都由探针打赢、出现 2 个奖励、在地图上点下一节点进入第 2 层；子进程存档未被改写、没有写 `runs/`，父进程自己的自动存档前后相同。
 
 ## 0.6.0-beta.1 与 beta.2 改动（先测这一节）
 
@@ -45,6 +47,7 @@ W1–W8 随 0.6.0-beta.1 发布，W9–W16 随 0.6.0-beta.2 发布（PR #20）�
 | W17 | 从历史对局对一个回合点“练习此回合” | 练习窗口的语言、音量和窗口大小与正式游戏一致；你当前启用的已审核 Mod（如 Colored Map、CardImageReplacer 2.0）在练习里同样生效，求解器不出现。角色和怪物站在正常位置，血条在角色脚下，数字没有被挡住；战场不是暗的。（2026-11-03，未发布） |
 | W18 | 同装一个会截获鼠标点击的 Mod（例如反馈里的 Loadout），打开账本点几次“职业”下拉 | 点不开时，账本顶部出现红色告警，说明点击被其他 Mod 截获，列出未审核的 Mod 名，提示 Ctrl+Shift+R。只装已审核 Mod 时不出现这行。（2026-11-03，未发布） |
 | W19 | “战斗与资源 → 实际战损”看第 1 幕的虱虫 | “2 只虱虫”和“3 只虱虫”分两行显示，不再都叫“虱虫”；三哨卫、三只鸟这类本身带数量的名字不重复加前缀。（2026-11-03，未发布） |
+| W20 | 新打一局到第 3 层以上，从历史对局点第 2 层（怪物房），先点“从此层继续”，关掉练习窗口后再对同层一个回合点“练习此回合”；再点一个“?”或商店楼层的“从此层继续” | 练习窗口直接进入该层，地图上走过的路径、遗物、牌组和血量与当时一致；“练习此回合”落在所选回合。打赢后有正常奖励，打开地图能选下一个节点进入下一层。“?”和商店楼层进入的是当时那个事件或那组货架。关掉练习窗口后，正式游戏“继续”仍回到原来的进度，历史和统计里没有这次练习。（2026-11-03，未发布） |
 
 本批已知边界，按预期记录即可：
 

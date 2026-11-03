@@ -39,7 +39,7 @@ final class RunReview {
         overview.resize(w(.16f),h(.035f));overview.move(w(.86f),h(.39f));
         choiceTab.resize(w(.13f),h(.035f));choiceTab.move(w(.13f),h(.39f));
         deckTab.resize(w(.18f),h(.035f));deckTab.move(w(.30f),h(.39f));
-        host.prev.move(w(.32f),h(.075f));host.next.move(w(.46f),h(.075f));host.diagnostics.move(w(.65f),h(.075f));host.replayButton.move(w(.85f),h(.075f));
+        host.prev.move(w(.32f),h(.075f));host.next.move(w(.46f),h(.075f));host.diagnostics.move(w(.65f),h(.075f));host.replayButton.move(w(.85f),h(.075f));host.continueButton.move(w(.85f),h(.13f));
     }
     static float w(float x){return Settings.WIDTH*x;}static float h(float y){return Settings.HEIGHT*y;}
     int focused(){return pinned?indexForFloor():hover;}
@@ -59,8 +59,9 @@ final class RunReview {
         if(host.click(host.next)&&!model.floors.isEmpty()){int i=Math.min(model.floors.size()-1,indexForFloor()+1);pinned=true;choose(i);}
         if(host.click(host.diagnostics)){host.raw=true;host.makeLines();return;}
         if(pinned&&!host.availableTurns.isEmpty()&&host.click(host.replayButton))host.replaySelected();
+        if(pinned&&host.floorSave!=null&&host.click(host.continueButton))host.continueFloor();
         if(InputHelper.scrolledDown)scroll++;if(InputHelper.scrolledUp)scroll--;scroll=Math.max(0,Math.min(maxScroll(),scroll));
-        List<Hitbox> controls=new ArrayList<>(nodes);if(pinned)controls.addAll(Arrays.asList(overview,choiceTab,deckTab));controls.addAll(Arrays.asList(host.prev,host.next,host.diagnostics,host.latestTab,host.historyTab,host.home,back));if(pinned&&!host.availableTurns.isEmpty())controls.add(host.replayButton);host.controller(controls);
+        List<Hitbox> controls=new ArrayList<>(nodes);if(pinned)controls.addAll(Arrays.asList(overview,choiceTab,deckTab));controls.addAll(Arrays.asList(host.prev,host.next,host.diagnostics,host.latestTab,host.historyTab,host.home,back));if(pinned&&!host.availableTurns.isEmpty())controls.add(host.replayButton);if(pinned&&host.floorSave!=null)controls.add(host.continueButton);host.controller(controls);
     }
     int maxScroll(){int f=focused();if(f<0||showDeck){JsonObject state=f<0?model.finalState:model.floors.get(f).last;return Math.max(0,(RunReviewModel.deck(state).size()+3)/4-5);}return Math.max(0,entries(model.floors.get(f)).size()-5);}
     void text(SpriteBatch sb,String text,float x,float y,Color color){host.text(sb,text,w(x),h(y),color);}
@@ -88,6 +89,7 @@ final class RunReview {
         else renderFloor(sb,model.floors.get(focus));
         if(!host.message.isEmpty())text(sb,host.fit(host.message,w(.74f)),.20f,.115f,Color.SALMON);
         host.button(sb,back,tr("关闭账本","Close"));host.button(sb,host.prev,tr("上一层","Previous"));host.button(sb,host.next,tr("下一层","Next"));host.button(sb,host.diagnostics,tr("详细记录","Details"));
+        if(pinned&&host.floorSave!=null)host.button(sb,host.continueButton,tr("从此层继续","Play from floor"));
         if(pinned&&!host.availableTurns.isEmpty()){
             host.button(sb,host.replayButton,ReplayLauncher.canReplayCurrent(host.availableTurns.get(host.turnSelection))?tr("重打此回合","Restart turn"):tr("练习此回合","Practice turn"));
             host.turnMenu.render(sb,w(.70f),h(.18f));
