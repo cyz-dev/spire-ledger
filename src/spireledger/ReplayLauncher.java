@@ -251,6 +251,9 @@ final class ReplayLauncher {
             String id=info.ID;
             if(!ids.contains(id))continue;
             if("basemod".equalsIgnoreCase(id)||"stslib".equalsIgnoreCase(id)||LEDGER_ID.equalsIgnoreCase(id))continue;
+            // SuperFastMode is copied separately below (with its own config), so it must not be copied twice: a second
+            // Files.copy of the same jar into the same path throws FileAlreadyExistsException on Windows.
+            if(StateMod.SPEED_MOD.equalsIgnoreCase(id))continue;
             // Test fixtures record their own probe mod; it must never follow a manifest into a real practice window.
             if(id.toLowerCase(Locale.ROOT).startsWith("spire-ledger-"))continue;
             Path jar=jarPath(info);
@@ -339,7 +342,7 @@ final class ReplayLauncher {
         Files.copy(stslibJar, instanceDir.resolve("mods/StSLib.jar"), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stateNotesJar, instanceDir.resolve("mods/SpireLedger.jar"), StandardCopyOption.REPLACE_EXISTING);
         if(speedModJar!=null){
-            Files.copy(speedModJar,instanceDir.resolve("mods/SuperFastMode.jar"));
+            Files.copy(speedModJar,instanceDir.resolve("mods/SuperFastMode.jar"),StandardCopyOption.REPLACE_EXISTING);
             Path config=Paths.get(com.evacipated.cardcrawl.modthespire.lib.ConfigUtils.CONFIG_DIR,"SuperFastMode","SuperFastModeConfig.properties");
             if(Files.isRegularFile(config)){
                 String os=System.getProperty("os.name","").toLowerCase(Locale.ROOT);
