@@ -35,5 +35,51 @@ String[] allowed={"basemod|5.56.0","RunHistoryPlus|1.8.3","superfastmode|1.0.8",
   check(ReplayEnvironment.accepts(combination),"the installed combination with CardImageReplacer stays inside the whitelist");
   combination.get(combination.size()-1).getAsJsonObject().addProperty("version","2.1");
   check(!ReplayEnvironment.accepts(combination),"an unreviewed build of the same mod is still rejected");
+// Every presentation field must be dropped by the hash: the list used to live in two places and drifted (reticle_rendered).
+  for(String field:SnapshotShape.VISUAL){
+    JsonObject plain=new JsonParser().parse("{\"state\":{\"hp\":30,\"card\":{\"id\":\"Strike\"}}}").getAsJsonObject();
+    JsonObject noisy=new JsonParser().parse("{\"state\":{\"hp\":30,\"card\":{\"id\":\"Strike\"}}}").getAsJsonObject();
+    plain.getAsJsonObject("state").add(field,new JsonPrimitive(1));
+    noisy.getAsJsonObject("state").add(field,new JsonPrimitive("different"));
+    check(TurnFiles.contentHash(plain).equals(TurnFiles.contentHash(noisy)),field+" is presentation and must not split the same board");
+  }
+  JsonObject entered=new JsonParser().parse("{\"state\":{\"hp\":30,\"cur_map_node_state\":{\"taken\":false}}}").getAsJsonObject();
+  JsonObject reloaded=new JsonParser().parse("{\"state\":{\"hp\":30,\"cur_map_node_state\":{\"taken\":true}}}").getAsJsonObject();
+  check(!TurnFiles.contentHash(entered).equals(TurnFiles.contentHash(reloaded)),"the map node's taken flag is state and still splits the board");
+  Path tree=directory.resolve("tree");Files.createDirectories(tree);JsonObject meta=new JsonObject();
+  Recorder session1=new Recorder(tree,meta,"11111111-1111-1111-1111-111111111111");
+  check(session1.branchParent.isEmpty()&&"run_start".equals(session1.branchReason),"the first session of a run has no parent");
+  TurnFiles treeFiles=new TurnFiles(tree.resolve(session1.runId),session1.runId,new JsonObject());
+  JsonObject treeEntry=new JsonObject();treeEntry.addProperty("branch_id",session1.branch);treeEntry.addProperty("turn",1);treeEntry.addProperty("captured_at",1L);
+  JsonObject treeSnap=new JsonParser().parse("{\"state\":{\"hp\":30,\"deck\":[]}}").getAsJsonObject();
+  JsonObject treeRef=treeFiles.publish(treeEntry,treeSnap);session1.close();
+  Recorder session2=new Recorder(tree,meta,session1.runId);
+  check(!session2.branch.equals(session1.branch),"a new process opens a new branch");
+  check(session2.branchParent.equals(session1.branch),"the new branch names the session it continues: "+session2.branchParent);
+  check(session2.branchParentSnapshot.equals(Recorder.string(treeRef,"snapshot_id")),"the parent pointer names the last recorded checkpoint");
+  check("process_restart".equals(session2.branchReason),"a restart records why it branched");
+  TurnFiles resumed=new TurnFiles(tree.resolve(session2.runId),session2.runId,new JsonObject());
+  JsonObject again=new JsonObject();again.addProperty("branch_id",session2.branch);again.addProperty("turn",1);again.addProperty("captured_at",2L);
+  JsonObject repeat=resumed.publish(again,new JsonParser().parse(treeSnap.toString()).getAsJsonObject());
+  check("duplicate".equals(Recorder.string(repeat,"availability")),"a re-entered turn costs a pointer, not a second file");
+  check(Recorder.string(repeat,"duplicate_of").equals(Recorder.string(treeRef,"snapshot_id")),"the pointer names the original checkpoint");
+  check(resumed.liveBytes()==treeFiles.liveBytes(),"the second session adds no bytes for the same board: "+resumed.liveBytes());
+  String parentBranch=session2.branch;JsonObject rollback=new JsonObject();rollback.addProperty("snapshot_id",Recorder.string(treeRef,"snapshot_id"));
+  session2.forkBranch(parentBranch,"in_combat_turn_rollback",rollback);
+  check(!session2.branch.equals(parentBranch)&&session2.branchParent.equals(parentBranch),"a turn rollback forks from the branch it was in");
+  check(session2.branchParentSnapshot.equals(Recorder.string(treeRef,"snapshot_id")),"the rollback names the checkpoint it restarted from");
+  boolean rollbackLogged=false;for(JsonElement e:session2.document().getAsJsonArray("records")){JsonObject r=e.getAsJsonObject();if("turn_rollback".equals(Recorder.string(r,"type"))&&"in_combat_turn_rollback".equals(Recorder.string(r,"reason"))&&parentBranch.equals(Recorder.string(r,"parent_branch_id")))rollbackLogged=true;}
+  check(rollbackLogged,"the rollback stays in events.jsonl for the training side");
+  session2.close();
+  // A restart must resume the fight, not invent a second one; a new fight on the same floor must not inherit it.
+  JsonObject persisted=new JsonObject();persisted.addProperty("combat_id","stored");persisted.addProperty("floor",20);
+  check(TurnRecorder.nextCombat(true,20,"",-1,persisted).equals("stored"),"a restarted process resumes the fight it was in");
+  check(TurnRecorder.nextCombat(true,20,"current",20,persisted).equals("current"),"an in-process load keeps the live identity");
+  check(!TurnRecorder.nextCombat(true,21,"",-1,persisted).equals("stored"),"a load that moved a floor starts a new fight");
+  check(!TurnRecorder.nextCombat(true,20,"",-1,null).startsWith("stored"),"a run with no stored fight starts a new one");
+  check(!TurnRecorder.nextCombat(false,20,"current",20,persisted).equals("current"),"walking into a new fight never reuses an id");
+  JsonObject manifestAfter=TurnFiles.read(dedupe.resolve("replay/manifest.json"),TurnFiles.MAX_MANIFEST);
+  JsonObject lastCombat=manifestAfter.getAsJsonObject("last_combat");
+  check(lastCombat!=null&&"c".equals(Recorder.string(lastCombat,"combat_id")),"the manifest remembers which fight the run is in: "+lastCombat);
 System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures, one copy per board");}
 }

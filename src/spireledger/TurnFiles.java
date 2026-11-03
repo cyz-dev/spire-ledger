@@ -45,7 +45,7 @@ final class TurnFiles {
                 if(Files.exists(existing)&&sha256(Files.readAllBytes(existing)).equals(Recorder.string(known,"sha256"))){
                     ref.addProperty("snapshot_id",id);ref.addProperty("availability","duplicate");ref.addProperty("relative_path","");
                     ref.addProperty("content_sha256",content);ref.addProperty("duplicate_of",Recorder.string(known,"snapshot_id"));
-                    entries.add(ref);try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}return Recorder.copy(ref);
+                    entries.add(ref);noteLastCombat(entry);try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}return Recorder.copy(ref);
                 }
                 blobs().remove(content);
             }
@@ -55,23 +55,23 @@ final class TurnFiles {
             ref.addProperty("snapshot_id",id);ref.addProperty("relative_path",name);ref.addProperty("availability","recorded");ref.addProperty("bytes",data.length);ref.addProperty("sha256",sha256(data));ref.addProperty("content_sha256",content);
         }
         else {ref.addProperty("snapshot_id",id);ref.addProperty("relative_path","");if(!ref.has("availability"))ref.addProperty("availability","missing");}
-        entries.add(ref);try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}
+        entries.add(ref);noteLastCombat(entry);try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}
         evict(Recorder.string(ref,"branch_id"));
         return Recorder.copy(ref);
     }
+    /**
+     * Remembers which fight the run is in, so a restarted process can keep the same identity instead of counting one
+     * fight twice. It rides in the manifest because that file is already written atomically with every point.
+     */
+    private void noteLastCombat(JsonObject entry){
+        String combat=Recorder.string(entry,"combat_id");if(combat.isEmpty())return;
+        JsonObject last=new JsonObject();last.addProperty("combat_id",combat);
+        last.addProperty("floor",entry.has("floor")?entry.get("floor").getAsInt():-1);
+        manifest.add("last_combat",last);
+    }
     /** State-only hash: metadata and transient presentation values never split the same turn into two copies. */
     static String contentHash(JsonObject snapshot){
-        JsonObject body=new JsonParser().parse(snapshot.toString()).getAsJsonObject();body.remove("identity");normalize(body);
-        try{return sha256(body.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){return "";}
-    }
-    static final String[] TRANSIENT={"uuid","draw_y","intent_alpha","reticle_alpha","wait_timer"},HITBOX={"hb","health_hb","intent_hb"},HITBOX_TRANSIENT={"y","c_y","hovered","just_hovered"};
-    static void normalize(JsonElement element){
-        if(element.isJsonObject()){
-            JsonObject o=element.getAsJsonObject();
-            for(String k:TRANSIENT)o.remove(k);
-            for(String k:HITBOX)if(o.has(k)&&o.get(k).isJsonObject()){JsonObject box=o.getAsJsonObject(k);for(String t:HITBOX_TRANSIENT)box.remove(t);}
-            for(Map.Entry<String,JsonElement> e:new ArrayList<>(o.entrySet()))normalize(e.getValue());
-        }else if(element.isJsonArray()){for(JsonElement x:element.getAsJsonArray())normalize(x);}
+        try{return sha256(SnapshotShape.body(snapshot).toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){return "";}
     }
     /** Oldest branches are reclaimed first; the branch being written is never touched. */
     private void evict(String currentBranch)throws IOException {

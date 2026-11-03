@@ -187,16 +187,8 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
         AbstractDungeon.overlayMenu.showCombatPanels();AbstractDungeon.overlayMenu.endTurnButton.enable();
         AbstractDungeon.player.isEndingTurn=false;AbstractDungeon.player.hand.refreshHandLayout();AbstractDungeon.player.hand.applyPowers();AbstractDungeon.player.hand.glowCheck();
     }
-    static final Set<String> VISUAL_FIELDS=new HashSet<>(Arrays.asList("inspect_hb","hb","health_hb","intent_hb","hb_x","hb_y","hb_w","hb_h","hb_alpha","draw_x","draw_y","dialog_x","dialog_y","anim_x","anim_y","reticle_alpha","reticle_rendered","intent_alpha","intent_alpha_target","intent_offset_x","previous_screen_name"));
-    static JsonElement logical(JsonElement value){
-        if(value.isJsonArray()){JsonArray out=new JsonArray();for(JsonElement e:value.getAsJsonArray())out.add(logical(e));return out;}
-        if(!value.isJsonObject())return value;
-        JsonObject out=new JsonObject();for(Map.Entry<String,JsonElement> e:value.getAsJsonObject().entrySet())if(!VISUAL_FIELDS.contains(e.getKey()))out.add(e.getKey(),logical(e.getValue()));
-        if("Potion Slot".equals(Recorder.string(out,"id")))out.remove("slot");
-        if(out.has("wait_timer")&&out.get("wait_timer").getAsDouble()<=0)out.addProperty("wait_timer",0);
-        JsonObject creature=out.getAsJsonObject("creature");if(creature!=null&&creature.has("is_dead")&&creature.get("is_dead").getAsBoolean()&&out.has("death_timer")&&out.get("death_timer").getAsDouble()<0)out.addProperty("death_timer",0);
-        return out;
-    }
+    /** Shared with the on-disk hash, so "same board" cannot mean two different things (SnapshotShape). */
+    static JsonElement logical(JsonElement value){return SnapshotShape.logical(value);}
     static void load(JsonObject snapshot)throws Exception{
         Object saved=saver().getConstructor(JsonObject.class).newInstance(snapshot.getAsJsonObject("state"));
         call(saved,"loadState",new Class<?>[0]);restoreEnvironment(snapshot.getAsJsonObject("environment"));repair(snapshot.getAsJsonObject("supplement"));readyAfterRestore();

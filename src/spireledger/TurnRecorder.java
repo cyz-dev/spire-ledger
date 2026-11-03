@@ -40,15 +40,34 @@ final class TurnRecorder {
     /** Set by the load hook so the next battle prep can tell "S/L back into this fight" from "a new fight". */
     static void saveLoaded(){pendingLoad=true;}
     /**
-     * A save load returns to the same combat unless the floor moved, so the combat keeps its id and the repeated turn
-     * is stored as a branch attempt rather than as a second fight (architecture, 2026-11-01).
+     * A save load returns to the same combat, so the fight keeps its id and the repeated turn becomes another
+     * attempt of it. The id also has to survive a full restart: quitting the game and loading the save starts a new
+     * process with no memory, and the previous id is read back from the run's replay manifest. Without that, every
+     * S/L turned one fight into two and the turns before the restart could only be practised, not replayed.
      */
     static void battle(){
         boolean load=pendingLoad;pendingLoad=false;
         int floor=floorNow();
         if(restoringCombat){restoringCombat=false;lastKey="";lastFloor=floor;return;}
-        if(load&&floor==lastFloor&&!combatId.isEmpty()){lastKey="";return;}
-        combatId=UUID.randomUUID().toString();lastKey="";lastFloor=floor;
+        combatId=nextCombat(load,floor,combatId,lastFloor,load?lastCombat():null);
+        lastKey="";lastFloor=floor;
+    }
+    /** Pure decision, so the offline check can cover all four cases without a dungeon. */
+    static String nextCombat(boolean load,int floor,String current,int lastFloor,JsonObject persisted){
+        if(load&&!current.isEmpty()&&floor==lastFloor)return current;
+        if(load&&persisted!=null&&persisted.has("floor")&&persisted.get("floor").getAsInt()==floor){
+            String id=Recorder.string(persisted,"combat_id");if(!id.isEmpty())return id;
+        }
+        return UUID.randomUUID().toString();
+    }
+    /** The combat the previous session was in; null when the run has not recorded one yet. */
+    static JsonObject lastCombat(){
+        try{
+            Recorder owner=StateMod.recorder;if(owner==null)return null;
+            java.nio.file.Path path=owner.directory.resolve("replay").resolve("manifest.json");
+            if(!java.nio.file.Files.exists(path))return null;
+            return TurnFiles.read(path,TurnFiles.MAX_MANIFEST).getAsJsonObject("last_combat");
+        }catch(Exception ignored){return null;}
     }
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
