@@ -179,6 +179,8 @@ static JsonObject capture()throws Exception{JsonObject before=rng(),out=new Json
     }
     static void readyAfterRestore(){
         AbstractDungeon.effectList.clear();AbstractDungeon.effectsQueue.clear();AbstractDungeon.topLevelEffects.clear();AbstractDungeon.topLevelEffectsQueue.clear();
+        // A room entered just before the restore is still fading in; the cleared queues would leave that veil over the board, so the practice window showed the HUD over an empty arena.
+        AbstractDungeon.isFadingIn=false;AbstractDungeon.waitingOnFadeOut=false;if(AbstractDungeon.fadeColor!=null)AbstractDungeon.fadeColor.a=0;
         AbstractDungeon.isScreenUp=false;AbstractDungeon.screen=AbstractDungeon.CurrentScreen.NONE;AbstractDungeon.previousScreen=null;
         GameActionManager a=AbstractDungeon.actionManager;
         a.actions.clear();a.preTurnActions.clear();a.cardQueue.clear();a.monsterQueue.clear();a.currentAction=null;a.turnStartCurrentAction=null;a.turnHasEnded=false;a.phase=GameActionManager.Phase.WAITING_ON_USER;

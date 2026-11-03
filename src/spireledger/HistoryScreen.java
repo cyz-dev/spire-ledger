@@ -84,13 +84,17 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
     void setMonths(){Set<String> available=new TreeSet<>(Comparator.reverseOrder());SimpleDateFormat format=new SimpleDateFormat("yyyy-MM",Locale.ROOT);for(HistoryIndex.Summary s:index.runs)if(s.time>0)available.add(format.format(new Date(s.time)));months.clear();months.addAll(available);String[] from=new String[months.size()+1],to=new String[months.size()+1];from[0]=tr("起始月份：不限","From: any month");to[0]=tr("结束月份：不限","To: any month");for(int i=0;i<months.size();i++)from[i+1]=to[i+1]=months.get(i);filters[3]=dropdown(from);filters[5]=dropdown(to);selections[3]=selections[5]=0;}
     void filter(){long from=StatsScreen.month(months,selections[3],false),to=StatsScreen.month(months,selections[5],true);filtered=HistoryIndex.filter(index.runs,characters[selections[0]],selections[1]-1,outcomes[selections[2]],0,query,selections[4]==1,System.currentTimeMillis(),selections[6]==0?Integer.valueOf(CardCrawlGame.saveSlot):null,from,to);offset=0;}
     DropdownMenu focusMenu;List<Integer> focusEvents=new ArrayList<>();
+    boolean refreshingMenus;
     @Override public void changedSelectionTo(DropdownMenu menu,int index,String option){
-        if(menu==focusMenu){eventIndex=focusEvents.get(index);makeLines();return;}
-        if(menu==branchMenu){branchSelection=index;prepareFloors();makeLines();return;}
-        if(menu==turnMenu){turnSelection=index;attemptSelection=0;return;}
+        if(refreshingMenus)return;
+        if(menu==focusMenu){eventIndex=focusEvents.get(index);rebuildMenus();return;}
+        if(menu==branchMenu){branchSelection=index;prepareFloors();rebuildMenus();return;}
+        if(menu==turnMenu){turnSelection=index;attemptSelection=0;rebuildMenus();return;}
         if(menu==attemptMenu){attemptSelection=index;return;}
         for(int i=0;i<filters.length;i++)if(menu==filters[i])selections[i]=index;filter();
     }
+    /** Rebuilding recreates the dropdowns and re-selects an index, which calls back here; one guard keeps that out of the callback. */
+    void rebuildMenus(){refreshingMenus=true;try{makeLines();}finally{refreshingMenus=false;}}
     void clear(){Arrays.fill(selections,0);for(DropdownMenu d:filters)d.setSelectedIndex(0);query="";filter();}
     boolean click(Hitbox h){h.update();if(h.hovered&&com.megacrit.cardcrawl.helpers.controller.CInputActionSet.select.isJustPressed()){com.megacrit.cardcrawl.helpers.controller.CInputActionSet.select.unpress();return true;}if(h.hovered&&InputHelper.justClickedLeft)h.clickStarted=true;if(h.clicked){h.clicked=false;return true;}return false;}
     int controllerFocus;
@@ -327,7 +331,8 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
             List<String> branches = selected != null ? new ArrayList<>(selected.branches) : Collections.emptyList();
             String currentBranch = branchSelection == 0 ? (selected != null ? selected.lastBranch : "") : branchSelection == 1 ? "" : (branchSelection - 2 < branches.size() ? branches.get(branchSelection - 2) : "");
             Set<String> pathSnapshots=new HashSet<>();
-            for(JsonObject event:viewRecords)if("turn_snapshot".equals(Recorder.string(event,"type")))pathSnapshots.add(Recorder.string(event,"snapshot_id"));
+            // Turn points come from every branch of this run: after a replay or an S/L the earlier attempt is no longer on the final path, and it must stay selectable.
+            for(JsonElement item:HistoryIndex.array(detail,"records"))if(item.isJsonObject()&&"turn_snapshot".equals(Recorder.string(item.getAsJsonObject(),"type")))pathSnapshots.add(Recorder.string(item.getAsJsonObject(),"snapshot_id"));
             List<JsonObject> points=new ArrayList<>();
             for(JsonElement item:manifest.getAsJsonArray("snapshots")){
                 JsonObject pt=item.getAsJsonObject();

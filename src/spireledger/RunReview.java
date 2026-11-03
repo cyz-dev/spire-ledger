@@ -49,6 +49,7 @@ final class RunReview {
     void update(){
         sync();if(model==null)return;
         if(pinned&&host.turnMenu!=null){host.turnMenu.update();if(host.turnMenu.isOpen)return;}
+        if(pinned&&host.attemptMenu!=null){host.attemptMenu.update();if(host.attemptMenu.isOpen)return;}
         int over=-1;
         for(int i=0;i<nodes.size();i++){Hitbox node=nodes.get(i);boolean clicked=host.click(node);if(node.hovered)over=i;if(clicked){pinned=true;showDeck=false;choose(i);}}
         if(over!=hover){hover=over;if(!pinned){scroll=0;if(over>=0)choose(over);}}
@@ -90,7 +91,11 @@ final class RunReview {
         host.button(sb,back,tr("关闭账本","Close"));host.button(sb,host.prev,tr("上一层","Previous"));host.button(sb,host.next,tr("下一层","Next"));host.button(sb,host.diagnostics,tr("详细记录","Details"));
         if(pinned&&!host.availableTurns.isEmpty()){
             host.button(sb,host.replayButton,ReplayLauncher.canReplayCurrent(host.availableTurns.get(host.turnSelection))?tr("重打此回合","Restart turn"):tr("练习此回合","Practice turn"));
-            host.turnMenu.render(sb,w(.70f),h(.18f));
+            // Above the action row, and open lists last, so the attempts list stays readable instead of covering the button.
+            if(host.attemptMenu!=null&&!host.attemptMenu.isOpen)host.attemptMenu.render(sb,w(.53f),h(.27f));
+            if(!host.turnMenu.isOpen)host.turnMenu.render(sb,w(.70f),h(.27f));
+            if(host.turnMenu.isOpen)host.turnMenu.render(sb,w(.70f),h(.27f));
+            if(host.attemptMenu!=null&&host.attemptMenu.isOpen)host.attemptMenu.render(sb,w(.53f),h(.27f));
         }
     }
     void renderOverview(SpriteBatch sb,JsonObject state){

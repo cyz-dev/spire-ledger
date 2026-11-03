@@ -394,6 +394,8 @@ final class ReplayLauncher {
                         AbstractDungeon.currMapNode = node;
                     }
                     if (StateMod.ready()) {
+                        // Restoring in the middle of the room-entry fade leaves the world layer tinted, so wait for the veil to clear first.
+                        if(AbstractDungeon.fadeColor!=null&&AbstractDungeon.fadeColor.a>0f)return;
                         practiceStep = 2;
                     }
                 }
