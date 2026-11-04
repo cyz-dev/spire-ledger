@@ -14,7 +14,10 @@ final class TurnRecorder {
     static String combatId = "", lastKey = "";
     static Recorder owner;
     static TurnFiles files;
-    static boolean restoringCombat;
+    static boolean restoringCombat, pendingLoad;
+    static int lastFloor=-1;
+    /** Why the last observe() stopped short; the history screen shows it when a floor has no snapshot. */
+    static String blocker="";
     static boolean readPreference() {
         try {
             java.nio.file.Path p = StateMod.ROOT.getParent().resolve("turn_recording_enabled.txt");
@@ -32,12 +35,49 @@ final class TurnRecorder {
         status = enabled ? "Turn recording ready" : "Turn recording off";
     }
     static boolean compatible(){if(!EmbeddedSaveState.present())return false;try{if(!"capture-only-1".equals(Class.forName("savestate.SaveStateMod").getField("STATE_NOTES_ADAPTER").get(null)))return false;}catch(Exception ex){return false;}return ReplayEnvironment.loaded();}
-    static void battle(){if(restoringCombat)restoringCombat=false;else combatId=UUID.randomUUID().toString();lastKey="";}
+    /** The floor decides whether a load re-entered the same fight; offline checks run without a dungeon, so fall back to 0. */
+    static int floorNow(){try{return AbstractDungeon.floorNum;}catch(Throwable ignored){return 0;}}
+    /** Set by the load hook so the next battle prep can tell "S/L back into this fight" from "a new fight". */
+    static void saveLoaded(){pendingLoad=true;}
+    /**
+     * A save load returns to the same combat, so the fight keeps its id and the repeated turn becomes another
+     * attempt of it. The id also has to survive a full restart: quitting the game and loading the save starts a new
+     * process with no memory, and the previous id is read back from the run's replay manifest.
+     */
+    static void battle(){
+        boolean load=pendingLoad;pendingLoad=false;
+        int floor=floorNow();
+        if(restoringCombat){restoringCombat=false;lastKey="";lastFloor=floor;return;}
+        combatId=nextCombat(load,floor,combatId,lastFloor,load?lastCombat():null);
+        lastKey="";lastFloor=floor;
+    }
+    /** Pure decision, so the offline check can cover all four cases without a dungeon. */
+    static String nextCombat(boolean load,int floor,String current,int lastFloor,JsonObject persisted){
+        if(load&&!current.isEmpty()&&floor==lastFloor)return current;
+        if(load&&persisted!=null&&persisted.has("floor")&&persisted.get("floor").getAsInt()==floor){
+            String id=Recorder.string(persisted,"combat_id");if(!id.isEmpty())return id;
+        }
+        return UUID.randomUUID().toString();
+    }
+    /** The combat the previous session was in; null when the run has not recorded one yet. */
+    static JsonObject lastCombat(){
+        try{
+            Recorder owner=StateMod.recorder;if(owner==null)return null;
+            java.nio.file.Path path=owner.directory.resolve("replay").resolve("manifest.json");
+            if(!java.nio.file.Files.exists(path))return null;
+            JsonObject manifest=TurnFiles.lastCombat(path);
+            return manifest;
+        }catch(Exception ignored){return null;}
+    }
     static void restoreCombat(JsonObject ref){combatId=Recorder.string(ref,"combat_id");restoringCombat=!combatId.isEmpty();lastKey="";}
     static void observe(){
-        if(!enabled||failed||!StateMod.ready()||!TurnAdapter.stable())return;
+        if(!enabled){blocker="turn recording off";return;}
+        if(failed){blocker="turn recording stopped";return;}
+        if(!StateMod.ready()){blocker="game not ready";return;}
+        if(HistoryScreen.active()){blocker="history screen open";return;}
+        if(!TurnAdapter.capturable()){blocker="turn not settled";return;}
         try{
-            StateMod.ensure();if(combatId.isEmpty())return;
+            StateMod.ensure();if(combatId.isEmpty()){blocker="no combat started";return;}blocker="";
             if(owner!=StateMod.recorder){
                 owner=StateMod.recorder;
                 JsonObject environment=new JsonObject();
@@ -50,12 +90,17 @@ final class TurnRecorder {
                 files=new TurnFiles(owner.directory,owner.runId,environment);
             }
             String key=owner.branch+":"+combatId+":"+GameActionManager.turn;if(key.equals(lastKey))return;
-            JsonObject entry=new JsonObject();entry.addProperty("branch_id",owner.branch);entry.addProperty("combat_id",combatId);entry.addProperty("floor",AbstractDungeon.floorNum);entry.addProperty("turn",GameActionManager.turn);entry.addProperty("phase","player_turn_ready");entry.addProperty("captured_at",System.currentTimeMillis());
+            JsonObject entry=new JsonObject();entry.addProperty("branch_id",owner.branch);entry.addProperty("combat_id",combatId);
+            entry.addProperty("branch_parent",owner.branchParent);entry.addProperty("branch_parent_snapshot",owner.branchParentSnapshot);entry.addProperty("branch_reason",owner.branchReason);entry.addProperty("floor",AbstractDungeon.floorNum);entry.addProperty("turn",GameActionManager.turn);entry.addProperty("phase","player_turn_ready");entry.addProperty("captured_at",System.currentTimeMillis());
             long checkpointStart=System.nanoTime();JsonObject snapshot=null;
             if(!compatible()){entry.addProperty("availability","unsupported");entry.addProperty("reason","unverified_mod_versions_or_combination");}
-            else if(!AbstractDungeon.actionManager.cardsPlayedThisTurn.isEmpty()||GameActionManager.damageReceivedThisTurn!=0||GameActionManager.totalDiscardedThisTurn!=0){entry.addProperty("availability","missing");entry.addProperty("reason","first_action_or_opening_discard_already_observed");}
-            else {long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);entry.addProperty("reason","player_turn_ready");}
-            JsonObject ref=files.publish(entry,snapshot);lastKey=key;if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);status="recorded".equals(Recorder.string(ref,"availability"))?"Turn saved; practice ready":"Turn unavailable: "+Recorder.string(ref,"reason");
+            else{
+                // A turn is captured whether or not cards were played: the played count tells a clean turn start from a mid-turn point.
+                int played=AbstractDungeon.actionManager.cardsPlayedThisTurn.size();entry.addProperty("played",played);
+                long start=System.nanoTime();snapshot=TurnAdapter.capture();entry.addProperty("capture_ms",(System.nanoTime()-start)/1000000.0);
+                entry.addProperty("reason",played==0?"player_turn_ready":"mid_turn_after_"+played+"_cards");
+            }
+            JsonObject ref=files.publish(entry,snapshot);lastKey=key;lastFloor=floorNow();if(snapshot!=null)DiagnosticReport.rememberCheckpoint(snapshot);JsonObject event=Recorder.object("turn_snapshot");event.addProperty("checkpoint_total_ms",(System.nanoTime()-checkpointStart)/1000000.0);for(Map.Entry<String,JsonElement> e:ref.entrySet())event.add(e.getKey(),e.getValue());owner.append(event);String availability=Recorder.string(ref,"availability");status="recorded".equals(availability)?"Turn saved; practice ready":"duplicate".equals(availability)?"Turn unchanged: the same board is already stored":"Turn unavailable: "+Recorder.string(ref,"reason");
         }catch(Exception ex){DiagnosticReport.error("turn_recording",ex);failed=true;status="Turn recording stopped: "+ex.getClass().getSimpleName();System.err.println("[Spire Ledger] "+status);ex.printStackTrace();}
     }
 }

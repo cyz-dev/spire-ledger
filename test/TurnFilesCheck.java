@@ -15,5 +15,12 @@ public final class TurnFilesCheck {
   boolean valFailed = false;
   try { TurnAdapter.validateSnapshot(new JsonObject()); } catch (IllegalArgumentException ex) { valFailed = true; }
   check(valFailed, "empty snapshot rejected by validateSnapshot");
-System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures");}
+  // A save load returns to the same fight: the identity survives an in-process load and a restart on the same floor, and is dropped when the load moved a floor.
+  JsonObject persisted=new JsonObject();persisted.addProperty("combat_id","stored");persisted.addProperty("floor",20);
+  check(TurnRecorder.nextCombat(true,20,"",-1,persisted).equals("stored"),"a restarted process resumes the fight it was in");
+  check(TurnRecorder.nextCombat(true,20,"current",20,persisted).equals("current"),"an in-process load keeps the live identity");
+  check(!TurnRecorder.nextCombat(true,21,"",-1,persisted).equals("stored"),"a load that moved a floor starts a new fight");
+  check(!TurnRecorder.nextCombat(false,20,"",-1,persisted).equals("stored"),"a new fight never inherits the stored identity");
+  check("first".equals(Recorder.string(TurnFiles.lastCombat(files.directory.resolve("manifest.json")),"combat_id")),"the manifest remembers the fight of the last point");
+System.out.println("TurnFilesCheck PASS: durable independent points, restart, bounded ZIP and IO failures, one fight across S/L");}
 }
