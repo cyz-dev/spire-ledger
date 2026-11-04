@@ -37,6 +37,10 @@ public final class Hooks {
     @SpirePatch(clz=com.megacrit.cardcrawl.helpers.AsyncSaver.class,method="save") public static class FloorSaveWrite {
         @SpirePrefixPatch public static void before(String path,String data){FloorSaves.writing(path,data);}
     }
+    // A save load re-enters the same combat; TurnRecorder keeps the combat id when the floor did not move.
+    @SpirePatch(clz=com.megacrit.cardcrawl.saveAndContinue.SaveAndContinue.class,method="loadSaveFile",paramtypez={AbstractPlayer.PlayerClass.class}) public static class SaveLoaded {
+        @SpirePrefixPatch public static void before(){TurnRecorder.saveLoaded();}
+    }
     @SpirePatch(clz=AbstractPlayer.class,method="updateInput") public static class TurnReady {
         @SpirePrefixPatch public static void before(){TurnRecorder.observe();}
     }

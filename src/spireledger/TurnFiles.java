@@ -20,13 +20,18 @@ final class TurnFiles {
         else {manifest=Recorder.copy(environment);manifest.addProperty("schema",SCHEMA);manifest.addProperty("run_id",runId);manifest.add("snapshots",new JsonArray());}
     }
     static JsonObject read(Path path)throws IOException {if(Files.isSymbolicLink(path)||Files.size(path)>MAX_BYTES)throw new IOException("Replay file bounds");try{return new JsonParser().parse(new String(Files.readAllBytes(path),StandardCharsets.UTF_8)).getAsJsonObject();}catch(RuntimeException ex){throw new IOException("Invalid replay JSON",ex);}}
+    /** The fight the last point belongs to, so a restarted process can resume the id instead of starting a second fight. */
+    static JsonObject lastCombat(Path manifest)throws IOException {JsonObject doc=read(manifest);JsonElement last=doc.get("last_combat");return last!=null&&last.isJsonObject()?last.getAsJsonObject():null;}
     static void atomic(Path path,byte[] bytes)throws IOException {Path tmp=path.resolveSibling(path.getFileName()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp.toFile())){out.write(bytes);out.flush();out.getFD().sync();}Recorder.replace(tmp,path);}
     JsonObject publish(JsonObject entry,JsonObject snapshot)throws IOException {
         JsonArray entries=manifest.getAsJsonArray("snapshots");if(entries.size()>=MAX_POINTS)throw new IOException("Replay point limit");
         JsonObject ref=Recorder.copy(entry);String id=UUID.randomUUID().toString();ref.addProperty("snapshot_id",id);
         if(snapshot!=null){JsonObject identity=Recorder.copy(ref);identity.addProperty("run_id",Recorder.string(manifest,"run_id"));snapshot.add("identity",identity);byte[] data=snapshot.toString().getBytes(StandardCharsets.UTF_8);if(data.length>MAX_BYTES)throw new IOException("Replay point size limit");String name="turns/"+id+".json";atomic(directory.resolve(name),data);ref.addProperty("relative_path",name);ref.addProperty("availability","recorded");ref.addProperty("bytes",data.length);ref.addProperty("sha256",sha256(data));}
         else {ref.addProperty("relative_path","");if(!ref.has("availability"))ref.addProperty("availability","missing");}
-        entries.add(ref);try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}return Recorder.copy(ref);
+        entries.add(ref);
+        // The manifest remembers the fight, not just the points: after a full restart the next battle prep reads it back.
+        if(entry.has("combat_id")){JsonObject last=new JsonObject();last.addProperty("combat_id",Recorder.string(entry,"combat_id"));last.addProperty("floor",entry.has("floor")?entry.get("floor").getAsInt():-1);manifest.add("last_combat",last);}
+        try{atomic(directory.resolve("manifest.json"),manifest.toString().getBytes(StandardCharsets.UTF_8));}catch(IOException ex){entries.remove(entries.size()-1);throw ex;}return Recorder.copy(ref);
     }
     static String sha256(byte[] bytes)throws IOException{try{StringBuilder out=new StringBuilder();for(byte b:java.security.MessageDigest.getInstance("SHA-256").digest(bytes))out.append(String.format("%02x",b&255));return out.toString();}catch(java.security.NoSuchAlgorithmException ex){throw new IOException(ex);}}
     static void addToZip(Path runDirectory,ZipOutputStream zip)throws IOException {
