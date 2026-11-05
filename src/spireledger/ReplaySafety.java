@@ -35,6 +35,10 @@ public final class ReplaySafety {
     @SpirePatch(clz=CardCrawlGame.class,method="render") public static class ReportStatus {
         @SpirePostfixPatch public static void after(CardCrawlGame game){if(quarantined||DiagnosticReport.status.isEmpty())return;com.badlogic.gdx.graphics.g2d.SpriteBatch sb=(com.badlogic.gdx.graphics.g2d.SpriteBatch)StateMod.field(game,"sb");sb.begin();DiagnosticReport.draw(sb);sb.end();}
     }
+    // pause() is the window losing focus; the key-up of a held Ctrl+Shift+R is lost there.
+    @SpirePatch(clz=CardCrawlGame.class,method="pause") public static class FocusLost {
+        @SpirePrefixPatch public static void before(){DiagnosticReport.forgetShortcut();}
+    }
     @SpirePatch(clz=com.megacrit.cardcrawl.metrics.Metrics.class,method="run") public static class NoMetricsUpload {
         @SpirePrefixPatch public static SpireReturn<Void> before(){return quarantined||practice()?SpireReturn.Return(null):SpireReturn.Continue();}
     }

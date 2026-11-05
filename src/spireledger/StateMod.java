@@ -97,8 +97,35 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
         recorder.begin(key(reward),Snapshot.source(screen.rItem!=null),Snapshot.capture(),candidates(screen.rewardGroup,skip,bowl),"card:"+index,actor());seen.add(reward);
     });}
     static void bowl(Object button){if(!ready())return;safely(()->{ensure();RewardItem r=(RewardItem)field(button,"rItem");if(r==null||seen.contains(r))return;recorder.begin(key(r),Snapshot.source(true),Snapshot.capture(),candidates(r.cards,true,true),"bowl",actor());seen.add(r);});}
-    static void skip(RewardItem r){if(!ready()||r.cards==null||r.cards.isEmpty())return;safely(()->{ensure();if(seen.contains(r))return;recorder.begin(key(r),Snapshot.source(true),Snapshot.capture(),candidates(r.cards,true,AbstractDungeon.player.hasRelic("Singing Bowl")),"skip",actor());seen.add(r);recorder.flush();});}
-    static void abandon(){if(!ready()||AbstractDungeon.screen!=AbstractDungeon.CurrentScreen.COMBAT_REWARD)return;for(RewardItem r:new ArrayList<>(AbstractDungeon.combatRewardScreen.rewards))if(r.type==RewardItem.RewardType.CARD)skip(r);}
+    static void skip(RewardItem r){skip(r,null);}
+    static void skip(RewardItem r,String bypassed){if(!ready()||r.cards==null||r.cards.isEmpty())return;safely(()->{ensure();if(seen.contains(r))return;
+        JsonObject extra=null;if(bypassed!=null){extra=new JsonObject();extra.addProperty("bypassed",bypassed);}
+        recorder.begin(key(r),Snapshot.source(true),Snapshot.capture(),candidates(r.cards,true,AbstractDungeon.player.hasRelic("Singing Bowl")),"skip",actor(),extra);seen.add(r);recorder.flush();});}
+    static void abandon(){if(!ready()||AbstractDungeon.screen!=AbstractDungeon.CurrentScreen.COMBAT_REWARD)return;flushRewards("proceed_button");}
+    /**
+     * CARD rewards still in the list when the room ends. Vanilla clears the list inside
+     * nextRoomTransition after this prefix, and a map click during the card screen runs no native
+     * skip hook at all, so this is the only place left to record the screen.
+     */
+    static void flushRewards(String via){if(AbstractDungeon.combatRewardScreen==null)return;for(RewardItem r:new ArrayList<>(AbstractDungeon.combatRewardScreen.rewards))if(r.type==RewardItem.RewardType.CARD){skip(r,via);vanillaSkip(r);}}
+    /**
+     * Write the unclaimed screen into the game's own run file as well. Vanilla only calls
+     * RewardItem.recordCardSkipMetrics from ProceedButton and from the skip button, so a map click
+     * leaves the floor without a card_choices entry and the card RNG for that screen cannot be
+     * reconstructed from the .run file. Already-recorded screens (ProceedButton runs the call before
+     * the close we hook) are left alone.
+     */
+    static void vanillaSkip(RewardItem r){try{
+        if(r==null||r.cards==null||r.cards.isEmpty()||CardCrawlGame.metricData==null)return;
+        Set<String> offered=new HashSet<>();for(AbstractCard c:r.cards)offered.add(c.getMetricID());
+        for(Object item:CardCrawlGame.metricData.card_choices)if(item instanceof Map){
+            Map<?,?> entry=(Map<?,?>)item;if(!"SKIP".equals(entry.get("picked")))continue;
+            Object floor=entry.get("floor");if(!(floor instanceof Number)||((Number)floor).intValue()!=AbstractDungeon.floorNum)continue;
+            Object notPicked=entry.get("not_picked");
+            if(notPicked instanceof List&&new HashSet<>((List<?>)notPicked).equals(offered))return;
+        }
+        r.recordCardSkipMetrics();
+    }catch(Throwable ignored){}}
     static void screenSkip(CardRewardScreen s){if(!ready()||s.rItem!=null)return;safely(()->{ensure();Object r=s.rewardGroup;if(seen.contains(r))return;boolean legal=(Boolean)field(s,"skippable");if(!legal)return;recorder.begin(key(r),Snapshot.source(false),Snapshot.capture(),candidates(s.rewardGroup,true,false),"skip",actor());seen.add(r);recorder.flush();});}
     // blessing() (4 rewards) and miniBlessing() (2) both end at screenNum 3, where buttonEffect activates rewards[button].
     @SuppressWarnings("unchecked") static void neow(NeowEvent event,int button){if(!ready())return;safely(()->{
@@ -115,7 +142,8 @@ public final class StateMod implements PostInitializeSubscriber,PostUpdateSubscr
     /** item is the live stock object (a Courier restock is a new object); null is the removal service. */
     static void shopBuy(Object item,String candidate){if(!ready())return;safely(()->{ensure();AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom))return;
         recorder.begin(item==null?key(room)+":purge":key(item),"SHOP",Snapshot.capture(),Snapshot.shop(AbstractDungeon.shopScreen),candidate,actor(),shopVisit(room));});}
-    static void leaveRoom(){if(!ready())return;safely(()->{AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom)||!seen.contains(room))return;ensure();
+    static void leaveRoom(){if(!ready())return;safely(()->{flushRewards("room_exit");
+        AbstractRoom room=AbstractDungeon.getCurrRoom();if(!(room instanceof ShopRoom)||!seen.contains(room))return;ensure();
         String k=key(room)+":leave";JsonObject before=Snapshot.capture();
         // Leaving has no effect to wait for: its anchor is also its settled result.
         if(recorder.begin(k,"SHOP",before,Snapshot.shop(AbstractDungeon.shopScreen),"leave",actor(),shopVisit(room))!=null)recorder.settleKey(k,before);});}

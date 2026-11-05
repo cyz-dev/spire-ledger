@@ -23,10 +23,15 @@ final class DiagnosticReport {
  static void rememberCheckpoint(JsonObject snapshot){checkpoint=Recorder.copy(snapshot);}
  static void rememberReplay(JsonObject snapshot){replayTarget=Recorder.copy(snapshot);}
  static synchronized void error(String where,Throwable failure){JsonObject e=new JsonObject();e.addProperty("where",where);e.addProperty("time_ms",System.currentTimeMillis());e.addProperty("type",failure.getClass().getName());e.addProperty("message",String.valueOf(failure.getMessage()));StringWriter text=new StringWriter();failure.printStackTrace(new PrintWriter(text));String stack=text.toString();e.addProperty("stack",stack.substring(0,Math.min(stack.length(),16000)));errors.addLast(e);while(errors.size()>8)errors.removeFirst();}
- static void pollShortcut(){if(Gdx.input==null)return;boolean down=Gdx.input.isKeyPressed(Input.Keys.R)&&(Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT)||Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT))&&(Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)||Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT));if(down&&!held)request();held=down;}
+ static void pollShortcut(){if(Gdx.input==null)return;if(!hotkey(Gdx.input.isKeyPressed(Input.Keys.R)&&(Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT)||Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT))&&(Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)||Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT))))return;
+  System.err.println("[Spire Ledger] Ctrl+Shift+R: local error report");request();}
+ /** One export per key-down edge. Keys are only reported while the game window has focus. */
+ static boolean hotkey(boolean down){boolean fire=down&&!held;held=down;return fire;}
+ /** A window that lost focus never sees the key-up, which would swallow the next press; arming again costs at most one extra report. */
+ static void forgetShortcut(){held=false;}
  static boolean request(){return request(StateMod.ROOT.getParent().resolve("bug-reports"));}
  static boolean request(Path output){
-  if(!busy.compareAndSet(false,true))return false;
+  if(!busy.compareAndSet(false,true)){status=HistoryScreen.tr("上一份错误报告还在写入","Previous report is still writing");return false;}
   try{
   status=HistoryScreen.tr("正在导出本地错误报告…","Exporting local error report…");
   JsonObject context=new JsonObject();context.addProperty("schema","spire-ledger-diagnostic-v1");context.addProperty("mod_version",Recorder.VERSION);context.addProperty("game_version",Loader.STS_VERSION);context.addProperty("mts_version",String.valueOf(Loader.MTS_VERSION));context.addProperty("embedded_save_state","1.3.0/capture-only-1/embedded-1");context.addProperty("session_kind",ReplaySafety.practice()?"practice":"normal");context.addProperty("quarantined",ReplaySafety.quarantined);context.addProperty("privacy","local only; no raw save, account, audio, screenshot, full log, database or upload; diagnostics are not training permission");
