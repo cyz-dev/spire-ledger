@@ -321,8 +321,7 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(restoreAllowed && manifest.has("snapshots")){
             List<String> branches = selected != null ? new ArrayList<>(selected.branches) : Collections.emptyList();
             String currentBranch = branchSelection == 0 ? (selected != null ? selected.lastBranch : "") : branchSelection == 1 ? "" : (branchSelection - 2 < branches.size() ? branches.get(branchSelection - 2) : "");
-            Set<String> pathSnapshots=new HashSet<>();
-            for(JsonObject event:viewRecords)if("turn_snapshot".equals(Recorder.string(event,"type")))pathSnapshots.add(Recorder.string(event,"snapshot_id"));
+            Set<String> pathSnapshots=pathSnapshots(viewRecords);
             for(JsonElement item:manifest.getAsJsonArray("snapshots")){
                 JsonObject pt=item.getAsJsonObject();
                 boolean branchMatch = branchSelection==0?pathSnapshots.contains(Recorder.string(pt,"snapshot_id")):currentBranch.isEmpty() || currentBranch.equals(Recorder.string(pt, "branch_id"));
@@ -351,6 +350,12 @@ final class HistoryScreen implements DropdownMenuListener,ScrollBarListener,Text
         if(reason.equals("unsupported"))return tr("本局录制时的 Mod 组合未被当时的版本支持：回合点只记录了位置，没有保存可重打快照，旧记录无法补录。","The mod combination used when this run was recorded was not supported then: turn points were logged without a replay snapshot, and past turns cannot be reconstructed.");
         if(reason.equals("missing"))return tr("本层的回合快照没有保存下来。","No replay snapshot was saved on this floor.")+blockerHint();
         return tr("本层没有保存的回合快照。","No turn snapshot was saved on this floor.")+blockerHint();
+    }
+    /** Manifest points the final path reached; a board seen again after S/L is a duplicate event that names the stored point. */
+    static Set<String> pathSnapshots(List<JsonObject> events){
+        Set<String> out=new HashSet<>();
+        for(JsonObject event:events)if("turn_snapshot".equals(Recorder.string(event,"type"))){out.add(Recorder.string(event,"snapshot_id"));if(event.has("duplicate_of"))out.add(Recorder.string(event,"duplicate_of"));}
+        return out;
     }
     /** Why the last capture stopped short, in words the player can act on; empty when nothing is known. */
     static String blockerHint(){return TurnRecorder.blocker.isEmpty()?"":tr("（当前停在："," (waiting on: ")+blockerText()+tr("）",")");}

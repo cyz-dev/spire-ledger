@@ -38,6 +38,9 @@ public final class TurnFilesCheck {
   check(after.getAsJsonObject("blobs").entrySet().size()==blobs,"a duplicate adds no blob");
   int stored=0;for(JsonElement item:after.getAsJsonArray("snapshots")){JsonObject e=item.getAsJsonObject();if(Recorder.string(dup,"content_sha256").equals(Recorder.string(e,"content_sha256")))stored=e.has("attempts")?e.get("attempts").getAsInt():0;}
   check(stored==2,"the stored point keeps the attempt count");
+  // After S/L the final path drops the first session's events, so the history must reach the stored point through the duplicate.
+  JsonObject seenAgain=Recorder.copy(dup);seenAgain.addProperty("type","turn_snapshot");
+  check(HistoryScreen.pathSnapshots(java.util.Collections.singletonList(seenAgain)).contains(Recorder.string(ref,"snapshot_id")),"a duplicate on the final path keeps the stored point selectable");
   int turnFiles=0;try(DirectoryStream<Path> stream=Files.newDirectoryStream(files.directory.resolve("turns"))){for(Path ignored:stream)turnFiles++;}
   check(turnFiles==1,"a duplicate leaves one file on disk");
   // A different board on the same turn is a point of its own, so merging never hides a real state.
