@@ -75,7 +75,7 @@ Product spec: [product.md](product.md) · Architecture: [architecture.md](archit
 | 规则 | 内容 | 现有实现 |
 |---|---|---|
 | 逻辑对局去重 | 每个逻辑对局只计一次。原版 `.run` 按 `play_id` 去重，内容相同的副本只计一次，内容不同标冲突；Ledger 记录按 `play_id` 并入原版局，不按种子猜测关联（第 4 节） | 已实现（`StatsIndex.scan`，检查 “play ID dedup, same seed separate”） |
-| 只取最终路径 | Ledger 记录只使用最终有效路径及可确认的祖先片段：沿 `load` 的 `parent_checkpoint_id` 与 `turn_rollback` 的 `snapshot_id` 回溯，祖先不可确认时停止并计入 `unresolved_path`，不拼接未知父分支。其余 SL 分支只用于复盘 | 已实现（`finalPath`） |
+| 只取最终路径 | Ledger 记录只使用最终有效路径及可确认的祖先片段：沿 `load` 的 `parent_checkpoint_id` 与 `turn_rollback` 的 `snapshot_id` 回溯，祖先不可确认时停止并计入 `unresolved_path`，不拼接未知父分支。其余读档会话段只用于复盘 | 已实现（`finalPath`） |
 | 练习和夹具排除 | `session_kind=practice` 与 `dataset_origin=test_fixture` 的记录不进入正式统计；与原版局关联后，该原版局同样排除 | 已实现 |
 | 未完成排除 | 结局为“未完成”的局不进入正式统计，也不进入任何分母；当前正在进行的局同样排除 | **缺陷**：`StatsIndex.filter` 没有排除 `incomplete`（M1 修，见 architecture.md） |
 | 冲突排除 | 身份冲突（同一 `play_id` 的两份 `.run` 内容不同，或 Ledger 同一决策两次签名不同）时，冲突对象不参与计算，单独计数 | 已实现（整局排除） |
