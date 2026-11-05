@@ -1,6 +1,6 @@
 # Spire Ledger 待测试清单
 
-Last updated: 2026-11-03（`v0.6.0-beta.3`）
+Last updated: 2026-11-05（`v0.6.0-beta.4`）
 Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 
 维护者已做过离线断言（`build.ps1 -Check`）和隔离实例里的原生探针。beta.2 发布前已在 SuperFastMode 1.0.8、10 倍速下，通过真实 HistoryScreen 的回合下拉和重打按钮验证当前战斗回退，并核对状态、随机数状态及相同行动的结果。原生 UI 选牌仍记录为 human。Windows 上的独立练习也已通过：子进程保留 10 倍速，恢复状态与相同行动结果一致，源记录未改变。探针由程序驱动，下面的快速清单主要检查实际游玩体验。
@@ -26,10 +26,11 @@ Product spec: [product.md](product.md) · Metrics: [metrics.md](metrics.md)
 - 2026-11-03 楼层存档（P2）：`RecorderCheck` 断言同一层留最新一份、每份记 `floor_save` 事件；`integration.ps1` 原生探针通过，记录目录下的 `floors/41.autosave` 与游戏写出的 `saves/IRONCLAD.autosave` sha256 一致（27,988 字节）。
 - 2026-11-03 从此层继续（P3）：`RecorderCheck` 断言回合只匹配它进入该层时的节点、之后从别的节点再进该层就不再匹配、缺坐标的旧记录不匹配；`integration-replay.ps1 -FloorSave -SuperFastMode -ExperimentalTurns` 通过：父进程在真实地图上点第 1 层节点，`floors/1.autosave` 与游戏自动存档逐字节相同；练习子进程两次都从这份存档按“继续游戏”读档，一次在 Cultist 第 1 回合恢复快照（`floor_save_turn`），一次只从楼层开始（`floor_save`），都由探针打赢、出现 2 个奖励、在地图上点下一节点进入第 2 层；子进程存档未被改写、没有写 `runs/`，父进程自己的自动存档前后相同。
 - 2026-11-03 发布 0.6.0-beta.3 前在发布提交上复跑：`build.ps1 -Check` 全部通过；`integration-stats-options.ps1` 在中文 1024×768 和中文 1920×1080 下 32 个阶段均通过（Windows 隐藏窗口、音量 0），实际战损导出 20/20 个遭遇由游戏资源画出。练习相关的三个原生探针（`-FloorSave`、`-LaunchPractice`、`integration.ps1`）在同一份代码上通过，见上两条。
+- 2026-11-05 发布 0.6.0-beta.4 前在发布提交上复跑：`build.ps1 -Check` 全部通过（含 PR #31 读档后经 `duplicate_of` 仍能选到原点的断言）；`integration-stats-options.ps1` 在中文 1024×768 和 1920×1080 下 32 个阶段均通过，实际战损导出 20/20 个遭遇由游戏资源画出；`integration-replay.ps1 -Mode save -ReplayCurrent -SuperFastMode -ExperimentalTurns` 通过，同一场战斗录到第 1–3 回合各一条，读档后回到第 2、3 回合记为 `duplicate`、`attempts=2`，`combat_id` 不变，manifest 3 行 3 份文件；`integration.ps1 -BypassOnly` 通过，开着卡牌屏走真实 `nextRoomTransition` 记为跳过（`bypassed=room_exit`），原版 `card_choices` 多一条 `SKIP`。
 
-## 0.6.0-beta.1 至 beta.3 改动（先测这一节）
+## 0.6.0-beta.1 至 beta.4 改动（先测这一节）
 
-W1–W8 随 0.6.0-beta.1 发布，W9–W16 随 0.6.0-beta.2 发布（PR #20），W17–W20 随 0.6.0-beta.3 发布（issue #24–#26）。beta.1 的改动：涅奥/Boss 遗物的独立胜率口径、Boss 遗物按幕分组、非卡牌导出的 S–R00 分档、卡牌标准率把跳过纳入拟合与分档、PNG+CSV 一键导出，实际战损按幕分组和对应的 `hp-loss` 导出，以及所有按幕分组页面的幕下拉和实际战损的回复下拉。2026-10-31 又加入 RunHistoryPlus 优先的药水读取、分幕遭遇死亡率、导出页选幕（幕下拉含“全部”）、实际战损 T0–T4 分档和中文 scoped `csv-v2`。维护者已通过 `build.ps1 -Check` 的离线断言和 32 阶段原生探针；下面的界面项待手测。
+W1–W8 随 0.6.0-beta.1 发布，W9–W16 随 0.6.0-beta.2 发布（PR #20），W17–W20 随 0.6.0-beta.3 发布（issue #24–#26），A15–A17 随 0.6.0-beta.4 发布（PR #28、#30、#31）。beta.1 的改动：涅奥/Boss 遗物的独立胜率口径、Boss 遗物按幕分组、非卡牌导出的 S–R00 分档、卡牌标准率把跳过纳入拟合与分档、PNG+CSV 一键导出，实际战损按幕分组和对应的 `hp-loss` 导出，以及所有按幕分组页面的幕下拉和实际战损的回复下拉。2026-10-31 又加入 RunHistoryPlus 优先的药水读取、分幕遭遇死亡率、导出页选幕（幕下拉含“全部”）、实际战损 T0–T4 分档和中文 scoped `csv-v2`。维护者已通过 `build.ps1 -Check` 的离线断言和 32 阶段原生探针；下面的界面项待手测。
 
 | # | 怎么玩 | 看什么 |
 |---|---|---|
@@ -115,7 +116,7 @@ W1–W8 随 0.6.0-beta.1 发布，W9–W16 随 0.6.0-beta.2 发布（PR #20）�
 ## 环境
 
 - 游戏版本 12-18-2022，ModTheSpire 3.30.3，BaseMod 5.56.0，StSLib 2.12.0，SuperFastMode 1.0.8（10 倍速）。
-- 测 0.6.0-beta.3 时从 [v0.6.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.3) 下载 `SpireLedger.jar`，它也包含 beta.1 和 beta.2 的改动；测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
+- 测 0.6.0-beta.4 时从 [v0.6.0-beta.4](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.4) 下载 `SpireLedger.jar`，它也包含 beta.1 至 beta.3 的改动；测 0.5.0 时从 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0) 下载 `SpireLedger.jar`，它与 beta.5 功能相同；测 beta.3 新改动时可用 [v0.5.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.3) 下载 `SpireLedger.jar`；只做 beta.2 回归时，可从 [v0.5.0-beta.2](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0-beta.2) 下载。退出游戏和启动器后替换游戏 `mods/` 下的旧版。在 ModTheSpire 中启用 BaseMod、StSLib、Spire Ledger 和 SuperFastMode。第 B10、B11 项再增加对应的兼容性测试 Mod。
 - 也可在 ModTheSpire 中选择本次验证的 8 Mod 组合：以上四个，加求解器 0.9.6 或更新版本、Colored Map 2.4.1、Colored Powertips 2.3.0 和 Highlight Path 0.0.3。不要同时勾选旧 State Notes 或原版 SaveStateMod。
 - 在 Mod 设置页确认“Local Spire Ledger recording”和“Turn checkpoint recording (practice/replay)”已打开，再进入新战斗，等待玩家回合开头生成快照。
 - 记录写在 `~/.spire-ledger/runs/<run_id>/`。Windows 上是 `C:\Users\<你>\.spire-ledger\`。

@@ -2,7 +2,7 @@
 
 《杀戮尖塔 1》的本地记录与复盘 Mod。打开账本就能看当前局或当前存档位的最近一局，悬停楼层查看选择和资源变化，也可以查看个人统计与标准化率、导出统计长图，或重打已保存的回合。数据保存在本机，不上传。
 
-当前发布版：**[v0.6.0-beta.3](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.3)**（内测版，2026-11-03）。在 beta.2 之上，练习可以“从此层继续”并打完后沿地图往下打，练习窗口沿用你的语言、音量、窗口大小和已审核 Mod，点击被其他 Mod 截获时会告警，来自 haotiangod 的 issue #24–#26 和 PR #22、#23；手动测试项见 [docs/testing.md](docs/testing.md) 的 W17–W20。上一个正式版是 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0)（2026-10-30）。
+当前发布版：**[v0.6.0-beta.4](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.6.0-beta.4)**（内测版，2026-11-05）。在 beta.3 之上，回合快照恢复为每回合一条，读档回到同一场战斗不再拆成两场，同一局面只存一份；卡牌奖励屏开着时直接点地图，这一屏也会记成跳过。来自 haotiangod 的 PR #28、#30、#31；手动测试项见 [docs/testing.md](docs/testing.md) 的 A15–A17。上一个正式版是 [v0.5.0](https://github.com/cyz-dev/spire-ledger/releases/tag/v0.5.0)（2026-10-30）。
 
 ## 安装与升级
 
@@ -60,6 +60,16 @@
 个人统计读取游戏目录 `runs/` 下的原版 `.run` 和账本记录，按对局关联，避免重复计算。原版 `.run` 先按严格 UTF-8 解码，失败时回退 GBK（中文 Windows 的默认编码与 TinyCat 一致），并去掉 UTF-8 BOM；两种编码的旧局都能读取。逐层复盘页目前只展示账本记录；仅有原版 `.run` 的旧局可参与统计，但没有账本的完整决策详情与回合快照。缺少存档位信息的旧账本记录单独放在“旧记录：存档未知”。
 
 “操作来源未核实”表示无法确认动作来自人还是自动化，不表示幕数或奖励来源丢失。原版 `.run` 没有这项信息；与求解器同装也不等于已识别每个自动化动作。未知来源默认可参与统计，已知自动化选择会排除。
+
+## v0.6.0-beta.4 更新（内测）
+
+相对 beta.3 的改动，来自 haotiangod 的 issue [#27](https://github.com/cyz-dev/spire-ledger/issues/27)、[#32](https://github.com/cyz-dev/spire-ledger/issues/32) 和 PR [#28](https://github.com/cyz-dev/spire-ledger/pull/28)、[#30](https://github.com/cyz-dev/spire-ledger/pull/30)、[#31](https://github.com/cyz-dev/spire-ledger/pull/31)：
+
+- **回合快照每回合都录**：beta.3 及更早版本一局往往只录到 1–2 个回合，现在每回合一条。回合开头没稳定下来时会在出过牌后补录，复盘里注明已出过几张牌；没录到时历史页写明原因。
+- **读档不拆战斗**：S/L 或重开游戏后回到同一场战斗，仍算同一场，回合不再分成两组。
+- **同一局面只存一份**：读档后回到完全相同的局面，不再另存一份快照，只记一次“又来过”，重打时仍能选到这个回合。
+- **点地图离开也记选牌**：卡牌奖励屏开着时直接开地图走下一层，这一屏记为跳过，并补进游戏自己的 `.run`，统计的抓牌率不再漏掉这一屏。
+- **错误报告热键**：`Ctrl+Shift+R` 切出窗口后不再失灵，上一份还在写时会提示。
 
 ## v0.6.0-beta.3 更新（内测）
 
